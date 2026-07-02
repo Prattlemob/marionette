@@ -1,0 +1,36 @@
+# Mod metadata for NeoForge. Dollar-brace placeholders are expanded from gradle.properties
+# by the generateModMetadata task. See https://docs.neoforged.net/docs/gettingstarted/modfiles/
+license="${mod_license}"
+issueTrackerURL="https://github.com/Prattlemob/marionette/issues"
+
+[[mods]]
+modId="${mod_id}"
+version="${mod_version}"
+displayName="${mod_name}"
+displayURL="https://github.com/Prattlemob/marionette"
+authors="OhYea777"
+credits="A Prattlemob project - https://prattlemob.com"
+description='''
+Marionette turns a real, rendered Minecraft client into one an external program can observe and control. It is the strings, not the puppeteer: it publishes what the player perceives and accepts actions in return, so any agent - an LLM, a script, a reinforcement-learning policy, written in any language - can play through a real game window.
+
+Because it drives an actual client instead of a headless protocol connection, the game renders normally: capture it, record it, or stream it live.
+
+Marionette is infrastructure, not an AI: it ships no models and makes no decisions. Marionette moves the body - you bring the brain.
+'''
+
+[[mixins]]
+config="${mod_id}.mixins.json"
+
+[[dependencies.${mod_id}]]
+    modId="neoforge"
+    type="required"
+    versionRange="[${neo_version},)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="minecraft"
+    type="required"
+    versionRange="${minecraft_version_range}"
+    ordering="NONE"
+    side="BOTH"
