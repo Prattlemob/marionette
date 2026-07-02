@@ -38,9 +38,9 @@ depends on.
 
 Items:
 
-- [ ] `./gradlew build` passes locally and in CI
-- [ ] Mod entrypoint class exists and logs a startup line
-- [ ] `runClient` reaches the title screen with Marionette in the mod list
+- [x] `./gradlew build` passes locally and in CI
+- [x] Mod entrypoint class exists and logs a startup line
+- [x] `runClient` reaches the title screen with Marionette in the mod list
 
 ### M0.2 — Client lifecycle & tick hook
 
