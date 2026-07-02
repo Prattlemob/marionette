@@ -40,7 +40,7 @@ Items:
 
 - [x] `./gradlew build` passes locally and in CI
 - [x] Mod entrypoint class exists and logs a startup line
-- [x] `runClient` reaches the title screen with Marionette in the mod list
+- [ ] `runClient` reaches the title screen with Marionette in the mod list
 
 ### M0.2 — Client lifecycle & tick hook
 

@@ -32,6 +32,7 @@ public class MarionetteClient {
         NeoForge.EVENT_BUS.addListener(this::onLoggingOut);
     }
 
+    /** The singleton, or {@code null} until FML constructs the mod during client startup. */
     public static MarionetteClient instance() {
         return instance;
     }
@@ -40,6 +41,7 @@ public class MarionetteClient {
         return inWorld;
     }
 
+    /** Client ticks since login; runs continuously across dimension changes and respawns. */
     public long ticksInWorld() {
         return ticksInWorld;
     }
