@@ -1,6 +1,6 @@
 # Marionette
 
-NeoForge mod (Minecraft 26.2, Java 25) that lets an external program observe and
+NeoForge mod (Minecraft 1.21.8, Java 21) that lets an external program observe and
 control a real, rendered Minecraft client. Infrastructure only: it ships no AI
 models and makes no gameplay decisions. A Prattlemob project — prattlemob.com.
 
