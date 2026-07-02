@@ -21,12 +21,10 @@ Marionette aims to provide:
 
 ## Project status
 
-**Very early — pre-implementation.** The repository is a clean mod scaffold with no functionality; the design is not finalized and everything below is still open:
+**Very early — pre-implementation.** The repository is a clean mod scaffold with no functionality, but the design direction is now settled:
 
-- **TODO:** choose the transport between mod and agent.
-- **TODO:** define the observation and action formats.
-- **TODO:** decide whether anything runs server-side, or the mod stays purely client-side.
-- **TODO:** decide on integrations with other mods (none are planned or bundled yet).
+- The implementation plan lives in [ROADMAP.md](ROADMAP.md) — phases, milestones, and definitions of done.
+- Design decisions (settled, experiment-gated, and still open) are recorded in [docs/decisions.md](docs/decisions.md). Highlights: the transport is a localhost WebSocket carrying JSON; the core is client-only with an optional server component later; [Baritone](https://github.com/cabaletta/baritone) is planned as an optional (never bundled) integration for high-level navigation.
 
 Design discussion happens in [issues](https://github.com/Prattlemob/marionette/issues) — see [CONTRIBUTING.md](CONTRIBUTING.md).
 

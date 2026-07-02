@@ -7,9 +7,11 @@ models and makes no gameplay decisions. A Prattlemob project — prattlemob.com.
 ## Status & ground rules
 
 - **Pre-implementation.** The mod classes are intentionally empty scaffolds.
-- **Open decisions — do not lock in without asking:** the mod↔agent transport,
-  the observation/action formats, client-only vs. server component, and any mod
-  integrations (e.g. Baritone). Leave marked TODOs instead of choosing.
+  The implementation plan is `ROADMAP.md`; follow its milestone order.
+- **Design decisions live in `docs/decisions.md`** — settled ones (WebSocket
+  transport, composite observation frame, etc.) are binding; anything marked
+  open, deferred, or experiment-gated there must not be locked in without
+  asking. Record every resolution in that file.
 - **Protocol-first:** the wire contract gets specified in `protocol/` before it
   is implemented; `examples/` holds reference agents; `docs/` holds design notes.
 - **Stay agent-agnostic:** never hard-wire a specific model, AI service, or
