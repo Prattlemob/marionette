@@ -63,6 +63,12 @@ public class MarionetteClient {
     }
 
     private void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
+        // LoggingOut also fires with a null player during the defensive
+        // disconnect that precedes creating an integrated server or joining a
+        // multiplayer server; only a non-null player marks a real session end.
+        if (event.getPlayer() == null) {
+            return;
+        }
         inWorld = false;
         Marionette.LOGGER.info("Left world");
     }
