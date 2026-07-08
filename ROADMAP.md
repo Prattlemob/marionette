@@ -57,10 +57,10 @@ Items:
 
 Items:
 
-- [ ] Client tick event handler wired (pre/post tick as appropriate)
-- [ ] In-world vs. menu state tracked; handlers no-op outside a world
-- [ ] World join/leave detection with log evidence
-- [ ] Mod marked client-side (no-op / not required on dedicated servers)
+- [x] Client tick event handler wired (pre/post tick as appropriate)
+- [x] In-world vs. menu state tracked; handlers no-op outside a world
+- [x] World join/leave detection with log evidence
+- [x] Mod marked client-side (no-op / not required on dedicated servers)
 
 ---
 
