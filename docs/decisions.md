@@ -26,15 +26,30 @@ carrying JSON text messages.
 - Every mainstream language has a mature WebSocket client; browser-based
   agents/dashboards work with zero extra tooling.
 
-### D1a — WebSocket server implementation — Open (decide in M1.2)
+### D1a — WebSocket server implementation — **Settled** (2026-07-11, Phase 1 design)
 
-Candidates:
+**Netty, with `io.netty:netty-codec-http:4.1.118.Final` bundled via
+NeoForge Jar-in-Jar.**
 
-- **Netty-based, using the Netty Minecraft already bundles** (recommended):
-  zero new runtime dependencies; Netty ships WebSocket codecs. Risk: coupled
-  to MC's Netty version — acceptable since we are pinned to 1.21.8.
-- **Shaded `Java-WebSocket`** (MIT, small): fallback if the bundled-Netty
-  route proves awkward in the mod environment.
+The original premise ("the Netty Minecraft bundles ships WebSocket codecs")
+turned out to be **false**: Minecraft ships only Netty's core modules
+(buffer, codec, common, handler, resolver, transport, epoll). The WebSocket
+codecs live in `netty-codec-http`, which is not on the runtime classpath
+(verified against this project's `runtimeClasspath` on MC 1.21.8 /
+NeoForge 21.8.53, Netty core 4.1.118.Final).
+
+Resolution: Jar-in-Jar the missing codec jar (Apache-2.0, ~660 KB),
+version-matched to MC's Netty core, `transitive = false` so no Netty core
+classes are duplicated. No relocation: the jar only adds codec classes on
+top of the Netty core MC already loads, and Jar-in-Jar negotiates versions
+if another mod bundles it too. The rest of the original rationale stands
+(single event-loop thread, ping/pong frames free, writability-based
+backpressure for M2.3, binary frames available later).
+
+Rejected: `Java-WebSocket` (kept as fallback; independent of MC's Netty but
+brings its own thread model and the bridge design is built around a Netty
+pipeline); hand-rolling WS framing on bare Netty core (framing-for-free was
+the point of choosing WebSocket, per D1).
 
 ## D2 — Observation composition: composite frame + section mask — **Settled**
 

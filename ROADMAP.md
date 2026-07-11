@@ -722,7 +722,7 @@ All design decisions, their status, and rationale live in
 
 | # | Decision | Status | Needed by |
 |---|----------|--------|-----------|
-| D1 | Transport | **Settled: WebSocket** (D1a: server impl, decide in M1.2) | M1.2 |
+| D1 | Transport | **Settled: WebSocket** (D1a settled: Netty + jar-in-jar'd `netty-codec-http`) | M1.2 |
 | D2 | Observation composition | **Settled: composite frame + section mask** | M4.1 |
 | D3 | Block-scan strategy | **Settled: on-demand, JSON palette + indices; deltas reserved** | M4.5 |
 | D4 | Input injection mechanism | **Experiment-gated** (pass criteria defined) | M1.1 |

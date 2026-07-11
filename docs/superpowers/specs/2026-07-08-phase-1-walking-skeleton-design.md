@@ -14,11 +14,14 @@ Decisions resolved during this design (with the project owner):
   everything automatable; a human at the keyboard only for the D4 criteria
   that need real input (key press mid-agent-control, focus loss) and a final
   eyeball of the walking demo.
-- **D1a:** bundled Netty (the Netty Minecraft ships, with its WebSocket
-  codecs). Zero new runtime dependencies; coupling to MC's Netty version is
-  acceptable on a 1.21.8-pinned mod. Fallback remains shaded Java-WebSocket
-  if the bundled route proves awkward. To be recorded in `docs/decisions.md`
-  when M1.2 lands.
+- **D1a:** Netty — but *not* purely the bundled one. Fact-check during
+  planning found Minecraft ships only Netty's core modules; the WebSocket
+  codecs live in `netty-codec-http`, which is absent. Resolution (owner
+  approved): bundle `io.netty:netty-codec-http:4.1.118.Final` (Apache-2.0,
+  ~660 KB), version-matched to MC's Netty core, via NeoForge's Jar-in-Jar.
+  No relocation needed; the jar adds codecs on top of the Netty core MC
+  already loads. Fallback remains Java-WebSocket. Recorded in
+  `docs/decisions.md`.
 - **Architecture:** three bounded subsystems (below), chosen over both a
   minimal hang-it-off-`MarionetteClient` skeleton (would force a Phase-2
   refactor and leaves D4 without a seam) and forward-designed protocol-v1
@@ -49,7 +52,8 @@ Three units under `com.prattlemob.marionette`, wired by the existing
 
 ### `bridge` package
 
-- **`BridgeServer`** — bundled-Netty WebSocket server on `127.0.0.1:24680`
+- **`BridgeServer`** — Netty WebSocket server (MC's bundled Netty core +
+  Jar-in-Jar'd `netty-codec-http`) on `127.0.0.1:24680`
   (constant until M2.2 makes it config), accepting one connection at a time;
   a further connect while one is live is refused with a WebSocket close
   reason (`"controller already connected"`; formal error shape is M2.1).
@@ -111,7 +115,8 @@ recorded either way.
 
 ## 3. Bridge wire contract (protocol v0) & data flow
 
-**Server pipeline** (bundled Netty classes): `HttpServerCodec` →
+**Server pipeline** (Netty core from MC + Jar-in-Jar'd codecs):
+`HttpServerCodec` →
 `HttpObjectAggregator` → `WebSocketServerProtocolHandler` (answers ping/pong
 for free) → text-frame handler.
 
