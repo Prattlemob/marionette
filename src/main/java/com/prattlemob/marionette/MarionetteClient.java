@@ -1,5 +1,10 @@
 package com.prattlemob.marionette;
 
+import java.util.List;
+
+import com.google.gson.JsonObject;
+import com.prattlemob.marionette.bridge.AgentCommand;
+import com.prattlemob.marionette.bridge.BridgeServer;
 import com.prattlemob.marionette.control.ControlState;
 import com.prattlemob.marionette.control.ControlStateApplier;
 import com.prattlemob.marionette.control.DemoScript;
@@ -14,6 +19,7 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.GameShuttingDownEvent;
 
 /**
  * Client-side lifecycle anchor and tick-loop orchestrator. Owns the single
@@ -40,6 +46,7 @@ public class MarionetteClient {
     private long ticksInWorld;
     private DemoScript demo;
     private boolean controlsEngaged;
+    private BridgeServer bridge;
 
     public MarionetteClient(ModContainer container) {
         instance = this;
@@ -47,6 +54,24 @@ public class MarionetteClient {
         NeoForge.EVENT_BUS.addListener(this::onClientTickPost);
         NeoForge.EVENT_BUS.addListener(this::onLoggingIn);
         NeoForge.EVENT_BUS.addListener(this::onLoggingOut);
+        NeoForge.EVENT_BUS.addListener(this::onGameShuttingDown);
+        try {
+            BridgeServer server = new BridgeServer(BridgeServer.DEFAULT_PORT,
+                    container.getModInfo().getVersion().toString());
+            server.start();
+            bridge = server;
+            Marionette.LOGGER.info("Bridge listening on 127.0.0.1:{}", server.port());
+        } catch (Exception e) {
+            bridge = null;
+            Marionette.LOGGER.error("Bridge failed to start; running without external control", e);
+        }
+    }
+
+    private void onGameShuttingDown(GameShuttingDownEvent event) {
+        if (bridge != null) {
+            bridge.stop();
+            Marionette.LOGGER.info("Bridge stopped");
+        }
     }
 
     /** The singleton, or {@code null} until FML constructs the mod during client startup. */
@@ -66,13 +91,30 @@ public class MarionetteClient {
     private void onClientTickPre(ClientTickEvent.Pre event) {
         Minecraft minecraft = Minecraft.getInstance();
         LocalPlayer player = minecraft.player;
+        boolean agentLost = bridge != null && bridge.pollDisconnected();
+
         if (!inWorld || player == null) {
+            if (bridge != null) {
+                bridge.drainCommands(); // no world to act in: discard
+            }
+            if (agentLost) {
+                Marionette.LOGGER.info("Agent disconnected");
+            }
             // Safety rule: no player entity to control -> nothing may stay held.
             if (controlsEngaged) {
                 demo = null;
                 releaseControls();
             }
             return;
+        }
+        if (agentLost) {
+            Marionette.LOGGER.info("Agent disconnected — releasing all controls");
+            releaseControls();
+        }
+        if (bridge != null) {
+            for (AgentCommand command : bridge.drainCommands()) {
+                applyCommand(command);
+            }
         }
         if (demo != null) {
             DemoScript.Stunt stunt = demo.tick(player.getYRot(), controlState);
@@ -82,7 +124,7 @@ public class MarionetteClient {
                 Marionette.LOGGER.info("Demo complete");
             }
         }
-        boolean shouldControl = demo != null;
+        boolean shouldControl = demo != null || (bridge != null && bridge.hasController());
         if (shouldControl) {
             ControlState.Look look = controlState.consumeLook();
             if (look != null) {
@@ -93,6 +135,23 @@ public class MarionetteClient {
             controlsEngaged = true;
         } else if (controlsEngaged) {
             releaseControls();
+        }
+    }
+
+    private void applyCommand(AgentCommand command) {
+        switch (command) {
+            case AgentCommand.InputUpdate update -> {
+                if (update.forward() != null) controlState.setForward(update.forward());
+                if (update.back() != null) controlState.setBack(update.back());
+                if (update.left() != null) controlState.setLeft(update.left());
+                if (update.right() != null) controlState.setRight(update.right());
+                if (update.jump() != null) controlState.setJump(update.jump());
+                if (update.sneak() != null) controlState.setSneak(update.sneak());
+                if (update.sprint() != null) controlState.setSprint(update.sprint());
+            }
+            case AgentCommand.Look look -> controlState.setLook(look.yaw(), look.pitch());
+            case AgentCommand.Release release -> controlState.releaseAll();
+            case AgentCommand.Hello hello -> { } // handshake handled by the bridge
         }
     }
 
@@ -130,6 +189,17 @@ public class MarionetteClient {
         if (controlsEngaged && player != null && ticksInWorld % PUPPET_LOG_INTERVAL == 0) {
             Marionette.LOGGER.info(String.format("Puppet pos %.2f %.2f %.2f yaw %.1f",
                     player.getX(), player.getY(), player.getZ(), player.getYRot()));
+        }
+        if (bridge != null && inWorld && player != null) {
+            JsonObject frame = new JsonObject();
+            frame.addProperty("type", "observation");
+            frame.addProperty("tick", ticksInWorld);
+            frame.addProperty("x", player.getX());
+            frame.addProperty("y", player.getY());
+            frame.addProperty("z", player.getZ());
+            frame.addProperty("yaw", player.getYRot());
+            frame.addProperty("pitch", player.getXRot());
+            bridge.sendObservation(frame.toString());
         }
     }
 
