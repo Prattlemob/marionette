@@ -113,6 +113,10 @@ neoForge {
             sourceSet(sourceSets.main)
         }
     }
+
+    // Puts the modding runtime (Netty core, Gson, ...) on the unit-test
+    // classpath so the bridge's headless tests can run.
+    addModdingDependenciesTo sourceSets.test
 }
 
 // Sets up a dependency configuration called 'localRuntime'.
@@ -147,7 +151,6 @@ dependencies {
     // http://www.gradle.org/docs/current/userguide/dependency_management.html
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
-    testImplementation 'com.google.code.gson:gson:2.11.0'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
