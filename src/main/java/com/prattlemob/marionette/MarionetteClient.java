@@ -106,6 +106,7 @@ public class MarionetteClient {
             return;
         }
         if (agentLost) {
+            controlState.releaseAll(); // drop un-applied residue from the dead agent
             if (controlsEngaged) {
                 Marionette.LOGGER.info("Agent disconnected — releasing all controls");
                 releaseControls();
