@@ -1892,8 +1892,12 @@ Replace `onClientTickPre` with:
             if (bridge != null) {
                 bridge.drainCommands(); // no world to act in: discard
             }
-            if (agentLost && controlsEngaged) {
+            if (agentLost) {
                 Marionette.LOGGER.info("Agent disconnected — releasing all controls");
+            }
+            // Safety rule: no player entity to control -> nothing may stay held.
+            if (controlsEngaged) {
+                demo = null;
                 releaseControls();
             }
             return;

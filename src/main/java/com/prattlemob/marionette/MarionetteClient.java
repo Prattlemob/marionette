@@ -77,6 +77,11 @@ public class MarionetteClient {
         Minecraft minecraft = Minecraft.getInstance();
         LocalPlayer player = minecraft.player;
         if (!inWorld || player == null) {
+            // Safety rule: no player entity to control -> nothing may stay held.
+            if (controlsEngaged) {
+                demo = null;
+                releaseControls();
+            }
             return;
         }
         if (demo != null) {
