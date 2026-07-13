@@ -94,7 +94,7 @@ Items:
 - [x] Raw camera rotation injection (set yaw/pitch — smoothing comes later,
       M3.2)
 - [x] "Release all" operation that returns input to vanilla instantly
-- [ ] Hardcoded demo script behind a debug toggle (deleted/disabled after M1.3)
+- [x] Hardcoded demo script behind a debug toggle (deleted/disabled after M1.3)
 
 ### M1.2 — Minimal localhost bridge
 
@@ -116,13 +116,13 @@ Items:
 
 Items:
 
-- [ ] D1a decided and recorded; WebSocket server bound to loopback,
+- [x] D1a decided and recorded; WebSocket server bound to loopback,
       single-connection accept
-- [ ] Inbound messages parsed on network thread, applied only on client tick
-- [ ] Minimal handshake (`hello` with protocol version)
-- [ ] Minimal observation out: position + rotation per tick
-- [ ] `protocol/v0-draft.md` documenting the above verbatim
-- [ ] Minimal Python probe script in `examples/`
+- [x] Inbound messages parsed on network thread, applied only on client tick
+- [x] Minimal handshake (`hello` with protocol version)
+- [x] Minimal observation out: position + rotation per tick
+- [x] `protocol/v0-draft.md` documenting the above verbatim
+- [x] Minimal Python probe script in `examples/`
 
 ### M1.3 — Walking skeleton demo + safety baseline
 
@@ -140,12 +140,12 @@ Items:
 
 Items:
 
-- [ ] `examples/walk_square.py` (or similar) driving the square via the bridge
-- [ ] Disconnect / socket error → immediate release-all + idle
-- [ ] Malformed message → error response (or drop) without crashing the
+- [x] `examples/walk_square.py` (or similar) driving the square via the bridge
+- [x] Disconnect / socket error → immediate release-all + idle
+- [x] Malformed message → error response (or drop) without crashing the
       client; controls unaffected or released
-- [ ] Reconnect works repeatedly in one game session
-- [ ] Leaving the world (menu/death screen) suspends actuation safely
+- [x] Reconnect works repeatedly in one game session
+- [x] Leaving the world (menu/death screen) suspends actuation safely
 
 > **Milestone gate:** if Phase 1 can't be made reliable, the project's premise
 > is wrong. Everything after this is breadth, not risk.
