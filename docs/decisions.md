@@ -26,7 +26,7 @@ carrying JSON text messages.
 - Every mainstream language has a mature WebSocket client; browser-based
   agents/dashboards work with zero extra tooling.
 
-### D1a — WebSocket server implementation — **Settled** (M1.2, 2026-07-11)
+### D1a — WebSocket server implementation — **Settled** (2026-07-11, Phase 1 design)
 
 **Netty, with `io.netty:netty-codec-http:4.1.118.Final` bundled via
 NeoForge Jar-in-Jar.**
