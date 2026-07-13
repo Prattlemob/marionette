@@ -78,28 +78,48 @@ surface with no payoff for the payloads that live in the frame.
 - Escape hatch: if profiling ever demands it, the same palette+indices
   structure moves into a binary WebSocket frame without redesign.
 
-## D4 — Input injection mechanism — **Experiment-gated** (M1.1)
+## D4 — Input injection mechanism — **Settled** (M1.1 experiment, 2026-07-13)
 
-Prototype both candidates during M1.1; leaning mixin, but the KeyMapping
-variant is cheap insurance and the fallback if the mixin target proves
-fragile.
+**Input-path mixin.** `KeyboardInputMixin` OR-merges the agent's
+`ControlState` into `KeyboardInput.tick()`'s semantic output and recomputes
+the move vector vanilla-faithfully, rather than faking key presses.
 
-Candidates:
+Both candidates were prototyped and run through the same scripted grid (six
+runs: plain / gui-stunt / toggle-stress × each variant) plus a human
+coexistence-and-focus-loss checklist. Per-criterion results:
 
-1. **Mixin into the player input path** (e.g. `ClientInput`/keyboard-input
-   population) — manipulates the *semantic* movement values rather than faking
-   key presses; expected to make the human-override policy (M5.1) cleaner.
-2. **KeyMapping-forcing** — set the pressed state of vanilla key mappings.
+| Criterion | KeyMapping-forcing | Input-path mixin |
+|---|---|---|
+| Stuck state after release | **AMBIGUOUS** — `release()`'s `setDown(false)` is a documented no-op on a toggled `ToggleKeyMapping`; WALK_2's sustained ~2.7–2.8 blocks/sample flicker (below) shows crouch was "on" roughly half the time, so a latched crouch on release is structurally possible, just not directly filmed (evidence logging stops the instant controls release). | **PASS** — release is a direct `ControlState` clear, no toggle-based no-op path; no code-level staleness mechanism; clean in all runs. |
+| GUI open/close survival | **PASS**, with a quirk — full lifecycle (open → close → COAST → `Demo complete` → clean release) completes every time, but movement nearly halts while the inventory is open (0.31 blocks/sample vs. ~5.3 expected) because vanilla routes key input away from gameplay while a `Screen` has focus; resumes at full speed on close. | **PASS, cleaner** — same full lifecycle completes, and movement continues undisturbed through the GUI-open window (5.50–5.62 blocks/sample) because the semantic merge happens beneath screen-focus routing. Recorded as data: the two variants *diverge* on this axis by design, not by defect; the mixin's continue-through-GUI behavior was chosen deliberately. |
+| Sprint/sneak toggle-logic correctness | **FAIL** — with `toggleCrouch`/`toggleSprint` enabled, `ToggleKeyMapping.setDown(true)` toggles the key state *per tick* instead of holding it. Sprint (edge-triggered/latched in vanilla) was unaffected (5.4–5.6, no flicker), but sneak flickered to a sustained ~2.7–2.8 blocks/sample instead of the expected ~1.3 — roughly the midpoint between walk and sneak speed, i.e. visible per-tick toggling, reproducible across three consecutive samples. | **PASS** — reads `ControlState` directly, never touches `KeyMapping.setDown`; both sprint (5.43–5.61) and sneak (1.29–1.39) match the clean baseline ranges exactly, fully immune to toggle-key settings. |
+| Human coexistence (W/S mid-demo) | Skipped — moot given the scripted toggle-logic FAIL. | **PASS** (human checklist) — human W/S input OR-merges sanely; S does not counter a scripted forward hold (defined behavior: human can *add*, not *counter*, agent-held controls). |
+| Focus loss (alt-tab mid-demo) | Skipped — moot given the scripted toggle-logic FAIL. | **PASS** (human checklist) — alt-tab mid-demo survived, ended with a clean release and no stuck input afterward. |
 
-A candidate wins by passing **all** of:
+Outcome per the D4 rule ("one candidate passes all criteria → it wins"): the
+mixin passed every criterion; the KeyMapping-forcing variant failed
+toggle-logic correctness outright (criterion c) with the stuck-state
+criterion left structurally ambiguous by the same root cause, so its human
+checklist was skipped as moot.
 
-- Coexists with real keyboard input (a human pressing a key mid-agent-control
-  produces sane, defined behavior).
-- Survives GUI open/close and window focus loss.
-- Plays correctly with vanilla sprint/sneak toggle logic.
-- Never leaks stuck keys / stuck `KeyMapping` state.
+**Loser's concrete failure mode:** `ToggleKeyMapping` (backing
+`keyShift`/`keySprint` when `toggleCrouch`/`toggleSprint` are enabled in
+`options.txt`) treats every `setDown(true)` call as a toggle, not a hold.
+Driving it once per tick therefore flips the underlying state once per tick,
+which vanilla's edge-triggered sprint-start logic happens to absorb
+invisibly but which visibly halves the effective sneak speed (measured
+~2.7–2.8 blocks/sample vs. the expected ~1.3). The same semantics make
+`setDown(false)` a documented no-op on release, leaving a real,
+code-supported risk of a latched crouch after `Controls released`.
 
-Record the winner and the loser's failure mode here when decided.
+Full evidence, delta tables, and the criteria matrix: `.superpowers/sdd/task-5-report.md`
+(scripted grid) plus the human checklist notes folded into this record.
+
+**Feeds forward to M5.1:** the mixin's OR-merge means a human can *add*
+input on top of agent-held controls but cannot *counter* them (pressing S
+does not stop a scripted forward hold). M5.1's human-input precedence policy
+must add an explicit "human counters/overrides agent" layer on top of this
+OR-merge base — it is not free from D4 and needs its own design.
 
 ## D5 — Camera smoothing model — **Experiment-gated** (M3.2)
 

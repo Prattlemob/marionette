@@ -3,7 +3,6 @@ package com.prattlemob.marionette;
 import com.prattlemob.marionette.control.ControlState;
 import com.prattlemob.marionette.control.ControlStateApplier;
 import com.prattlemob.marionette.control.DemoScript;
-import com.prattlemob.marionette.control.KeyMappingApplier;
 import com.prattlemob.marionette.control.MixinInputApplier;
 
 import net.minecraft.client.Minecraft;
@@ -35,7 +34,7 @@ public class MarionetteClient {
     private static MarionetteClient instance;
 
     private final ControlState controlState = new ControlState();
-    private final ControlStateApplier applier = createApplier();
+    private final ControlStateApplier applier = new MixinInputApplier();
 
     private boolean inWorld;
     private long ticksInWorld;
@@ -53,17 +52,6 @@ public class MarionetteClient {
     /** The singleton, or {@code null} until FML constructs the mod during client startup. */
     public static MarionetteClient instance() {
         return instance;
-    }
-
-    /** D4 experiment switch; the winner gets hardcoded when D4 is decided. */
-    private static ControlStateApplier createApplier() {
-        String variant = System.getProperty("marionette.applier", "keymapping");
-        Marionette.LOGGER.info("Control applier: {}", variant);
-        return switch (variant) {
-            case "keymapping" -> new KeyMappingApplier();
-            case "mixin" -> new MixinInputApplier();
-            default -> throw new IllegalArgumentException("Unknown marionette.applier: " + variant);
-        };
     }
 
     public boolean isInWorld() {

@@ -56,14 +56,13 @@ neoForge {
         }
 
         // Scripted-verification run: auto-joins the Phase1Verify world and
-        // arms the hardcoded demo. The three properties below are edited per
-        // D4 experiment run (variant / gui stunts).
+        // arms the hardcoded demo. The gui-stunts property below is edited
+        // per demo run.
         clientDemo {
             client()
             programArguments.addAll '--quickPlaySingleplayer', 'Phase1Verify'
             systemProperty 'marionette.demo', 'true'
             systemProperty 'marionette.demo.gui', 'false'
-            systemProperty 'marionette.applier', 'mixin'
         }
 
         server {

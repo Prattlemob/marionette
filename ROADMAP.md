@@ -87,13 +87,13 @@ Items:
 
 Items:
 
-- [ ] `ControlState` model: held controls persist until changed (set-and-hold)
-- [ ] D4 experiment: mixin variant vs. KeyMapping variant, judged against the
+- [x] `ControlState` model: held controls persist until changed (set-and-hold)
+- [x] D4 experiment: mixin variant vs. KeyMapping variant, judged against the
       documented pass criteria; result recorded in docs/decisions.md
-- [ ] Movement injection (forward/back/strafe) applied each tick
-- [ ] Raw camera rotation injection (set yaw/pitch — smoothing comes later,
+- [x] Movement injection (forward/back/strafe) applied each tick
+- [x] Raw camera rotation injection (set yaw/pitch — smoothing comes later,
       M3.2)
-- [ ] "Release all" operation that returns input to vanilla instantly
+- [x] "Release all" operation that returns input to vanilla instantly
 - [ ] Hardcoded demo script behind a debug toggle (deleted/disabled after M1.3)
 
 ### M1.2 — Minimal localhost bridge
@@ -725,7 +725,7 @@ All design decisions, their status, and rationale live in
 | D1 | Transport | **Settled: WebSocket** (D1a settled: Netty + jar-in-jar'd `netty-codec-http`) | M1.2 |
 | D2 | Observation composition | **Settled: composite frame + section mask** | M4.1 |
 | D3 | Block-scan strategy | **Settled: on-demand, JSON palette + indices; deltas reserved** | M4.5 |
-| D4 | Input injection mechanism | **Experiment-gated** (pass criteria defined) | M1.1 |
+| D4 | Input injection mechanism | **Settled: input-path mixin** (M1.1 experiment) | M1.1 |
 | D5 | Camera smoothing model | **Experiment-gated** (pass criteria defined) | M3.2 |
 | D6 | Protocol versioning | **Settled: integer version + capability flags** | M2.1 |
 | D7 | Multi-client policy | **Settled: single controller; `role` field reserved** | M2.1 |
