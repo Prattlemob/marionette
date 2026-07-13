@@ -42,3 +42,6 @@ run/
 **/src/generated/**/.cache/
 repo/
 !**/src/**/repo/
+
+### Dedicated-server stray output (world-gen verification runs) ###
+logs/
