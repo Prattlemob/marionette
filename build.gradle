@@ -63,7 +63,7 @@ neoForge {
             programArguments.addAll '--quickPlaySingleplayer', 'Phase1Verify'
             systemProperty 'marionette.demo', 'true'
             systemProperty 'marionette.demo.gui', 'false'
-            systemProperty 'marionette.applier', 'keymapping'
+            systemProperty 'marionette.applier', 'mixin'
         }
 
         server {

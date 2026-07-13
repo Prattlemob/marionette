@@ -4,6 +4,7 @@ import com.prattlemob.marionette.control.ControlState;
 import com.prattlemob.marionette.control.ControlStateApplier;
 import com.prattlemob.marionette.control.DemoScript;
 import com.prattlemob.marionette.control.KeyMappingApplier;
+import com.prattlemob.marionette.control.MixinInputApplier;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
@@ -60,6 +61,7 @@ public class MarionetteClient {
         Marionette.LOGGER.info("Control applier: {}", variant);
         return switch (variant) {
             case "keymapping" -> new KeyMappingApplier();
+            case "mixin" -> new MixinInputApplier();
             default -> throw new IllegalArgumentException("Unknown marionette.applier: " + variant);
         };
     }

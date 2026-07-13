@@ -3,6 +3,9 @@
   "package": "com.prattlemob.marionette.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [],
+  "client": [
+    "KeyboardInputMixin"
+  ],
   "injectors": {
     "defaultRequire": 1
   },
