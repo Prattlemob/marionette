@@ -201,6 +201,9 @@ Items:
 - [ ] Port, bind address, enable/disable toggle
 - [ ] Observation rate + radii caps as config values with sane defaults/limits
 - [ ] Feature toggle scaffolding for future optional layers
+- [ ] Suppress-pause-on-focus-loss toggle so an agent-driven client keeps
+      running (and streaming) while unfocused (see docs/decisions.md; M5.1
+      decides per-mode behavior)
 
 ### M2.3 — Connection lifecycle, framing, rate & backpressure
 
@@ -491,7 +494,13 @@ Items:
 
 - [ ] Ping/pong watchdog with configurable timeout
 - [ ] Panic keybinding (registered, rebindable, shown in controls menu)
-- [ ] Human-override policy implemented + documented
+- [ ] Human-override policy implemented + documented (three modes per
+      docs/decisions.md: human-priority / agent-exclusive / panic)
+- [ ] Input-lockout keybind (agent-exclusive mode): rebindable, shown in
+      controls menu; lockout + panic keys never suppressed; auto-drops when
+      no controller is attached
+- [ ] Focus-loss behavior decided per precedence mode (with the M2.2
+      no-pause-while-agent-connected config toggle)
 - [ ] Loopback enforcement + explicit-opt-out config gate + log warning
 - [ ] Edge-case matrix tested: death, respawn, dimension change, GUI open,
       pause menu, world leave

@@ -219,4 +219,26 @@ earlier if outside contributions arrive.
 - Raw-input vs. active-Baritone-goal conflict policy; which Baritone settings
   are exposed — M6.2.
 - Human-input precedence policy details and watchdog timeout default — M5.1.
+  The policy must define **three modes** (owner-requested, 2026-07-13):
+  **human-priority** (default — human input overrides/pauses agent control),
+  **agent-exclusive** (a rebindable *input-lockout* keybind suppresses all
+  local gameplay inputs — movement/jump/sneak/sprint keys, mouse look,
+  attack/use, hotbar — so only the agent drives), and **panic** (existing —
+  instant human control, agent severed). Invariants settled now because they
+  are trust rules, not scope: the lockout toggle and panic key are **never**
+  suppressed; system/UI keys (Escape, F3, chat) stay live (exact list decided
+  at M5.1); lockout **auto-drops the moment no controller is attached**
+  (disconnect, watchdog trip, world leave) so a dead agent can never leave a
+  locked keyboard; the M5.2 HUD must show the active mode prominently.
+  Implementation note: with D4's OR-merge mixin, agent-exclusive means
+  *replace* instead of *merge* in `KeyboardInputMixin`, plus new mouse-look
+  suppression (vanilla `MouseHandler.turnPlayer` path).
+- Streaming while unfocused — M2.2/M5.1. Vanilla singleplayer opens the pause
+  menu on window-focus loss (`pauseOnLostFocus`), freezing an agent-driven
+  session the moment the operator alt-tabs. M2.2 adds a config toggle
+  (suggested default: suppress the focus-loss pause while an agent is
+  connected) so a puppeted client keeps running and streamable unfocused;
+  M5.1 decides how focus loss behaves in each precedence mode (pausing on
+  focus loss is arguably a safety feature when a human walks away). Interim
+  workaround: `pauseOnLostFocus:false` in options.txt (or F3+P).
 - Mod-version ↔ protocol-version relationship in the changelog policy — M9.2.
