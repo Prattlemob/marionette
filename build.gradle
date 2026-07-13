@@ -55,6 +55,17 @@ neoForge {
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
         }
 
+        // Scripted-verification run: auto-joins the Phase1Verify world and
+        // arms the hardcoded demo. The three properties below are edited per
+        // D4 experiment run (variant / gui stunts).
+        clientDemo {
+            client()
+            programArguments.addAll '--quickPlaySingleplayer', 'Phase1Verify'
+            systemProperty 'marionette.demo', 'true'
+            systemProperty 'marionette.demo.gui', 'false'
+            systemProperty 'marionette.applier', 'keymapping'
+        }
+
         server {
             server()
             programArgument '--nogui'
