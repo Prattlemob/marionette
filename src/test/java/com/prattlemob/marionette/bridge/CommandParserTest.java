@@ -73,7 +73,9 @@ class CommandParserTest {
 
     @Test
     void rejectsNonFiniteLook() {
+        // 1e400 is valid JSON and parses as a number, but overflows float to
+        // Infinity — this must trip the finiteness check, not the type check.
         assertThrows(ProtocolException.class,
-                () -> CommandParser.parse("{\"type\": \"look\", \"yaw\": \"NaN\", \"pitch\": 0}"));
+                () -> CommandParser.parse("{\"type\": \"look\", \"yaw\": 1e400, \"pitch\": 0}"));
     }
 }
