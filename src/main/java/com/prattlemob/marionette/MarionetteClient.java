@@ -1,7 +1,5 @@
 package com.prattlemob.marionette;
 
-import java.util.List;
-
 import com.google.gson.JsonObject;
 import com.prattlemob.marionette.bridge.AgentCommand;
 import com.prattlemob.marionette.bridge.BridgeServer;
@@ -108,8 +106,12 @@ public class MarionetteClient {
             return;
         }
         if (agentLost) {
-            Marionette.LOGGER.info("Agent disconnected — releasing all controls");
-            releaseControls();
+            if (controlsEngaged) {
+                Marionette.LOGGER.info("Agent disconnected — releasing all controls");
+                releaseControls();
+            } else {
+                Marionette.LOGGER.info("Agent disconnected");
+            }
         }
         if (bridge != null) {
             for (AgentCommand command : bridge.drainCommands()) {

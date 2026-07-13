@@ -6,8 +6,9 @@ models and makes no gameplay decisions. A Prattlemob project — prattlemob.com.
 
 ## Status & ground rules
 
-- **Pre-implementation.** The mod classes are intentionally empty scaffolds.
-  The implementation plan is `ROADMAP.md`; follow its milestone order.
+- **Phases 0–1 implemented** (client lifecycle, input injection via the D4
+  mixin, localhost WebSocket bridge with protocol v0, safety baseline).
+  `ROADMAP.md` tracks milestone order and status; follow it for what's next.
 - **Design decisions live in `docs/decisions.md`** — settled ones (WebSocket
   transport, composite observation frame, etc.) are binding; anything marked
   open, deferred, or experiment-gated there must not be locked in without

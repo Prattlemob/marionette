@@ -21,7 +21,7 @@ Marionette aims to provide:
 
 ## Project status
 
-**Very early — pre-implementation.** The repository is a clean mod scaffold with no functionality, but the design direction is now settled:
+**Phase 1 walking skeleton works.** An external script can already drive the rendered player over a localhost WebSocket — see [examples/](examples/) for a working agent. The design direction for what's next is settled:
 
 - The implementation plan lives in [ROADMAP.md](ROADMAP.md) — phases, milestones, and definitions of done.
 - Design decisions (settled, experiment-gated, and still open) are recorded in [docs/decisions.md](docs/decisions.md). Highlights: the transport is a localhost WebSocket carrying JSON; the core is client-only with an optional server component later; [Baritone](https://github.com/cabaletta/baritone) is planned as an optional (never bundled) integration for high-level navigation.
@@ -34,11 +34,11 @@ Design discussion happens in [issues](https://github.com/Prattlemob/marionette/i
 
 ## Usage
 
-*Coming soon.* How to connect an agent will be documented once the design lands. Reference agents will live in [examples/](examples/).
+Connect an agent over the localhost WebSocket bridge; see [examples/](examples/) for reference agents (`probe.py`, `walk_square.py`).
 
 ## Protocol
 
-*To be defined.* The wire contract will be specified in [protocol/](protocol/) before it is implemented, so that agents in any language can target it.
+The current wire contract is the throwaway [v0 draft](protocol/v0-draft.md); it will be replaced by protocol v1 in Phase 2. The stable, documented contract will be specified in [protocol/](protocol/), so that agents in any language can target it.
 
 ## License
 

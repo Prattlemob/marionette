@@ -126,8 +126,9 @@ invisibly but which visibly halves the effective sneak speed (measured
 `setDown(false)` a documented no-op on release, leaving a real,
 code-supported risk of a latched crouch after `Controls released`.
 
-Full evidence, delta tables, and the criteria matrix: `.superpowers/sdd/task-5-report.md`
-(scripted grid) plus the human checklist notes folded into this record.
+Full per-run evidence and delta tables are archived outside the repo (dev-box
+scratch); the criteria matrix above, plus the human checklist notes folded
+into this record, is the durable record.
 
 **Feeds forward to M5.1:** the mixin's OR-merge means a human can *add*
 input on top of agent-held controls but cannot *counter* them (pressing S
@@ -225,6 +226,13 @@ earlier if outside contributions arrive.
 
 ## Minor open points (decide inside their milestones)
 
+- Bridge lifecycle polish carried out of Phase 1 review — M2.1/M2.3: gate the
+  disconnect latch on a completed hello (a probe connection that never sent
+  hello currently logs a spurious agent-disconnect on close); duplicate-hello
+  rejection test (v1 handshake rewrite); daemon thread factory for the Netty
+  event loop; log/diagnose `exceptionCaught` causes; define release-vs-
+  bridge-stop ordering on shutdown (currently inert — ticks have stopped —
+  observed as `Bridge stopped` before `Controls released` on window close).
 - Movement axes on the wire: boolean (key-like) vs. analog floats
   (controller-like) — M3.1.
 - Item-component serialization depth (enchantments, custom names) — M4.2.

@@ -35,6 +35,8 @@ public abstract class KeyboardInputMixin extends ClientInput {
                 this.keyPresses.jump() || state.jump(),
                 this.keyPresses.shift() || state.sneak(),
                 this.keyPresses.sprint() || state.sprint());
+        // Mirrors vanilla KeyboardInput.tick()'s impulse derivation —
+        // re-verify against it on any Minecraft version bump.
         float forwardImpulse = this.keyPresses.forward() == this.keyPresses.backward()
                 ? 0.0F : (this.keyPresses.forward() ? 1.0F : -1.0F);
         float leftImpulse = this.keyPresses.left() == this.keyPresses.right()
