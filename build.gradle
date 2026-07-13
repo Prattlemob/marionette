@@ -152,6 +152,18 @@ dependencies {
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    // D1a: MC bundles only Netty core; the WebSocket codecs live in
+    // netty-codec-http, so we jar-in-jar exactly the version matching MC's
+    // Netty (4.1.118.Final on 1.21.8). transitive=false keeps the bundled
+    // jar codec-only.
+    jarJar(implementation('io.netty:netty-codec-http')) {
+        version {
+            strictly '[4.1, 4.2)'
+            prefer '4.1.118.Final'
+        }
+        transitive = false
+    }
 }
 
 tasks.named('test', Test) {
