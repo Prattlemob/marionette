@@ -51,6 +51,18 @@ brings its own thread model and the bridge design is built around a Netty
 pipeline); hand-rolling WS framing on bare Netty core (framing-for-free was
 the point of choosing WebSocket, per D1).
 
+**Dev-environment addendum (2026-07-13, Task 8 verification):** Jar-in-Jar
+only unpacks the bundled codec into the mod's module at *production*
+runtime. NeoForge's dev run tasks (`runClient*`) load classes straight from
+`build/classes`, so the `jarJar`-only jar sits on the plain JVM classpath as
+an unnamed-module jar the mod's named module can't read — first contact
+threw `NoClassDefFoundError: io/netty/handler/codec/http/HttpServerCodec`
+on the first real connection attempt. Fix: also declare the same artifact
+via ModDevGradle's `additionalRuntimeClasspath` in `build.gradle`, which
+puts it on the dev run's classpath the way FML expects. Production
+packaging (the actual jarJar-bundled jar) is unaffected; this only wires up
+the dev loop.
+
 ## D2 — Observation composition: composite frame + section mask — **Settled**
 
 One observation message per cadence tick, containing named sections
