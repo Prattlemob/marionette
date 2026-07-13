@@ -52,16 +52,18 @@ pipeline); hand-rolling WS framing on bare Netty core (framing-for-free was
 the point of choosing WebSocket, per D1).
 
 **Dev-environment addendum (2026-07-13, Task 8 verification):** Jar-in-Jar
-only unpacks the bundled codec into the mod's module at *production*
-runtime. NeoForge's dev run tasks (`runClient*`) load classes straight from
-`build/classes`, so the `jarJar`-only jar sits on the plain JVM classpath as
-an unnamed-module jar the mod's named module can't read — first contact
-threw `NoClassDefFoundError: io/netty/handler/codec/http/HttpServerCodec`
-on the first real connection attempt. Fix: also declare the same artifact
-via ModDevGradle's `additionalRuntimeClasspath` in `build.gradle`, which
-puts it on the dev run's classpath the way FML expects. Production
-packaging (the actual jarJar-bundled jar) is unaffected; this only wires up
-the dev loop.
+metadata only exists inside the packaged mod jar, and NeoForge dev run
+tasks (`runClient*`) load the mod from `build/classes` without packaging
+one — so FML's mod/library discovery never sees the bundled
+`netty-codec-http` at all in dev, and plain external libraries are not
+loaded into dev runs on their own (per NeoForge's non-MC-dependency docs).
+The codec was therefore simply absent from the dev classpath: first real
+connection threw `NoClassDefFoundError:
+io/netty/handler/codec/http/HttpServerCodec`. Fix: also declare the same
+artifact via ModDevGradle's `additionalRuntimeClasspath` in `build.gradle`,
+which exists precisely to put libraries on the dev-run classpath. It is
+additive and dev-only: production packaging still relies solely on the
+jarJar bundle.
 
 ## D2 — Observation composition: composite frame + section mask — **Settled**
 
