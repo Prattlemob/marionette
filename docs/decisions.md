@@ -234,7 +234,14 @@ earlier if outside contributions arrive.
   thread factory for the Netty event loop; log/diagnose `exceptionCaught`
   causes; define release-vs-bridge-stop ordering on shutdown (currently
   inert — ticks have stopped — observed as `Bridge stopped` before
-  `Controls released` on window close).
+  `Controls released` on window close); halt frame processing after a binary-frame violation (the 1003 close path leaves already-pipelined text frames parsed and enqueued until channelInactive — give the session an explicit close()).
+- JSON strictness on the wire — pre-release. `MessageParser` uses Gson's lenient
+  `JsonParser.parseString`, which accepts non-standard JSON (unquoted keys,
+  single quotes). Since `protocol/README.md` defines tightened validation as a
+  breaking change, accidental leniency hardens into contract: before the first
+  tagged release, either switch to strict parsing or add a spec sentence that
+  acceptance of non-conforming JSON is unspecified and may tighten without a
+  version bump. (Final M2.1 review, 2026-07-15.)
 - Movement axes on the wire: boolean (key-like) vs. analog floats
   (controller-like) — M3.1.
 - Item-component serialization depth (enchantments, custom names) — M4.2.
