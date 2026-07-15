@@ -81,6 +81,11 @@ public final class MessageParser {
                 throw new ProtocolError(ErrorCode.INVALID_FIELD,
                         "field \"versions\" must be a non-empty array of integers");
             }
+            double value = primitive.getAsDouble();
+            if (value != Math.rint(value) || value < Integer.MIN_VALUE || value > Integer.MAX_VALUE) {
+                throw new ProtocolError(ErrorCode.INVALID_FIELD,
+                        "field \"versions\" must be a non-empty array of integers");
+            }
             versions.add(primitive.getAsInt());
         }
         return versions;

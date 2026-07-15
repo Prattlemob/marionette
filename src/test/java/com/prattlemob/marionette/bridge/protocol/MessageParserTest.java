@@ -42,6 +42,10 @@ class MessageParserTest {
                 () -> MessageParser.parse("{\"type\": \"hello\", \"versions\": 1}")).code());
         assertEquals(ErrorCode.INVALID_FIELD, assertThrows(ProtocolError.class,
                 () -> MessageParser.parse("{\"type\": \"hello\", \"versions\": [1], \"role\": 5}")).code());
+        assertEquals(ErrorCode.INVALID_FIELD, assertThrows(ProtocolError.class,
+                () -> MessageParser.parse("{\"type\": \"hello\", \"versions\": [1.5]}")).code());
+        assertEquals(ErrorCode.INVALID_FIELD, assertThrows(ProtocolError.class,
+                () -> MessageParser.parse("{\"type\": \"hello\", \"versions\": [4000000000]}")).code());
     }
 
     @Test
