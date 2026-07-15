@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Marionette walking-skeleton demo (protocol v0): walk a square.
+"""Marionette walking-skeleton demo (protocol v1): walk a square.
 
 Walks four ~5-block sides with 90° turns and reports how far from the
 start the player ended up. Doubles as the disconnect-safety test target:
@@ -29,9 +29,9 @@ async def next_observation(ws):
 
 async def main():
     async with websockets.connect(f"ws://127.0.0.1:{PORT}/") as ws:
-        await ws.send(json.dumps({"type": "hello", "version": 0}))
+        await ws.send(json.dumps({"type": "hello", "versions": [1], "role": "controller"}))
         hello = json.loads(await ws.recv())
-        assert hello.get("type") == "hello", hello
+        assert hello.get("type") == "hello", f"handshake rejected: {hello}"
 
         start = await next_observation(ws)
         yaw = start["yaw"]

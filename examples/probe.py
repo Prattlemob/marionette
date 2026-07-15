@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Minimal Marionette bridge probe (protocol v0).
+"""Minimal Marionette bridge probe (protocol v1).
 
 Connects, performs the hello handshake, watches observations for a second,
 then holds `forward` for three seconds and releases it — the M1.2
@@ -30,8 +30,11 @@ async def watch(ws, seconds):
 
 async def main():
     async with websockets.connect(f"ws://127.0.0.1:{PORT}/") as ws:
-        await ws.send(json.dumps({"type": "hello", "version": 0}))
-        print("hello reply:", await ws.recv())
+        await ws.send(json.dumps({"type": "hello", "versions": [1], "role": "controller"}))
+        hello = json.loads(await ws.recv())
+        assert hello.get("type") == "hello", f"handshake rejected: {hello}"
+        print(f"connected: protocol {hello['version']}, mod {hello['mod']}, "
+              f"capabilities {hello['capabilities']}")
         print("-- observing for 1 s --")
         await watch(ws, 1.0)
         print("-- forward ON for 3 s --")
