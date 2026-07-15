@@ -1,9 +1,8 @@
 # Marionette protocol v0 — DRAFT
 
-> **Status: throwaway draft.** This documents exactly what the Phase 1
-> walking skeleton speaks, nothing more. Protocol v1 (M2.1) replaces it
-> with a versioned envelope, capability flags, and a documented change
-> process. Do not build lasting tooling against v0.
+> **Status: superseded by [v1.md](v1.md).** This documents exactly what
+> the Phase 1 walking skeleton spoke, nothing more. Kept for history; do
+> not target it.
 
 ## Transport
 
