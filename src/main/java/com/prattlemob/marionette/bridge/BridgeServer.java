@@ -8,7 +8,10 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-import com.google.gson.JsonObject;
+import com.prattlemob.marionette.bridge.protocol.AgentCommand;
+import com.prattlemob.marionette.bridge.protocol.ErrorCode;
+import com.prattlemob.marionette.bridge.protocol.Messages;
+import com.prattlemob.marionette.bridge.protocol.ProtocolSession;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
@@ -23,18 +26,24 @@ import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.websocketx.CloseWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
+import io.netty.handler.codec.http.websocketx.WebSocketFrame;
+import io.netty.handler.codec.http.websocketx.WebSocketFrameAggregator;
 import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
 
 /**
- * Localhost-only WebSocket bridge (protocol v0). One controller connection
- * at a time; a later connect while one is attached is refused with close
- * code 1013. The single Netty event-loop thread parses and enqueues
- * commands but never touches game state; the tick thread drains them.
- * Deliberately free of Minecraft imports so it is testable headless.
+ * Localhost-only WebSocket transport for protocol v1. All protocol logic
+ * lives in {@link ProtocolSession}; this class only moves frames and
+ * executes the session's instructions. One controller connection at a
+ * time; a later connect while one is attached is refused with a
+ * controller_attached error and close code 1013. The single Netty
+ * event-loop thread parses and enqueues commands but never touches game
+ * state; the tick thread drains them. Deliberately free of Minecraft
+ * imports so it is testable headless.
  */
 public final class BridgeServer {
-    public static final int PROTOCOL_VERSION = 0;
     public static final int DEFAULT_PORT = 24680;
+    /** Max WebSocket message size; larger closes with 1009 (see protocol/v1.md). */
+    private static final int MAX_FRAME_BYTES = 65536;
 
     private final int requestedPort;
     private final String modVersion;
@@ -63,8 +72,9 @@ public final class BridgeServer {
                     protected void initChannel(SocketChannel channel) {
                         channel.pipeline().addLast(
                                 new HttpServerCodec(),
-                                new HttpObjectAggregator(65536),
-                                new WebSocketServerProtocolHandler("/", null, true),
+                                new HttpObjectAggregator(MAX_FRAME_BYTES),
+                                new WebSocketServerProtocolHandler("/", null, true, MAX_FRAME_BYTES),
+                                new WebSocketFrameAggregator(MAX_FRAME_BYTES),
                                 new AgentConnectionHandler());
                     }
                 });
@@ -82,9 +92,10 @@ public final class BridgeServer {
     }
 
     /**
-     * True exactly once after a connection is lost; the tick loop turns this
-     * into release-all. The one-tick safety guarantee rests on the tick loop
-     * calling this every tick.
+     * True exactly once after a hello-completed controller is lost; the tick
+     * loop turns this into release-all. The one-tick safety guarantee rests
+     * on the tick loop calling this every tick. Connections that never
+     * completed hello do not signal here.
      */
     public boolean pollDisconnected() {
         return disconnected.getAndSet(false);
@@ -122,67 +133,48 @@ public final class BridgeServer {
         }
     }
 
-    private static String errorJson(String message) {
-        JsonObject error = new JsonObject();
-        error.addProperty("type", "error");
-        error.addProperty("message", message);
-        return error.toString();
-    }
-
-    private final class AgentConnectionHandler extends SimpleChannelInboundHandler<TextWebSocketFrame> {
-        private boolean helloDone;
+    private final class AgentConnectionHandler extends SimpleChannelInboundHandler<WebSocketFrame> {
+        private ProtocolSession session;
 
         @Override
         public void userEventTriggered(ChannelHandlerContext ctx, Object event) throws Exception {
-            if (event instanceof WebSocketServerProtocolHandler.HandshakeComplete
-                    && !controller.compareAndSet(null, ctx.channel())) {
-                ctx.writeAndFlush(new CloseWebSocketFrame(1013, "controller already connected"))
-                        .addListener(ChannelFutureListener.CLOSE);
+            if (event instanceof WebSocketServerProtocolHandler.HandshakeComplete) {
+                if (controller.compareAndSet(null, ctx.channel())) {
+                    session = new ProtocolSession(modVersion);
+                } else {
+                    ctx.write(new TextWebSocketFrame(Messages.error(
+                            ErrorCode.CONTROLLER_ATTACHED, "controller already connected",
+                            null, null)));
+                    ctx.writeAndFlush(new CloseWebSocketFrame(
+                                    ErrorCode.CONTROLLER_ATTACHED.closeCode(),
+                                    "controller already connected"))
+                            .addListener(ChannelFutureListener.CLOSE);
+                }
             }
             super.userEventTriggered(ctx, event);
         }
 
         @Override
-        protected void channelRead0(ChannelHandlerContext ctx, TextWebSocketFrame frame) {
-            if (controller.get() != ctx.channel()) {
+        protected void channelRead0(ChannelHandlerContext ctx, WebSocketFrame frame) {
+            if (controller.get() != ctx.channel() || session == null) {
                 return; // a refused extra connection; it is already closing
             }
-            AgentCommand command;
-            try {
-                command = CommandParser.parse(frame.text());
-            } catch (ProtocolException e) {
-                ctx.writeAndFlush(new TextWebSocketFrame(errorJson(e.getMessage())));
-                return;
-            }
-            if (!helloDone) {
-                handleHello(ctx, command);
-                return;
-            }
-            if (command instanceof AgentCommand.Hello) {
-                ctx.writeAndFlush(new TextWebSocketFrame(errorJson("duplicate hello")));
-                return;
-            }
-            inbound.add(command);
-        }
-
-        private void handleHello(ChannelHandlerContext ctx, AgentCommand command) {
-            if (!(command instanceof AgentCommand.Hello hello)) {
-                ctx.writeAndFlush(new CloseWebSocketFrame(1002, "hello required first"))
+            if (!(frame instanceof TextWebSocketFrame text)) {
+                ctx.writeAndFlush(new CloseWebSocketFrame(1003, "text frames only"))
                         .addListener(ChannelFutureListener.CLOSE);
                 return;
             }
-            if (hello.version() != PROTOCOL_VERSION) {
-                ctx.writeAndFlush(new CloseWebSocketFrame(1002, "unsupported protocol version"))
-                        .addListener(ChannelFutureListener.CLOSE);
-                return;
+            for (ProtocolSession.Action action : session.onFrame(text.text())) {
+                switch (action) {
+                    case ProtocolSession.Action.Send send ->
+                            ctx.writeAndFlush(new TextWebSocketFrame(send.json()));
+                    case ProtocolSession.Action.Enqueue enqueue -> inbound.add(enqueue.command());
+                    case ProtocolSession.Action.Close close ->
+                            ctx.writeAndFlush(new CloseWebSocketFrame(close.code(), close.reason()))
+                                    .addListener(ChannelFutureListener.CLOSE);
+                }
             }
-            helloDone = true;
-            JsonObject reply = new JsonObject();
-            reply.addProperty("type", "hello");
-            reply.addProperty("version", PROTOCOL_VERSION);
-            reply.addProperty("mod", modVersion);
-            ctx.writeAndFlush(new TextWebSocketFrame(reply.toString()));
-            controllerReady.set(true);
+            controllerReady.set(session.isActive());
         }
 
         @Override
@@ -190,7 +182,10 @@ public final class BridgeServer {
             if (controller.compareAndSet(ctx.channel(), null)) {
                 controllerReady.set(false);
                 inbound.clear(); // commands from a dead controller must not act
-                disconnected.set(true);
+                if (session != null && session.isActive()) {
+                    // Only a hello-completed controller counts as an agent loss.
+                    disconnected.set(true);
+                }
             }
             super.channelInactive(ctx);
         }

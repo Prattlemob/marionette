@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import java.net.URI;
@@ -23,9 +24,10 @@ import org.junit.jupiter.api.Test;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.prattlemob.marionette.bridge.protocol.AgentCommand;
 
 class BridgeServerTest {
-    private static final String HELLO = "{\"type\": \"hello\", \"version\": 0}";
+    private static final String HELLO = "{\"type\": \"hello\", \"versions\": [1]}";
 
     private BridgeServer server;
 
@@ -103,15 +105,49 @@ class BridgeServerTest {
     }
 
     @Test
-    void helloHandshakeRepliesWithVersionAndModVersion() throws Exception {
+    void helloHandshakeRepliesWithVersionCapabilitiesAndModVersion() throws Exception {
         TestClient client = TestClient.connect(server.port());
         assertFalse(server.hasController(), "not a controller before hello");
         client.send(HELLO);
         JsonObject reply = JsonParser.parseString(client.awaitMessage()).getAsJsonObject();
         assertEquals("hello", reply.get("type").getAsString());
-        assertEquals(0, reply.get("version").getAsInt());
+        assertEquals(1, reply.get("version").getAsInt());
+        assertTrue(reply.get("capabilities").getAsJsonObject().isEmpty());
         assertEquals("test-version", reply.get("mod").getAsString());
         await(server::hasController);
+    }
+
+    @Test
+    void nonHelloFirstMessageGetsErrorThenCloses1002() throws Exception {
+        TestClient client = TestClient.connect(server.port());
+        client.send("{\"type\": \"input\", \"forward\": true}");
+        JsonObject error = JsonParser.parseString(client.awaitMessage()).getAsJsonObject();
+        assertEquals("hello_required", error.get("code").getAsString());
+        assertEquals(1002, (int) client.closeCode.get(5, TimeUnit.SECONDS));
+        assertFalse(server.hasController());
+    }
+
+    @Test
+    void unsupportedVersionGetsErrorWithSupportedThenCloses1002() throws Exception {
+        TestClient client = TestClient.connect(server.port());
+        client.send("{\"type\": \"hello\", \"versions\": [99]}");
+        JsonObject error = JsonParser.parseString(client.awaitMessage()).getAsJsonObject();
+        assertEquals("unsupported_version", error.get("code").getAsString());
+        assertEquals(1, error.get("supported").getAsJsonArray().get(0).getAsInt());
+        assertEquals(1002, (int) client.closeCode.get(5, TimeUnit.SECONDS));
+    }
+
+    @Test
+    void secondConnectionGetsControllerAttachedThenCloses1013() throws Exception {
+        TestClient first = connectAndHello();
+        TestClient second = TestClient.connect(server.port());
+        JsonObject error = JsonParser.parseString(second.awaitMessage()).getAsJsonObject();
+        assertEquals("controller_attached", error.get("code").getAsString());
+        assertEquals(1013, (int) second.closeCode.get(5, TimeUnit.SECONDS));
+        // the original controller is unaffected:
+        first.send("{\"type\": \"input\", \"forward\": true}");
+        await(() -> server.drainCommands().stream()
+                .anyMatch(c -> c instanceof AgentCommand.InputUpdate));
     }
 
     @Test
@@ -129,40 +165,13 @@ class BridgeServerTest {
     }
 
     @Test
-    void nonHelloFirstMessageClosesTheConnection() throws Exception {
-        TestClient client = TestClient.connect(server.port());
-        client.send("{\"type\": \"input\", \"forward\": true}");
-        assertEquals(1002, (int) client.closeCode.get(5, TimeUnit.SECONDS));
-        assertFalse(server.hasController());
-    }
-
-    @Test
-    void wrongVersionIsRejected() throws Exception {
-        TestClient client = TestClient.connect(server.port());
-        client.send("{\"type\": \"hello\", \"version\": 99}");
-        assertEquals(1002, (int) client.closeCode.get(5, TimeUnit.SECONDS));
-    }
-
-    @Test
-    void secondConnectionIsRefusedWhileControllerAttached() throws Exception {
-        TestClient first = connectAndHello();
-        TestClient second = TestClient.connect(server.port());
-        assertEquals(1013, (int) second.closeCode.get(5, TimeUnit.SECONDS));
-        // the original controller is unaffected:
-        first.send("{\"type\": \"input\", \"forward\": true}");
-        await(() -> {
-            List<AgentCommand> drained = server.drainCommands();
-            return drained.stream().anyMatch(c -> c instanceof AgentCommand.InputUpdate);
-        });
-    }
-
-    @Test
     void malformedMessageGetsErrorReplyAndConnectionSurvives() throws Exception {
         TestClient client = connectAndHello();
         client.send("garbage");
         JsonObject error = JsonParser.parseString(client.awaitMessage()).getAsJsonObject();
         assertEquals("error", error.get("type").getAsString());
         assertNotNull(error.get("message"));
+        assertNotNull(error.get("code"));
         // still alive and functional:
         client.send("{\"type\": \"release\"}");
         await(() -> server.drainCommands().stream().anyMatch(c -> c instanceof AgentCommand.Release));

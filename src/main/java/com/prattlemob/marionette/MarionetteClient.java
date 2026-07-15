@@ -1,8 +1,8 @@
 package com.prattlemob.marionette;
 
-import com.google.gson.JsonObject;
-import com.prattlemob.marionette.bridge.AgentCommand;
 import com.prattlemob.marionette.bridge.BridgeServer;
+import com.prattlemob.marionette.bridge.protocol.AgentCommand;
+import com.prattlemob.marionette.bridge.protocol.Messages;
 import com.prattlemob.marionette.control.ControlState;
 import com.prattlemob.marionette.control.ControlStateApplier;
 import com.prattlemob.marionette.control.DemoScript;
@@ -154,7 +154,6 @@ public class MarionetteClient {
             }
             case AgentCommand.Look look -> controlState.setLook(look.yaw(), look.pitch());
             case AgentCommand.Release release -> controlState.releaseAll();
-            case AgentCommand.Hello hello -> { } // handshake handled by the bridge
         }
     }
 
@@ -194,15 +193,9 @@ public class MarionetteClient {
                     player.getX(), player.getY(), player.getZ(), player.getYRot()));
         }
         if (bridge != null && inWorld && player != null) {
-            JsonObject frame = new JsonObject();
-            frame.addProperty("type", "observation");
-            frame.addProperty("tick", ticksInWorld);
-            frame.addProperty("x", player.getX());
-            frame.addProperty("y", player.getY());
-            frame.addProperty("z", player.getZ());
-            frame.addProperty("yaw", player.getYRot());
-            frame.addProperty("pitch", player.getXRot());
-            bridge.sendObservation(frame.toString());
+            bridge.sendObservation(Messages.observation(ticksInWorld,
+                    player.getX(), player.getY(), player.getZ(),
+                    player.getYRot(), player.getXRot()));
         }
     }
 
