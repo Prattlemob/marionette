@@ -172,14 +172,14 @@ Items:
 
 Items:
 
-- [ ] Message envelope spec (type, optional request id for request/response
+- [x] Message envelope spec (type, optional request id for request/response
       pairs)
-- [ ] Handshake spec: integer protocol version, capability flags, `role`
+- [x] Handshake spec: integer protocol version, capability flags, `role`
       field, rejection path (D6, D7)
-- [ ] Second controller connection rejected with documented error (D7)
-- [ ] Error message spec (code, human-readable message, offending input echo)
-- [ ] `protocol/README.md` explains versioning & change process
-- [ ] Implementation brought into exact conformance; example script updated
+- [x] Second controller connection rejected with documented error (D7)
+- [x] Error message spec (code, human-readable message, offending input echo)
+- [x] `protocol/README.md` explains versioning & change process
+- [x] Implementation brought into exact conformance; example script updated
 
 ### M2.2 — Configuration file
 

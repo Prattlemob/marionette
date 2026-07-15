@@ -226,13 +226,15 @@ earlier if outside contributions arrive.
 
 ## Minor open points (decide inside their milestones)
 
-- Bridge lifecycle polish carried out of Phase 1 review — M2.1/M2.3: gate the
-  disconnect latch on a completed hello (a probe connection that never sent
-  hello currently logs a spurious agent-disconnect on close); duplicate-hello
-  rejection test (v1 handshake rewrite); daemon thread factory for the Netty
-  event loop; log/diagnose `exceptionCaught` causes; define release-vs-
-  bridge-stop ordering on shutdown (currently inert — ticks have stopped —
-  observed as `Bridge stopped` before `Controls released` on window close).
+- Bridge lifecycle polish carried out of Phase 1 review — **partially
+  resolved in M2.1** (2026-07-15): the disconnect latch is now gated on a
+  completed hello (a probe that never sent hello no longer logs a spurious
+  agent-disconnect), and duplicate-hello rejection is specced
+  (`unexpected_hello`, non-fatal) and tested. Still open for M2.3: daemon
+  thread factory for the Netty event loop; log/diagnose `exceptionCaught`
+  causes; define release-vs-bridge-stop ordering on shutdown (currently
+  inert — ticks have stopped — observed as `Bridge stopped` before
+  `Controls released` on window close).
 - Movement axes on the wire: boolean (key-like) vs. analog floats
   (controller-like) — M3.1.
 - Item-component serialization depth (enchantments, custom names) — M4.2.
