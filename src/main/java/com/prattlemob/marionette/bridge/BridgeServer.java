@@ -200,6 +200,9 @@ public final class BridgeServer {
                 // WebSocketServerProtocolHandler's default close path inject
                 // its own courtesy 1000 "Bye" frame instead, masking the
                 // real cause (see protocol/v1.md's transport section).
+                // Best-effort: pre-handshake (HttpObjectAggregator) no WS
+                // encoder is wired, so the write fails harmlessly — the
+                // connection dies via the close listener either way.
                 ctx.writeAndFlush(new CloseWebSocketFrame(1009, "message too big"))
                         .addListener(ChannelFutureListener.CLOSE);
             } else {

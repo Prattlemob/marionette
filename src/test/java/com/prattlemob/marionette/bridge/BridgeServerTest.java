@@ -218,7 +218,7 @@ class BridgeServerTest {
             try {
                 next[0] = connectAndHello();
                 return true;
-            } catch (Exception stillAttached) {
+            } catch (Exception | AssertionError stillAttached) {
                 return false;
             }
         });
