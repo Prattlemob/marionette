@@ -27,8 +27,8 @@ requirement, not an afterthought. The current posture, as specified in
 - **Bounded agent power.** A connected agent can only issue the documented
   protocol commands (in v1: movement, camera, release). Malformed input
   never crashes the client and never alters held controls; on disconnect,
-  socket error, or watchdog trip, all controls release within one client
-  tick and the player idles.
+  socket error, or the client leaving the world, all controls release
+  within one client tick and the player idles.
 
 ## Supported versions
 
