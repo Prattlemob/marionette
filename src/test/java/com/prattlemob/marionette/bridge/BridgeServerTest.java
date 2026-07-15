@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -93,6 +94,11 @@ class BridgeServerTest {
         public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
             closeCode.complete(statusCode);
             return null;
+        }
+
+        @Override
+        public void onError(WebSocket webSocket, Throwable error) {
+            closeCode.completeExceptionally(error);
         }
     }
 
@@ -198,5 +204,70 @@ class BridgeServerTest {
         server.sendObservation("{\"type\": \"observation\", \"tick\": 1}");
         JsonObject observation = JsonParser.parseString(client.awaitMessage()).getAsJsonObject();
         assertEquals(1, observation.get("tick").getAsInt());
+    }
+
+    @Test
+    void neverHelloConnectionDoesNotSignalAgentLossOnClose() throws Exception {
+        TestClient probe = TestClient.connect(server.port());
+        probe.ws.abort(); // never sent hello
+        // Deterministic ordering: the controller slot frees only in
+        // channelInactive, so once a new connection completes hello, the
+        // probe's close has been fully processed.
+        TestClient[] next = new TestClient[1];
+        await(() -> {
+            try {
+                next[0] = connectAndHello();
+                return true;
+            } catch (Exception stillAttached) {
+                return false;
+            }
+        });
+        assertFalse(server.pollDisconnected(),
+                "a connection that never completed hello must not latch a disconnect");
+    }
+
+    @Test
+    void duplicateHelloIsNonFatalError() throws Exception {
+        TestClient client = connectAndHello();
+        client.send(HELLO);
+        JsonObject error = JsonParser.parseString(client.awaitMessage()).getAsJsonObject();
+        assertEquals("unexpected_hello", error.get("code").getAsString());
+        // still alive and functional:
+        client.send("{\"type\": \"release\"}");
+        await(() -> server.drainCommands().stream().anyMatch(c -> c instanceof AgentCommand.Release));
+    }
+
+    @Test
+    void errorEchoesIdAndOffendingInput() throws Exception {
+        TestClient client = connectAndHello();
+        String frame = "{\"type\": \"look\", \"id\": 12, \"yaw\": \"north\", \"pitch\": 0}";
+        client.send(frame);
+        JsonObject error = JsonParser.parseString(client.awaitMessage()).getAsJsonObject();
+        assertEquals("invalid_field", error.get("code").getAsString());
+        assertEquals(12, error.get("id").getAsInt());
+        assertEquals(frame, error.get("input").getAsString());
+    }
+
+    @Test
+    void binaryFrameCloses1003() throws Exception {
+        TestClient client = connectAndHello();
+        client.ws.sendBinary(ByteBuffer.wrap(new byte[] {1, 2, 3}), true).join();
+        assertEquals(1003, (int) client.closeCode.get(5, TimeUnit.SECONDS));
+    }
+
+    @Test
+    void oversizedMessageClosesTheConnection() throws Exception {
+        TestClient client = connectAndHello();
+        client.send("{\"type\": \"release\", \"pad\": \"" + "x".repeat(70_000) + "\"}");
+        // Netty's frame decoder rejects messages over MAX_FRAME_BYTES with a
+        // 1009 close frame. If the JDK client fragments the message instead,
+        // the frame aggregator trips and the server closes without a close
+        // frame — accept either terminal signal, but the connection must die.
+        try {
+            assertEquals(1009, (int) client.closeCode.get(5, TimeUnit.SECONDS));
+        } catch (java.util.concurrent.ExecutionException abnormalClose) {
+            // closed without a close frame — acceptable; see note above
+        }
+        await(() -> !server.hasController());
     }
 }

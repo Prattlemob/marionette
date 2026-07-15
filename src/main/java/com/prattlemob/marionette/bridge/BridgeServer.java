@@ -22,6 +22,7 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.handler.codec.TooLongFrameException;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.websocketx.CloseWebSocketFrame;
@@ -192,7 +193,18 @@ public final class BridgeServer {
 
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-            ctx.close(); // channelInactive handles the release signal
+            if (cause instanceof TooLongFrameException) {
+                // The frame decoder/aggregator rejected an oversized message
+                // before it ever reached channelRead0. Send the 1009 close
+                // frame explicitly: a bare ctx.close() here would let
+                // WebSocketServerProtocolHandler's default close path inject
+                // its own courtesy 1000 "Bye" frame instead, masking the
+                // real cause (see protocol/v1.md's transport section).
+                ctx.writeAndFlush(new CloseWebSocketFrame(1009, "message too big"))
+                        .addListener(ChannelFutureListener.CLOSE);
+            } else {
+                ctx.close(); // channelInactive handles the release signal
+            }
         }
     }
 }
