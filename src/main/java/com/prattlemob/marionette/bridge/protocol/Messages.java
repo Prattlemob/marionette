@@ -20,7 +20,9 @@ public final class Messages {
             reply.add("id", id);
         }
         reply.addProperty("version", version);
-        reply.add("capabilities", new JsonObject());
+        JsonObject capabilities = new JsonObject();
+        capabilities.addProperty("configure", true);
+        reply.add("capabilities", capabilities);
         reply.addProperty("mod", modVersion);
         return reply.toString();
     }

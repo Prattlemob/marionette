@@ -85,6 +85,8 @@ public final class MessageParser {
                     requiredFiniteFloat(json, "yaw"),
                     requiredFiniteFloat(json, "pitch"));
             case "release" -> new AgentCommand.Release();
+            case "configure" -> new AgentCommand.Configure(
+                    optionalRangedInt(json, "rateDivisor", 1, 100));
             default -> throw new ProtocolError(ErrorCode.UNKNOWN_TYPE, "unknown type: " + type);
         };
     }
@@ -155,5 +157,21 @@ public final class MessageParser {
                     "field \"" + name + "\" must be finite");
         }
         return value;
+    }
+
+    private static Integer optionalRangedInt(JsonObject json, String name, int min, int max) {
+        JsonElement element = json.get(name);
+        if (element == null) {
+            return null;
+        }
+        String requirement = "field \"" + name + "\" must be an integer between " + min + " and " + max;
+        if (!(element instanceof JsonPrimitive primitive) || !primitive.isNumber()) {
+            throw new ProtocolError(ErrorCode.INVALID_FIELD, requirement);
+        }
+        double value = primitive.getAsDouble();
+        if (value != Math.rint(value) || value < min || value > max) {
+            throw new ProtocolError(ErrorCode.INVALID_FIELD, requirement);
+        }
+        return primitive.getAsInt();
     }
 }

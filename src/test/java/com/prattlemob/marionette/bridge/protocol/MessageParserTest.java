@@ -155,4 +155,27 @@ class MessageParserTest {
         assertInstanceOf(AgentCommand.Release.class,
                 MessageParser.parse("{\"type\": \"release\"}"));
     }
+
+    @Test
+    void parsesConfigureWithRateDivisor() {
+        AgentCommand.Configure configure = assertInstanceOf(AgentCommand.Configure.class,
+                MessageParser.parse("{\"type\": \"configure\", \"rateDivisor\": 5}"));
+        assertEquals(5, configure.rateDivisor());
+    }
+
+    @Test
+    void parsesConfigureWithNoFieldsAsNoOp() {
+        AgentCommand.Configure configure = assertInstanceOf(AgentCommand.Configure.class,
+                MessageParser.parse("{\"type\": \"configure\"}"));
+        assertNull(configure.rateDivisor());
+    }
+
+    @Test
+    void rejectsBadRateDivisor() {
+        for (String bad : List.of("0", "101", "-3", "2.5", "true", "\"5\"")) {
+            assertEquals(ErrorCode.INVALID_FIELD, assertThrows(ProtocolError.class,
+                    () -> MessageParser.parse("{\"type\": \"configure\", \"rateDivisor\": " + bad + "}")).code(),
+                    "rateDivisor " + bad + " must be rejected");
+        }
+    }
 }

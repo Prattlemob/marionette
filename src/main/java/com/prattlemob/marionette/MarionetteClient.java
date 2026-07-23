@@ -201,6 +201,9 @@ public class MarionetteClient {
             }
             case AgentCommand.Look look -> controlState.setLook(look.yaw(), look.pitch());
             case AgentCommand.Release release -> controlState.releaseAll();
+            case AgentCommand.Configure configure -> {
+                // Per-session configuration; implementation deferred to M2.4+
+            }
         }
     }
 

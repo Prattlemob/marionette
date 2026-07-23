@@ -36,7 +36,7 @@ class ProtocolSessionTest {
         assertEquals("hello", reply.get("type").getAsString());
         assertEquals(1, reply.get("version").getAsInt());
         assertEquals("test-version", reply.get("mod").getAsString());
-        assertTrue(reply.get("capabilities").getAsJsonObject().isEmpty());
+        assertTrue(reply.get("capabilities").getAsJsonObject().get("configure").getAsBoolean());
         assertTrue(session.isActive());
     }
 

@@ -122,7 +122,7 @@ class BridgeServerTest {
         JsonObject reply = JsonParser.parseString(client.awaitMessage()).getAsJsonObject();
         assertEquals("hello", reply.get("type").getAsString());
         assertEquals(1, reply.get("version").getAsInt());
-        assertTrue(reply.get("capabilities").getAsJsonObject().isEmpty());
+        assertTrue(reply.get("capabilities").getAsJsonObject().get("configure").getAsBoolean());
         assertEquals("test-version", reply.get("mod").getAsString());
         await(server::hasController);
     }

@@ -22,7 +22,7 @@ class MessagesTest {
         JsonObject reply = parse(Messages.helloReply(1, "0.1.0", null));
         assertEquals("hello", reply.get("type").getAsString());
         assertEquals(1, reply.get("version").getAsInt());
-        assertTrue(reply.get("capabilities").getAsJsonObject().isEmpty());
+        assertTrue(reply.get("capabilities").getAsJsonObject().get("configure").getAsBoolean());
         assertEquals("0.1.0", reply.get("mod").getAsString());
         assertFalse(reply.has("id"));
     }
