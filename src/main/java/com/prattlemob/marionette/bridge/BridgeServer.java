@@ -42,10 +42,10 @@ import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
  * imports so it is testable headless.
  */
 public final class BridgeServer {
-    public static final int DEFAULT_PORT = 24680;
     /** Max WebSocket message size; larger closes with 1009 (see protocol/v1.md). */
     private static final int MAX_FRAME_BYTES = 65536;
 
+    private final String bindAddress;
     private final int requestedPort;
     private final String modVersion;
     private final Queue<AgentCommand> inbound = new ConcurrentLinkedQueue<>();
@@ -56,13 +56,18 @@ public final class BridgeServer {
     private NioEventLoopGroup group;
     private Channel listener;
 
-    /** @param port TCP port on loopback; 0 binds an ephemeral port (tests). */
-    public BridgeServer(int port, String modVersion) {
+    /**
+     * @param bindAddress address to bind; callers are responsible for
+     *        loopback clamping (MarionetteConfig.resolveBindAddress)
+     * @param port TCP port; 0 binds an ephemeral port (tests).
+     */
+    public BridgeServer(String bindAddress, int port, String modVersion) {
+        this.bindAddress = bindAddress;
         this.requestedPort = port;
         this.modVersion = modVersion;
     }
 
-    /** Bind to loopback. Blocks briefly; call once. Throws on bind failure. */
+    /** Bind to the configured address. Blocks briefly; call once. Throws on bind failure. */
     public void start() {
         group = new NioEventLoopGroup(1);
         ServerBootstrap bootstrap = new ServerBootstrap()
@@ -79,7 +84,7 @@ public final class BridgeServer {
                                 new AgentConnectionHandler());
                     }
                 });
-        listener = bootstrap.bind("127.0.0.1", requestedPort).syncUninterruptibly().channel();
+        listener = bootstrap.bind(bindAddress, requestedPort).syncUninterruptibly().channel();
     }
 
     /** The actually bound port (differs from requested when that was 0). */

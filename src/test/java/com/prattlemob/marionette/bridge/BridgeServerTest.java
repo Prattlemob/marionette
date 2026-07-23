@@ -34,7 +34,7 @@ class BridgeServerTest {
 
     @BeforeEach
     void startServer() {
-        server = new BridgeServer(0, "test-version");
+        server = new BridgeServer("127.0.0.1", 0, "test-version");
         server.start();
     }
 

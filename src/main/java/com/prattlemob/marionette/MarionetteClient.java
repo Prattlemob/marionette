@@ -54,7 +54,7 @@ public class MarionetteClient {
         NeoForge.EVENT_BUS.addListener(this::onLoggingOut);
         NeoForge.EVENT_BUS.addListener(this::onGameShuttingDown);
         try {
-            BridgeServer server = new BridgeServer(BridgeServer.DEFAULT_PORT,
+            BridgeServer server = new BridgeServer("127.0.0.1", 24680,
                     container.getModInfo().getVersion().toString());
             server.start();
             bridge = server;
