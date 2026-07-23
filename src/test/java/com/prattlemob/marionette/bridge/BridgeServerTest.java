@@ -59,7 +59,17 @@ class BridgeServerTest {
         final BlockingQueue<String> messages = new LinkedBlockingQueue<>();
         final CompletableFuture<Integer> closeCode = new CompletableFuture<>();
         private final StringBuilder partial = new StringBuilder();
+        volatile boolean stalled;
         WebSocket ws;
+
+        void stallReads() {
+            stalled = true;
+        }
+
+        void resumeReads() {
+            stalled = false;
+            ws.request(1);
+        }
 
         static TestClient connect(int port) throws Exception {
             return connect("127.0.0.1", port);
@@ -90,7 +100,9 @@ class BridgeServerTest {
                 messages.add(partial.toString());
                 partial.setLength(0);
             }
-            webSocket.request(1);
+            if (!stalled) {
+                webSocket.request(1);
+            }
             return null;
         }
 
@@ -288,5 +300,37 @@ class BridgeServerTest {
             // closed without a close frame — acceptable; see note above
         }
         await(() -> !server.hasController());
+    }
+
+    @Test
+    void slowConsumerCoalescesToLatestWithBoundedBuffer() throws Exception {
+        TestClient client = connectAndHello();
+        client.stallReads();
+        // Hammer frames from this (tick-analogue) thread until the writability
+        // gate engages. TCP + Netty buffers absorb the first ~hundreds of KB.
+        String lastSent = null;
+        long tick = 0;
+        while (server.coalescedObservations() < 101 && tick < 500_000) {
+            lastSent = "{\"type\": \"observation\", \"tick\": " + tick++ + "}";
+            server.sendObservation(lastSent);
+        }
+        assertTrue(server.coalescedObservations() > 0, "writability gate never engaged");
+        long coalescedAtStall = server.coalescedObservations();
+        // Latest-wins: after the agent resumes reading, the last frame it
+        // eventually receives is the newest one sent, not a stale backlog tail.
+        client.resumeReads();
+        String expected = lastSent;
+        await(() -> {
+            String message;
+            while ((message = client.messages.poll()) != null) {
+                if (message.equals(expected)) {
+                    return true;
+                }
+            }
+            return false;
+        });
+        // Bounded: the coalesced counter kept growing instead of the queue.
+        assertTrue(coalescedAtStall > 100,
+                "expected sustained coalescing while stalled, saw " + coalescedAtStall);
     }
 }

@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.prattlemob.marionette.bridge.protocol.AgentCommand;
@@ -18,7 +19,9 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOption;
 import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
@@ -52,6 +55,8 @@ public final class BridgeServer {
     private final AtomicReference<Channel> controller = new AtomicReference<>();
     private final AtomicBoolean controllerReady = new AtomicBoolean();
     private final AtomicBoolean disconnected = new AtomicBoolean();
+    private final AtomicReference<String> pendingObservation = new AtomicReference<>();
+    private final AtomicLong coalesced = new AtomicLong();
 
     private NioEventLoopGroup group;
     private Channel listener;
@@ -73,6 +78,10 @@ public final class BridgeServer {
         ServerBootstrap bootstrap = new ServerBootstrap()
                 .group(group)
                 .channel(NioServerSocketChannel.class)
+                // Hard bound for a slow-reading agent: beyond the high-water mark the
+                // channel reports unwritable and sendObservation coalesces instead.
+                .childOption(ChannelOption.WRITE_BUFFER_WATER_MARK,
+                        new WriteBufferWaterMark(32 * 1024, 64 * 1024))
                 .childHandler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel channel) {
@@ -117,12 +126,31 @@ public final class BridgeServer {
         return commands;
     }
 
-    /** Send one observation frame; silently dropped when no controller is ready. */
+    /**
+     * Send one observation frame; silently dropped when no controller is
+     * ready. A slow-reading agent (channel unwritable) gets frames coalesced
+     * to latest: the newest frame waits in a one-slot stash, flushed when the
+     * channel drains; intermediate frames are dropped and counted. Setting
+     * the stash to null before a direct write is what keeps latest-wins
+     * ordering: a newer frame always supersedes a stashed older one.
+     */
     public void sendObservation(String json) {
         Channel channel = controller.get();
-        if (controllerReady.get() && channel != null && channel.isActive()) {
-            channel.writeAndFlush(new TextWebSocketFrame(json));
+        if (!controllerReady.get() || channel == null || !channel.isActive()) {
+            return;
         }
+        if (channel.isWritable()) {
+            pendingObservation.set(null);
+            channel.writeAndFlush(new TextWebSocketFrame(json));
+        } else {
+            pendingObservation.set(json);
+            coalesced.incrementAndGet();
+        }
+    }
+
+    /** Observation frames deferred/dropped for a slow reader since this controller attached. */
+    public long coalescedObservations() {
+        return coalesced.get();
     }
 
     /** Close listener, connection, and event loop. Safe to call once at shutdown. */
@@ -184,10 +212,23 @@ public final class BridgeServer {
         }
 
         @Override
+        public void channelWritabilityChanged(ChannelHandlerContext ctx) throws Exception {
+            if (ctx.channel() == controller.get() && ctx.channel().isWritable()) {
+                String pending = pendingObservation.getAndSet(null);
+                if (pending != null) {
+                    ctx.writeAndFlush(new TextWebSocketFrame(pending));
+                }
+            }
+            super.channelWritabilityChanged(ctx);
+        }
+
+        @Override
         public void channelInactive(ChannelHandlerContext ctx) throws Exception {
             if (controller.compareAndSet(ctx.channel(), null)) {
                 controllerReady.set(false);
                 inbound.clear(); // commands from a dead controller must not act
+                pendingObservation.set(null);
+                coalesced.set(0);
                 if (session != null && session.isActive()) {
                     // Only a hello-completed controller counts as an agent loss.
                     disconnected.set(true);
