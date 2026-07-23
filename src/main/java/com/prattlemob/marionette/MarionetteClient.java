@@ -64,6 +64,7 @@ public class MarionetteClient {
     private BridgeServer bridge;
     /** Per-session rateDivisor override from configure; null = use config. Reset on agent loss. */
     private Integer sessionRateDivisor;
+    private long reportedCoalesced;
 
     private final String modVersion;
 
@@ -109,6 +110,11 @@ public class MarionetteClient {
     }
 
     private void onGameShuttingDown(GameShuttingDownEvent event) {
+        // Ordering rule (docs/decisions.md, M2.3): controls release before the
+        // bridge stops. Inert in practice (ticks have stopped) but explicit.
+        if (controlsEngaged) {
+            releaseControls();
+        }
         if (bridge != null) {
             bridge.stop();
             logNormal("Bridge stopped");
@@ -255,6 +261,16 @@ public class MarionetteClient {
         ticksInWorld++;
         if (ticksInWorld % TICK_LOG_INTERVAL == 0) {
             logVerbose("Client tick {} in world", ticksInWorld);
+        }
+        if (bridge != null && ticksInWorld % TICK_LOG_INTERVAL == 0) {
+            long total = bridge.coalescedObservations();
+            if (total > reportedCoalesced) {
+                logNormal("{} observation frames coalesced for a slow-reading agent ({} total this session)",
+                        total - reportedCoalesced, total);
+                reportedCoalesced = total;
+            } else if (total < reportedCoalesced) {
+                reportedCoalesced = total; // counter reset by a reconnect
+            }
         }
         LocalPlayer player = Minecraft.getInstance().player;
         if (controlsEngaged && player != null && ticksInWorld % PUPPET_LOG_INTERVAL == 0) {
