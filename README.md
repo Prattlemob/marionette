@@ -44,37 +44,43 @@ config files); values marked *(restart required)* are read once at startup.
 
 ```toml
 [bridge]
-    # Master switch: when false, the WebSocket bridge never starts. (restart required)
-    enabled = true
-    # TCP port for the bridge listener. (restart required)
-    #Range: 1 ~ 65535
-    port = 24680
-    # Bind address. Non-loopback values are ignored and clamped to 127.0.0.1
-    # with a warning until the explicit opt-out gate ships (M5.1). (restart required)
-    bindAddress = "127.0.0.1"
+	#Master switch: when false, the WebSocket bridge never starts. (restart required)
+	enabled = true
+	#TCP port for the bridge listener. (restart required)
+	# Default: 24680
+	# Range: 1 ~ 65535
+	port = 24680
+	#Bind address. Non-loopback values are ignored and clamped to 127.0.0.1
+	#with a warning until the explicit opt-out gate ships (M5.1). (restart required)
+	bindAddress = "127.0.0.1"
 
 [observation]
-    # Send one observation frame every N client ticks. (live)
-    #Range: 1 ~ 100
-    rateDivisor = 1
-    # Caps for future observation sections (M4.4 entities, M4.5 block scan).
-    # Defined now so operators see the ceiling; enforced when those ship. (live)
-    #Range: 4 ~ 64
-    entityRadius = 32
-    #Range: 1 ~ 256
-    entityMaxCount = 64
-    #Range: 4 ~ 32
-    blockScanRadius = 16
+	#Send one observation frame every N client ticks. (live)
+	# Default: 1
+	# Range: 1 ~ 100
+	rateDivisor = 1
+	#Caps for future observation sections (M4.4 entities, M4.5 block scan).
+	#Defined now so operators see the ceiling; enforced when those ship. (live)
+	# Default: 32
+	# Range: 4 ~ 64
+	entityRadius = 32
+	# Default: 64
+	# Range: 1 ~ 256
+	entityMaxCount = 64
+	# Default: 16
+	# Range: 4 ~ 32
+	blockScanRadius = 16
 
 [client]
-    # While an agent is connected, suppress the vanilla pause-on-focus-loss so
-    # the session keeps running and streaming when unfocused. (live)
-    suppressPauseOnLostFocus = true
+	#While an agent is connected, suppress the vanilla pause-on-focus-loss so
+	#the session keeps running and streaming when unfocused. (live)
+	suppressPauseOnLostFocus = true
 
 [logging]
-    # QUIET: warnings/errors only. NORMAL: lifecycle + connection events.
-    # VERBOSE: adds per-tick heartbeat and puppet-position evidence logs. (live)
-    verbosity = "NORMAL"
+	#QUIET: warnings/errors only. NORMAL: lifecycle + connection events.
+	#VERBOSE: adds per-tick heartbeat and puppet-position evidence logs. (live)
+	#Allowed Values: QUIET, NORMAL, VERBOSE
+	verbosity = "NORMAL"
 ```
 
 Notes:
