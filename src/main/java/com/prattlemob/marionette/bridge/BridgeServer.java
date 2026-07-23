@@ -174,6 +174,10 @@ public final class BridgeServer {
             pendingObservation.set(null);
             channel.writeAndFlush(new TextWebSocketFrame(json));
         } else {
+            // Edge case accepted: a frame stashed here just after a writability
+            // flush (channelWritabilityChanged already ran) waits for the next
+            // observation to supersede it rather than flushing immediately.
+            // Benign — the stream is continuous while in a world.
             pendingObservation.set(json);
             coalesced.incrementAndGet();
         }
@@ -185,9 +189,11 @@ public final class BridgeServer {
     }
 
     /**
-     * Close listener, connection (1001 going away), and event loop. Bounded:
-     * never hangs game quit. Ordering rule (docs/decisions.md): the caller
-     * releases controls before stopping the bridge. Safe to call repeatedly.
+     * Close listener, connection (1001 going away), and event loop. The
+     * group shutdown is bounded (2s quiet period, 3s timeout); daemon
+     * threads are the final backstop if that window is somehow exceeded.
+     * Ordering rule (docs/decisions.md): the caller releases controls
+     * before stopping the bridge. Safe to call repeatedly.
      */
     public void stop() {
         if (listener != null) {
@@ -216,7 +222,11 @@ public final class BridgeServer {
                 if (controller.compareAndSet(null, ctx.channel())) {
                     session = new ProtocolSession(modVersion);
                     pingTask = ctx.executor().scheduleAtFixedRate(
-                            () -> ctx.writeAndFlush(new PingWebSocketFrame()),
+                            () -> {
+                                if (ctx.channel().isWritable()) {
+                                    ctx.writeAndFlush(new PingWebSocketFrame());
+                                }
+                            },
                             pingIntervalMillis, pingIntervalMillis, TimeUnit.MILLISECONDS);
                 } else {
                     ctx.write(new TextWebSocketFrame(Messages.error(
@@ -238,6 +248,7 @@ public final class BridgeServer {
             }
             if (frame instanceof PongWebSocketFrame) {
                 lastPongNanos = System.nanoTime();
+                LOG.debug("Pong from controller");
                 return;
             }
             if (!(frame instanceof TextWebSocketFrame text)) {

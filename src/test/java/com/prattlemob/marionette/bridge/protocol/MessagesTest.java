@@ -18,7 +18,7 @@ class MessagesTest {
     }
 
     @Test
-    void helloReplyCarriesVersionEmptyCapabilitiesAndModVersion() {
+    void helloReplyCarriesVersionCapabilitiesAndModVersion() {
         JsonObject reply = parse(Messages.helloReply(1, "0.1.0", null));
         assertEquals("hello", reply.get("type").getAsString());
         assertEquals(1, reply.get("version").getAsInt());

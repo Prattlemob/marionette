@@ -43,12 +43,15 @@ async def main():
         print("-- forward OFF --")
         await ws.send(json.dumps({"type": "input", "forward": False}))
         await watch(ws, 1.0)
-        print("-- configure rateDivisor 10: expect ~2 observations/second --")
-        await ws.send(json.dumps({"type": "configure", "rateDivisor": 10}))
-        await watch(ws, 2.0)
-        print("-- configure rateDivisor 1: back to every tick --")
-        await ws.send(json.dumps({"type": "configure", "rateDivisor": 1}))
-        await watch(ws, 1.0)
+        if hello["capabilities"].get("configure"):
+            print("-- configure rateDivisor 10: expect ~2 observations/second --")
+            await ws.send(json.dumps({"type": "configure", "rateDivisor": 10}))
+            await watch(ws, 2.0)
+            print("-- configure rateDivisor 1: back to every tick --")
+            await ws.send(json.dumps({"type": "configure", "rateDivisor": 1}))
+            await watch(ws, 1.0)
+        else:
+            print("-- server lacks configure capability; skipping demo --")
 
 
 if __name__ == "__main__":

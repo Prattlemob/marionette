@@ -45,3 +45,6 @@ repo/
 
 ### Dedicated-server stray output (world-gen verification runs) ###
 logs/
+
+### Python (example agents) ###
+__pycache__/

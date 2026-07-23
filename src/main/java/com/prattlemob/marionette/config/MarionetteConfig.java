@@ -49,7 +49,9 @@ public final class MarionetteConfig {
         builder.pop();
         builder.push("observation");
         RATE_DIVISOR = builder
-                .comment("Send one observation frame every N client ticks. (live)")
+                .comment("Send one observation frame every N client ticks. (live)",
+                        "Agents can override this per session with the `configure` protocol",
+                        "message; this config value is the default and is restored on disconnect.")
                 .defineInRange("rateDivisor", 1, 1, 100);
         ENTITY_RADIUS = builder
                 .comment("Caps for future observation sections (M4.4 entities, M4.5 block scan).",
