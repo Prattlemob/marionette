@@ -136,4 +136,23 @@ class MessageParserTest {
         assertEquals(ErrorCode.INVALID_FIELD, assertThrows(ProtocolError.class,
                 () -> MessageParser.parse("{\"type\": \"look\", \"yaw\": 1e400, \"pitch\": 0}")).code());
     }
+
+    @Test
+    void rejectsNonStrictJson() {
+        // Gson's default JsonParser.parseString is lenient; the wire contract is RFC 8259.
+        assertEquals(ErrorCode.INVALID_JSON, assertThrows(ProtocolError.class,
+                () -> MessageParser.parse("{type: \"release\"}")).code());              // unquoted key
+        assertEquals(ErrorCode.INVALID_JSON, assertThrows(ProtocolError.class,
+                () -> MessageParser.parse("{'type': 'release'}")).code());              // single quotes
+        assertEquals(ErrorCode.INVALID_JSON, assertThrows(ProtocolError.class,
+                () -> MessageParser.parse("{\"type\": \"release\"} trailing")).code()); // trailing data
+        assertEquals(ErrorCode.INVALID_JSON, assertThrows(ProtocolError.class,
+                () -> MessageParser.parse("{\"type\": \"look\", \"yaw\": NaN, \"pitch\": 0}")).code());
+    }
+
+    @Test
+    void strictParsingStillAcceptsConformingJson() {
+        assertInstanceOf(AgentCommand.Release.class,
+                MessageParser.parse("{\"type\": \"release\"}"));
+    }
 }

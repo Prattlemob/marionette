@@ -1,5 +1,7 @@
 package com.prattlemob.marionette.bridge.protocol;
 
+import java.io.IOException;
+import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -9,22 +11,16 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
+import com.google.gson.Strictness;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
 
 /** Parses protocol v1 text frames into {@link ParsedMessage}s. Network-thread code. */
 public final class MessageParser {
     private MessageParser() {}
 
     public static ParsedMessage parse(String text) {
-        JsonObject json;
-        try {
-            JsonElement element = JsonParser.parseString(text);
-            if (!element.isJsonObject()) {
-                throw new ProtocolError(ErrorCode.INVALID_JSON, "message must be a JSON object");
-            }
-            json = element.getAsJsonObject();
-        } catch (JsonParseException e) {
-            throw new ProtocolError(ErrorCode.INVALID_JSON, "malformed JSON");
-        }
+        JsonObject json = strictJsonObject(text);
         JsonPrimitive id = envelopeId(json);
         try {
             return parseTyped(json, id);
@@ -32,6 +28,30 @@ public final class MessageParser {
             // Attach the envelope id so error replies can echo it.
             throw e.id() != null ? e : new ProtocolError(e.code(), e.getMessage(), id);
         }
+    }
+
+    /**
+     * RFC 8259 parsing. Gson's JsonParser.parseString is lenient (unquoted
+     * keys, single quotes, NaN); the wire contract is strict JSON, and
+     * protocol/README.md makes later tightening a breaking change — so be
+     * strict from the start (docs/decisions.md, M2.3).
+     */
+    private static JsonObject strictJsonObject(String text) {
+        JsonReader reader = new JsonReader(new StringReader(text));
+        reader.setStrictness(Strictness.STRICT);
+        JsonElement element;
+        try {
+            element = JsonParser.parseReader(reader);
+            if (reader.peek() != JsonToken.END_DOCUMENT) {
+                throw new ProtocolError(ErrorCode.INVALID_JSON, "trailing content after JSON value");
+            }
+        } catch (JsonParseException | IOException e) {
+            throw new ProtocolError(ErrorCode.INVALID_JSON, "malformed JSON");
+        }
+        if (!element.isJsonObject()) {
+            throw new ProtocolError(ErrorCode.INVALID_JSON, "message must be a JSON object");
+        }
+        return element.getAsJsonObject();
     }
 
     private static JsonPrimitive envelopeId(JsonObject json) {
