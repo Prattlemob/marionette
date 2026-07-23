@@ -141,6 +141,12 @@ public class MarionetteClient {
         boolean agentLost = bridge != null && bridge.pollDisconnected();
 
         if (!inWorld || player == null) {
+            // Reset before drain: a same-tick reconnect's configure must survive
+            // the disconnected agent's reset, not be wiped by it.
+            if (agentLost) {
+                sessionRateDivisor = null;
+                logNormal("Agent disconnected");
+            }
             if (bridge != null) {
                 for (AgentCommand command : bridge.drainCommands()) {
                     // Session settings apply without a world; actuation commands are discarded.
@@ -148,10 +154,6 @@ public class MarionetteClient {
                         applyCommand(command);
                     }
                 }
-            }
-            if (agentLost) {
-                sessionRateDivisor = null;
-                logNormal("Agent disconnected");
             }
             // Safety rule: no player entity to control -> nothing may stay held.
             if (controlsEngaged) {
