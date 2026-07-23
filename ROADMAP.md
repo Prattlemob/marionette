@@ -197,11 +197,11 @@ Items:
 
 Items:
 
-- [ ] Config schema defined and documented in README
-- [ ] Port, bind address, enable/disable toggle
-- [ ] Observation rate + radii caps as config values with sane defaults/limits
-- [ ] Feature toggle scaffolding for future optional layers
-- [ ] Suppress-pause-on-focus-loss toggle so an agent-driven client keeps
+- [x] Config schema defined and documented in README
+- [x] Port, bind address, enable/disable toggle
+- [x] Observation rate + radii caps as config values with sane defaults/limits
+- [x] Feature toggle scaffolding for future optional layers
+- [x] Suppress-pause-on-focus-loss toggle so an agent-driven client keeps
       running (and streaming) while unfocused (see docs/decisions.md; M5.1
       decides per-mode behavior)
 
