@@ -228,7 +228,7 @@ Items:
       per-session via a protocol message
 - [x] Send queue with hard bound + latest-wins coalescing for observation
       frames
-- [ ] Slow-consumer soak test evidence (log counters)
+- [x] Slow-consumer soak test evidence (log counters)
 - [x] Clean listener shutdown on client quit; no orphaned threads
 - [x] WebSocket ping/pong liveness (grounds the M5.1 watchdog)
 
