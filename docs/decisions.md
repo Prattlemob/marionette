@@ -264,12 +264,21 @@ earlier if outside contributions arrive.
   Implementation note: with D4's OR-merge mixin, agent-exclusive means
   *replace* instead of *merge* in `KeyboardInputMixin`, plus new mouse-look
   suppression (vanilla `MouseHandler.turnPlayer` path).
-- Streaming while unfocused — M2.2/M5.1. Vanilla singleplayer opens the pause
-  menu on window-focus loss (`pauseOnLostFocus`), freezing an agent-driven
-  session the moment the operator alt-tabs. M2.2 adds a config toggle
-  (suggested default: suppress the focus-loss pause while an agent is
-  connected) so a puppeted client keeps running and streamable unfocused;
-  M5.1 decides how focus loss behaves in each precedence mode (pausing on
-  focus loss is arguably a safety feature when a human walks away). Interim
-  workaround: `pauseOnLostFocus:false` in options.txt (or F3+P).
+- Streaming while unfocused — **M2.2 half resolved** (2026-07-23): the
+  `client.suppressPauseOnLostFocus` toggle (default on) suppresses the vanilla
+  focus-loss pause **only while a hello-completed controller is attached**,
+  via a `GameRenderer#render` mixin (a `@Redirect` swallowing the focus-loss
+  `pauseGame` call; the planned `Minecraft#pauseIfInactive` target does not
+  exist in 1.21.8) that never mutates `options.pauseOnLostFocus` (options.txt
+  cannot be persisted wrong; the moment the agent detaches while unfocused,
+  vanilla pauses on the next frame). With no agent connected, vanilla pause
+  behavior is untouched. Still open for M5.1: how focus loss behaves in each
+  precedence mode (pausing on focus loss is arguably a safety feature when a
+  human walks away).
+- Non-loopback bind handling — **resolved for M2.2** (2026-07-23): a
+  non-loopback `bridge.bindAddress` is clamped to `127.0.0.1` with a WARN
+  naming the ignored value; the bridge still starts, on loopback, so a config
+  typo never silently kills external control. The explicit "I understand"
+  opt-out gate for real non-loopback binding remains M5.1's
+  loopback-enforcement item.
 - Mod-version ↔ protocol-version relationship in the changelog policy — M9.2.

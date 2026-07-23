@@ -36,6 +36,58 @@ Design discussion happens in [issues](https://github.com/Prattlemob/marionette/i
 
 Connect an agent over the localhost WebSocket bridge; see [examples/](examples/) for reference agents (`probe.py`, `walk_square.py`).
 
+## Configuration
+
+Marionette generates `config/marionette-client.toml` on first launch. Values
+marked *(live)* are picked up as soon as the file is saved (NeoForge watches
+config files); values marked *(restart required)* are read once at startup.
+
+```toml
+[bridge]
+    # Master switch: when false, the WebSocket bridge never starts. (restart required)
+    enabled = true
+    # TCP port for the bridge listener. (restart required)
+    #Range: 1 ~ 65535
+    port = 24680
+    # Bind address. Non-loopback values are ignored and clamped to 127.0.0.1
+    # with a warning until the explicit opt-out gate ships (M5.1). (restart required)
+    bindAddress = "127.0.0.1"
+
+[observation]
+    # Send one observation frame every N client ticks. (live)
+    #Range: 1 ~ 100
+    rateDivisor = 1
+    # Caps for future observation sections (M4.4 entities, M4.5 block scan).
+    # Defined now so operators see the ceiling; enforced when those ship. (live)
+    #Range: 4 ~ 64
+    entityRadius = 32
+    #Range: 1 ~ 256
+    entityMaxCount = 64
+    #Range: 4 ~ 32
+    blockScanRadius = 16
+
+[client]
+    # While an agent is connected, suppress the vanilla pause-on-focus-loss so
+    # the session keeps running and streaming when unfocused. (live)
+    suppressPauseOnLostFocus = true
+
+[logging]
+    # QUIET: warnings/errors only. NORMAL: lifecycle + connection events.
+    # VERBOSE: adds per-tick heartbeat and puppet-position evidence logs. (live)
+    verbosity = "NORMAL"
+```
+
+Notes:
+
+- A non-loopback `bindAddress` is ignored and clamped to `127.0.0.1` with a
+  loud warning. An explicit opt-in for non-loopback binding is planned
+  (M5.1) but does not exist yet.
+- `suppressPauseOnLostFocus` only takes effect while an agent is connected;
+  with no agent attached the game pauses on focus loss exactly as vanilla.
+- The `[observation]` radius/count caps are defined ahead of the features
+  that consume them (Phase 4) so operators can see the ceilings; they have
+  no effect yet.
+
 ## Protocol
 
 The current wire contract is the throwaway [v0 draft](protocol/v0-draft.md); it will be replaced by protocol v1 in Phase 2. The stable, documented contract will be specified in [protocol/](protocol/), so that agents in any language can target it.
