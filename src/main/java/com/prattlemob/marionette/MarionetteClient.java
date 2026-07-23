@@ -3,6 +3,7 @@ package com.prattlemob.marionette;
 import com.prattlemob.marionette.bridge.BridgeServer;
 import com.prattlemob.marionette.bridge.protocol.AgentCommand;
 import com.prattlemob.marionette.bridge.protocol.Messages;
+import com.prattlemob.marionette.config.MarionetteConfig;
 import com.prattlemob.marionette.control.ControlState;
 import com.prattlemob.marionette.control.ControlStateApplier;
 import com.prattlemob.marionette.control.DemoScript;
@@ -12,8 +13,11 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.player.LocalPlayer;
 import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.config.ModConfig;
+import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.common.NeoForge;
@@ -46,19 +50,43 @@ public class MarionetteClient {
     private boolean controlsEngaged;
     private BridgeServer bridge;
 
-    public MarionetteClient(ModContainer container) {
+    private String modVersion;
+
+    public MarionetteClient(ModContainer container, IEventBus modBus) {
         instance = this;
+        modVersion = container.getModInfo().getVersion().toString();
+        container.registerConfig(ModConfig.Type.CLIENT, MarionetteConfig.SPEC);
+        modBus.addListener(this::onClientSetup);
         NeoForge.EVENT_BUS.addListener(this::onClientTickPre);
         NeoForge.EVENT_BUS.addListener(this::onClientTickPost);
         NeoForge.EVENT_BUS.addListener(this::onLoggingIn);
         NeoForge.EVENT_BUS.addListener(this::onLoggingOut);
         NeoForge.EVENT_BUS.addListener(this::onGameShuttingDown);
+    }
+
+    /** Configs are loaded by client setup; start the bridge on the main thread. */
+    private void onClientSetup(FMLClientSetupEvent event) {
+        event.enqueueWork(this::startBridge);
+    }
+
+    private void startBridge() {
+        if (!MarionetteConfig.bridgeEnabled) {
+            Marionette.LOGGER.info("Bridge disabled by config");
+            return;
+        }
+        String configured = MarionetteConfig.bindAddress;
+        String bind = MarionetteConfig.resolveBindAddress(configured);
+        if (!bind.equals(configured)) {
+            Marionette.LOGGER.warn(
+                    "Config bindAddress '{}' is not loopback; clamped to 127.0.0.1. "
+                    + "Non-loopback binding requires the explicit opt-out gate planned for M5.1.",
+                    configured);
+        }
         try {
-            BridgeServer server = new BridgeServer("127.0.0.1", 24680,
-                    container.getModInfo().getVersion().toString());
+            BridgeServer server = new BridgeServer(bind, MarionetteConfig.port, modVersion);
             server.start();
             bridge = server;
-            Marionette.LOGGER.info("Bridge listening on 127.0.0.1:{}", server.port());
+            Marionette.LOGGER.info("Bridge listening on {}:{}", bind, server.port());
         } catch (Exception e) {
             bridge = null;
             Marionette.LOGGER.error("Bridge failed to start; running without external control", e);
