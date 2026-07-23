@@ -92,6 +92,11 @@ public final class MarionetteConfig {
         return verbosity.atLeast(level);
     }
 
+    /** True when a tick-synced observation should be sent on this tick. */
+    public static boolean observationDueAt(long tick) {
+        return tick % observationRateDivisor == 0;
+    }
+
     /**
      * Clamp non-loopback (or unresolvable) bind addresses to 127.0.0.1.
      * The explicit "I understand" opt-out for real non-loopback binding is

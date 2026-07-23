@@ -280,5 +280,9 @@ earlier if outside contributions arrive.
   naming the ignored value; the bridge still starts, on loopback, so a config
   typo never silently kills external control. The explicit "I understand"
   opt-out gate for real non-loopback binding remains M5.1's
-  loopback-enforcement item.
+  loopback-enforcement item. Known gap to close in M5.1: the clamp check and
+  the Netty bind re-resolve the configured string independently, so a
+  *hostname* whose resolution changes between the two calls could in
+  principle bind non-loopback — resolve once and pass the resulting
+  `InetAddress` through when M5.1 hardens loopback enforcement.
 - Mod-version ↔ protocol-version relationship in the changelog policy — M9.2.

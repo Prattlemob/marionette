@@ -63,7 +63,7 @@ public class MarionetteClient {
     private boolean controlsEngaged;
     private BridgeServer bridge;
 
-    private String modVersion;
+    private final String modVersion;
 
     public MarionetteClient(ModContainer container, IEventBus modBus) {
         instance = this;
@@ -240,7 +240,7 @@ public class MarionetteClient {
                     player.getX(), player.getY(), player.getZ(), player.getYRot()));
         }
         if (bridge != null && inWorld && player != null
-                && ticksInWorld % MarionetteConfig.observationRateDivisor == 0) {
+                && MarionetteConfig.observationDueAt(ticksInWorld)) {
             bridge.sendObservation(Messages.observation(ticksInWorld,
                     player.getX(), player.getY(), player.getZ(),
                     player.getYRot(), player.getXRot()));

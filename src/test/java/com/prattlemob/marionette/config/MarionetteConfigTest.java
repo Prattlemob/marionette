@@ -31,5 +31,31 @@ class MarionetteConfigTest {
         assertEquals("127.0.0.1", MarionetteConfig.bindAddress);
         assertEquals(1, MarionetteConfig.observationRateDivisor);
         assertEquals(Verbosity.NORMAL, MarionetteConfig.verbosity);
+        assertEquals(true, MarionetteConfig.bridgeEnabled);
+        assertEquals(32, MarionetteConfig.entityRadius);
+        assertEquals(64, MarionetteConfig.entityMaxCount);
+        assertEquals(16, MarionetteConfig.blockScanRadius);
+        assertEquals(true, MarionetteConfig.suppressPauseOnLostFocus);
+    }
+
+    @Test
+    void observationDueAtRespectsDivisor() {
+        int original = MarionetteConfig.observationRateDivisor;
+        try {
+            MarionetteConfig.observationRateDivisor = 20;
+            assertEquals(true, MarionetteConfig.observationDueAt(0));
+            assertEquals(true, MarionetteConfig.observationDueAt(20));
+            assertEquals(true, MarionetteConfig.observationDueAt(40));
+            assertEquals(false, MarionetteConfig.observationDueAt(1));
+            assertEquals(false, MarionetteConfig.observationDueAt(19));
+            assertEquals(false, MarionetteConfig.observationDueAt(21));
+
+            MarionetteConfig.observationRateDivisor = 1;
+            assertEquals(true, MarionetteConfig.observationDueAt(0));
+            assertEquals(true, MarionetteConfig.observationDueAt(1));
+            assertEquals(true, MarionetteConfig.observationDueAt(2));
+        } finally {
+            MarionetteConfig.observationRateDivisor = original;
+        }
     }
 }

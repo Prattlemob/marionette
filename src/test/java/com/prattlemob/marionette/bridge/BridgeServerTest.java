@@ -62,9 +62,13 @@ class BridgeServerTest {
         WebSocket ws;
 
         static TestClient connect(int port) throws Exception {
+            return connect("127.0.0.1", port);
+        }
+
+        static TestClient connect(String host, int port) throws Exception {
             TestClient client = new TestClient();
             client.ws = HttpClient.newHttpClient().newWebSocketBuilder()
-                    .buildAsync(URI.create("ws://127.0.0.1:" + port + "/"), client)
+                    .buildAsync(URI.create("ws://" + host + ":" + port + "/"), client)
                     .get(5, TimeUnit.SECONDS);
             return client;
         }
@@ -253,6 +257,21 @@ class BridgeServerTest {
         TestClient client = connectAndHello();
         client.ws.sendBinary(ByteBuffer.wrap(new byte[] {1, 2, 3}), true).join();
         assertEquals(1003, (int) client.closeCode.get(5, TimeUnit.SECONDS));
+    }
+
+    @Test
+    void bindsTheConfiguredNonDefaultLoopbackAddress() throws Exception {
+        // 127.0.0.53 is a valid loopback address on Linux without configuration.
+        BridgeServer other = new BridgeServer("127.0.0.53", 0, "test-version");
+        other.start();
+        try {
+            TestClient client = TestClient.connect("127.0.0.53", other.port());
+            client.send(HELLO);
+            JsonObject reply = JsonParser.parseString(client.awaitMessage()).getAsJsonObject();
+            assertEquals("hello", reply.get("type").getAsString());
+        } finally {
+            other.stop();
+        }
     }
 
     @Test
