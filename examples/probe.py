@@ -2,8 +2,8 @@
 """Minimal Marionette bridge probe (protocol v1).
 
 Connects, performs the hello handshake, watches observations for a second,
-then holds `forward` for three seconds and releases it — the M1.2
-definition of done, visible in the game window.
+holds `forward` for three seconds and releases it, then demonstrates the
+`configure` message by slowing the observation stream to every 10th tick.
 
 Requires:  pip install websockets
 Usage:     python probe.py [port]     (default 24680)
@@ -42,6 +42,12 @@ async def main():
         await watch(ws, 3.0)
         print("-- forward OFF --")
         await ws.send(json.dumps({"type": "input", "forward": False}))
+        await watch(ws, 1.0)
+        print("-- configure rateDivisor 10: expect ~2 observations/second --")
+        await ws.send(json.dumps({"type": "configure", "rateDivisor": 10}))
+        await watch(ws, 2.0)
+        print("-- configure rateDivisor 1: back to every tick --")
+        await ws.send(json.dumps({"type": "configure", "rateDivisor": 1}))
         await watch(ws, 1.0)
 
 
