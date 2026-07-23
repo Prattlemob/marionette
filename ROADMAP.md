@@ -224,13 +224,13 @@ Items:
 
 Items:
 
-- [ ] Observation cadence: every-N-ticks divisor from config, changeable
+- [x] Observation cadence: every-N-ticks divisor from config, changeable
       per-session via a protocol message
-- [ ] Send queue with hard bound + latest-wins coalescing for observation
+- [x] Send queue with hard bound + latest-wins coalescing for observation
       frames
 - [ ] Slow-consumer soak test evidence (log counters)
-- [ ] Clean listener shutdown on client quit; no orphaned threads
-- [ ] WebSocket ping/pong liveness (grounds the M5.1 watchdog)
+- [x] Clean listener shutdown on client quit; no orphaned threads
+- [x] WebSocket ping/pong liveness (grounds the M5.1 watchdog)
 
 ---
 

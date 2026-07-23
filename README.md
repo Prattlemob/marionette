@@ -56,6 +56,8 @@ config files); values marked *(restart required)* are read once at startup.
 
 [observation]
 	#Send one observation frame every N client ticks. (live)
+	#Agents can override this per session with the `configure` protocol
+	#message; this config value is the default and is restored on disconnect.
 	# Default: 1
 	# Range: 1 ~ 100
 	rateDivisor = 1

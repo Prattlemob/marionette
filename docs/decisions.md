@@ -230,18 +230,30 @@ earlier if outside contributions arrive.
   resolved in M2.1** (2026-07-15): the disconnect latch is now gated on a
   completed hello (a probe that never sent hello no longer logs a spurious
   agent-disconnect), and duplicate-hello rejection is specced
-  (`unexpected_hello`, non-fatal) and tested. Still open for M2.3: daemon
-  thread factory for the Netty event loop; log/diagnose `exceptionCaught`
-  causes; define release-vs-bridge-stop ordering on shutdown (currently
-  inert — ticks have stopped — observed as `Bridge stopped` before
-  `Controls released` on window close); halt frame processing after a binary-frame violation (the 1003 close path leaves already-pipelined text frames parsed and enqueued until channelInactive — give the session an explicit close()).
-- JSON strictness on the wire — pre-release. `MessageParser` uses Gson's lenient
-  `JsonParser.parseString`, which accepts non-standard JSON (unquoted keys,
-  single quotes). Since `protocol/README.md` defines tightened validation as a
-  breaking change, accidental leniency hardens into contract: before the first
-  tagged release, either switch to strict parsing or add a spec sentence that
-  acceptance of non-conforming JSON is unspecified and may tighten without a
-  version bump. (Final M2.1 review, 2026-07-15.)
+  (`unexpected_hello`, non-fatal) and tested.
+  **Remaining items resolved in M2.3** (2026-07-23): daemon thread factory
+  (`marionette-bridge`, never blocks JVM exit); `exceptionCaught` causes
+  logged at WARN before closing; shutdown ordering defined — controls
+  release before bridge stop, and `stop()` sends close 1001 (going away)
+  with a bounded event-loop shutdown; binary-frame violations now
+  explicitly `close()` the session so pipelined text frames are ignored
+  (the disconnect latch keys off `helloCompleted()`, which survives the
+  close, so release-all safety still fires).
+- JSON strictness on the wire — **resolved in M2.3** (2026-07-23):
+  `MessageParser` parses with Gson `Strictness.STRICT` (RFC 8259) and
+  rejects trailing content; unquoted keys, single quotes, and NaN are
+  `invalid_json`. Strict-from-the-start avoids the breaking-change bump
+  that tightening after release would have required. (Raised in final
+  M2.1 review, 2026-07-15.)
+- Backpressure policy (M2.3, 2026-07-23): writability-gated latest-wins
+  coalescing in the transport — `WriteBufferWaterMark` 32/64 KiB is the
+  hard bound; one-slot stash flushed on writability recovery; only
+  observation frames coalesce. Ping interval fixed at 10 s until M5.1
+  makes the watchdog timeout configurable.
+- `configure` message (M2.3): deliberately generic session-settings
+  envelope — M4.1's D2 section mask lands in it additively. Advertised
+  as the `configure` capability flag. Processed even while no world is
+  loaded, unlike actuation commands.
 - Movement axes on the wire: boolean (key-like) vs. analog floats
   (controller-like) — M3.1.
 - Item-component serialization depth (enchantments, custom names) — M4.2.
