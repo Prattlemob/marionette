@@ -107,6 +107,13 @@ class BridgeServerTest {
         }
 
         @Override
+        public CompletionStage<?> onPing(WebSocket webSocket, ByteBuffer message) {
+            webSocket.sendPong(message);
+            webSocket.request(1);
+            return null;
+        }
+
+        @Override
         public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
             closeCode.complete(statusCode);
             return null;
@@ -300,6 +307,21 @@ class BridgeServerTest {
             // closed without a close frame — acceptable; see note above
         }
         await(() -> !server.hasController());
+    }
+
+    @Test
+    void serverPingsPeriodicallyAndRecordsThePong() throws Exception {
+        BridgeServer fast = new BridgeServer("127.0.0.1", 0, "test-version", 100);
+        fast.start();
+        try {
+            TestClient client = TestClient.connect(fast.port());
+            client.send(HELLO);
+            client.awaitMessage(); // hello reply
+            assertEquals(0, fast.lastPongNanos(), "no pong before the first ping interval");
+            await(() -> fast.lastPongNanos() != 0);
+        } finally {
+            fast.stop();
+        }
     }
 
     @Test

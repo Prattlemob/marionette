@@ -5,6 +5,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -29,9 +31,12 @@ import io.netty.handler.codec.TooLongFrameException;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.websocketx.CloseWebSocketFrame;
+import io.netty.handler.codec.http.websocketx.PingWebSocketFrame;
+import io.netty.handler.codec.http.websocketx.PongWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketFrameAggregator;
+import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolConfig;
 import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
 
 /**
@@ -48,15 +53,20 @@ public final class BridgeServer {
     /** Max WebSocket message size; larger closes with 1009 (see protocol/v1.md). */
     private static final int MAX_FRAME_BYTES = 65536;
 
+    /** Liveness ping cadence; constant in M2.3, the watchdog timeout knob is M5.1's. */
+    private static final long PING_INTERVAL_MILLIS = 10_000;
+
     private final String bindAddress;
     private final int requestedPort;
     private final String modVersion;
+    private final long pingIntervalMillis;
     private final Queue<AgentCommand> inbound = new ConcurrentLinkedQueue<>();
     private final AtomicReference<Channel> controller = new AtomicReference<>();
     private final AtomicBoolean controllerReady = new AtomicBoolean();
     private final AtomicBoolean disconnected = new AtomicBoolean();
     private final AtomicReference<String> pendingObservation = new AtomicReference<>();
     private final AtomicLong coalesced = new AtomicLong();
+    private volatile long lastPongNanos;
 
     private NioEventLoopGroup group;
     private Channel listener;
@@ -67,9 +77,19 @@ public final class BridgeServer {
      * @param port TCP port; 0 binds an ephemeral port (tests).
      */
     public BridgeServer(String bindAddress, int port, String modVersion) {
+        this(bindAddress, port, modVersion, PING_INTERVAL_MILLIS);
+    }
+
+    BridgeServer(String bindAddress, int port, String modVersion, long pingIntervalMillis) {
         this.bindAddress = bindAddress;
         this.requestedPort = port;
         this.modVersion = modVersion;
+        this.pingIntervalMillis = pingIntervalMillis;
+    }
+
+    /** nanoTime of the newest pong from the controller; 0 before the first. For the M5.1 watchdog. */
+    public long lastPongNanos() {
+        return lastPongNanos;
     }
 
     /** Bind to the configured address. Blocks briefly; call once. Throws on bind failure. */
@@ -88,7 +108,12 @@ public final class BridgeServer {
                         channel.pipeline().addLast(
                                 new HttpServerCodec(),
                                 new HttpObjectAggregator(MAX_FRAME_BYTES),
-                                new WebSocketServerProtocolHandler("/", null, true, MAX_FRAME_BYTES),
+                                new WebSocketServerProtocolHandler(WebSocketServerProtocolConfig.newBuilder()
+                                        .websocketPath("/")
+                                        .allowExtensions(true)
+                                        .maxFramePayloadLength(MAX_FRAME_BYTES)
+                                        .dropPongFrames(false)
+                                        .build()),
                                 new WebSocketFrameAggregator(MAX_FRAME_BYTES),
                                 new AgentConnectionHandler());
                     }
@@ -169,12 +194,16 @@ public final class BridgeServer {
 
     private final class AgentConnectionHandler extends SimpleChannelInboundHandler<WebSocketFrame> {
         private ProtocolSession session;
+        private ScheduledFuture<?> pingTask;
 
         @Override
         public void userEventTriggered(ChannelHandlerContext ctx, Object event) throws Exception {
             if (event instanceof WebSocketServerProtocolHandler.HandshakeComplete) {
                 if (controller.compareAndSet(null, ctx.channel())) {
                     session = new ProtocolSession(modVersion);
+                    pingTask = ctx.executor().scheduleAtFixedRate(
+                            () -> ctx.writeAndFlush(new PingWebSocketFrame()),
+                            pingIntervalMillis, pingIntervalMillis, TimeUnit.MILLISECONDS);
                 } else {
                     ctx.write(new TextWebSocketFrame(Messages.error(
                             ErrorCode.CONTROLLER_ATTACHED, "controller already connected",
@@ -192,6 +221,10 @@ public final class BridgeServer {
         protected void channelRead0(ChannelHandlerContext ctx, WebSocketFrame frame) {
             if (controller.get() != ctx.channel() || session == null) {
                 return; // a refused extra connection; it is already closing
+            }
+            if (frame instanceof PongWebSocketFrame) {
+                lastPongNanos = System.nanoTime();
+                return;
             }
             if (!(frame instanceof TextWebSocketFrame text)) {
                 ctx.writeAndFlush(new CloseWebSocketFrame(1003, "text frames only"))
@@ -229,6 +262,10 @@ public final class BridgeServer {
                 inbound.clear(); // commands from a dead controller must not act
                 pendingObservation.set(null);
                 coalesced.set(0);
+                if (pingTask != null) {
+                    pingTask.cancel(false);
+                }
+                lastPongNanos = 0;
                 if (session != null && session.isActive()) {
                     // Only a hello-completed controller counts as an agent loss.
                     disconnected.set(true);
