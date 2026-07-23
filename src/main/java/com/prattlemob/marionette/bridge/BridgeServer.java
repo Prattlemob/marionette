@@ -190,7 +190,7 @@ public final class BridgeServer {
 
     /**
      * Close listener, connection (1001 going away), and event loop. The
-     * group shutdown is bounded (2s quiet period, 3s timeout); daemon
+     * group shutdown is bounded (2s shutdown timeout, 3s await); daemon
      * threads are the final backstop if that window is somehow exceeded.
      * Ordering rule (docs/decisions.md): the caller releases controls
      * before stopping the bridge. Safe to call repeatedly.
