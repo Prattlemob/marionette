@@ -118,6 +118,12 @@ public class MarionetteClient {
         return instance;
     }
 
+    /** True while a hello-completed controller is attached to the bridge. */
+    public boolean hasAgentController() {
+        BridgeServer server = bridge;
+        return server != null && server.hasController();
+    }
+
     public boolean isInWorld() {
         return inWorld;
     }
