@@ -159,4 +159,15 @@ class ProtocolSessionTest {
         assertTrue(session.onFrame(HELLO).isEmpty());
         assertFalse(session.isActive());
     }
+
+    @Test
+    void closedSessionIgnoresFramesButRemembersHello() {
+        ProtocolSession session = new ProtocolSession("1.0");
+        session.onFrame("{\"type\": \"hello\", \"versions\": [1]}");
+        assertTrue(session.isActive());
+        session.close();
+        assertFalse(session.isActive());
+        assertTrue(session.helloCompleted(), "hello history survives close for the disconnect latch");
+        assertTrue(session.onFrame("{\"type\": \"release\"}").isEmpty());
+    }
 }

@@ -16,6 +16,9 @@ import com.prattlemob.marionette.bridge.protocol.ErrorCode;
 import com.prattlemob.marionette.bridge.protocol.Messages;
 import com.prattlemob.marionette.bridge.protocol.ProtocolSession;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFutureListener;
@@ -38,6 +41,7 @@ import io.netty.handler.codec.http.websocketx.WebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketFrameAggregator;
 import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolConfig;
 import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
+import io.netty.util.concurrent.DefaultThreadFactory;
 
 /**
  * Localhost-only WebSocket transport for protocol v1. All protocol logic
@@ -50,6 +54,8 @@ import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
  * imports so it is testable headless.
  */
 public final class BridgeServer {
+    private static final Logger LOG = LoggerFactory.getLogger(BridgeServer.class);
+
     /** Max WebSocket message size; larger closes with 1009 (see protocol/v1.md). */
     private static final int MAX_FRAME_BYTES = 65536;
 
@@ -94,7 +100,7 @@ public final class BridgeServer {
 
     /** Bind to the configured address. Blocks briefly; call once. Throws on bind failure. */
     public void start() {
-        group = new NioEventLoopGroup(1);
+        group = new NioEventLoopGroup(1, new DefaultThreadFactory("marionette-bridge", true));
         ServerBootstrap bootstrap = new ServerBootstrap()
                 .group(group)
                 .channel(NioServerSocketChannel.class)
@@ -178,17 +184,25 @@ public final class BridgeServer {
         return coalesced.get();
     }
 
-    /** Close listener, connection, and event loop. Safe to call once at shutdown. */
+    /**
+     * Close listener, connection (1001 going away), and event loop. Bounded:
+     * never hangs game quit. Ordering rule (docs/decisions.md): the caller
+     * releases controls before stopping the bridge. Safe to call repeatedly.
+     */
     public void stop() {
         if (listener != null) {
             listener.close().syncUninterruptibly();
+            listener = null;
         }
-        Channel channel = controller.get();
-        if (channel != null) {
-            channel.close();
+        Channel channel = controller.getAndSet(null);
+        if (channel != null && channel.isActive()) {
+            channel.writeAndFlush(new CloseWebSocketFrame(1001, "server shutting down"))
+                    .addListener(ChannelFutureListener.CLOSE);
         }
         if (group != null) {
-            group.shutdownGracefully();
+            group.shutdownGracefully(0, 2, TimeUnit.SECONDS)
+                    .awaitUninterruptibly(3, TimeUnit.SECONDS);
+            group = null;
         }
     }
 
@@ -227,6 +241,7 @@ public final class BridgeServer {
                 return;
             }
             if (!(frame instanceof TextWebSocketFrame text)) {
+                session.close(); // ignore text already pipelined behind the violation
                 ctx.writeAndFlush(new CloseWebSocketFrame(1003, "text frames only"))
                         .addListener(ChannelFutureListener.CLOSE);
                 return;
@@ -266,7 +281,7 @@ public final class BridgeServer {
                     pingTask.cancel(false);
                 }
                 lastPongNanos = 0;
-                if (session != null && session.isActive()) {
+                if (session != null && session.helloCompleted()) {
                     // Only a hello-completed controller counts as an agent loss.
                     disconnected.set(true);
                 }
@@ -289,6 +304,8 @@ public final class BridgeServer {
                 ctx.writeAndFlush(new CloseWebSocketFrame(1009, "message too big"))
                         .addListener(ChannelFutureListener.CLOSE);
             } else {
+                LOG.warn("Bridge connection error ({}): {}; closing connection",
+                        cause.getClass().getSimpleName(), cause.getMessage());
                 ctx.close(); // channelInactive handles the release signal
             }
         }

@@ -279,6 +279,44 @@ class BridgeServerTest {
     }
 
     @Test
+    void stopSendsGoingAwayCloseToController() throws Exception {
+        TestClient client = connectAndHello();
+        server.stop();
+        assertEquals(1001, (int) client.closeCode.get(5, TimeUnit.SECONDS));
+    }
+
+    @Test
+    void eventLoopThreadsAreNamedDaemons() {
+        var bridgeThreads = Thread.getAllStackTraces().keySet().stream()
+                .filter(t -> t.getName().startsWith("marionette-bridge")).toList();
+        assertFalse(bridgeThreads.isEmpty(), "expected a marionette-bridge event-loop thread");
+        assertTrue(bridgeThreads.stream().allMatch(Thread::isDaemon));
+    }
+
+    @Test
+    void binaryFrameViolationStillSignalsAgentLoss() throws Exception {
+        TestClient client = connectAndHello();
+        client.ws.sendBinary(ByteBuffer.wrap(new byte[] {1}), true).join();
+        assertEquals(1003, (int) client.closeCode.get(5, TimeUnit.SECONDS));
+        await(server::pollDisconnected); // safety: release-all must still fire
+    }
+
+    @Test
+    void framesPipelinedBehindABinaryViolationAreIgnored() throws Exception {
+        TestClient client = connectAndHello();
+        client.ws.sendBinary(ByteBuffer.wrap(new byte[] {1}), true).join();
+        try {
+            client.ws.sendText("{\"type\": \"release\"}", true).join();
+        } catch (Exception alreadyClosing) {
+            // the server may have torn the connection down first — fine
+        }
+        assertEquals(1003, (int) client.closeCode.get(5, TimeUnit.SECONDS));
+        Thread.sleep(100); // grace for any (incorrectly) processed pipelined frame
+        assertTrue(server.drainCommands().isEmpty(),
+                "text behind a binary violation must never be enqueued");
+    }
+
+    @Test
     void bindsTheConfiguredNonDefaultLoopbackAddress() throws Exception {
         // 127.0.0.53 is a valid loopback address on Linux without configuration.
         BridgeServer other = new BridgeServer("127.0.0.53", 0, "test-version");

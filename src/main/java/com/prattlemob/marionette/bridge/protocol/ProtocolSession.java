@@ -24,6 +24,7 @@ public final class ProtocolSession {
 
     private final String modVersion;
     private State state = State.AWAITING_HELLO;
+    private boolean helloCompleted;
 
     public ProtocolSession(String modVersion) {
         this.modVersion = modVersion;
@@ -71,6 +72,7 @@ public final class ProtocolSession {
                     new Action.Close(1002, ErrorCode.UNSUPPORTED_ROLE.wire()));
         }
         state = State.ACTIVE;
+        helloCompleted = true;
         return List.of(new Action.Send(
                 Messages.helloReply(PROTOCOL_VERSION, modVersion, hello.id())));
     }
@@ -91,5 +93,24 @@ public final class ProtocolSession {
             return List.of(send, new Action.Close(closeCode, code.wire()));
         }
         return List.of(send);
+    }
+
+    /**
+     * Force CLOSED so frames already pipelined behind a transport-level
+     * violation (e.g. a binary frame) are ignored instead of parsed and
+     * enqueued. Does not clear hello history — see helloCompleted().
+     */
+    public void close() {
+        state = State.CLOSED;
+    }
+
+    /**
+     * True once the hello handshake ever completed, surviving close(). The
+     * transport's disconnect latch (release-all safety) keys off this, not
+     * isActive(): a violation that closes the session must still count the
+     * connection loss as an agent loss.
+     */
+    public boolean helloCompleted() {
+        return helloCompleted;
     }
 }
