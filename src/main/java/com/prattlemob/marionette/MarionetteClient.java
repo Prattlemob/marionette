@@ -4,6 +4,7 @@ import com.prattlemob.marionette.bridge.BridgeServer;
 import com.prattlemob.marionette.bridge.protocol.AgentCommand;
 import com.prattlemob.marionette.bridge.protocol.Messages;
 import com.prattlemob.marionette.config.MarionetteConfig;
+import com.prattlemob.marionette.config.Verbosity;
 import com.prattlemob.marionette.control.ControlState;
 import com.prattlemob.marionette.control.ControlStateApplier;
 import com.prattlemob.marionette.control.DemoScript;
@@ -39,6 +40,18 @@ public class MarionetteClient {
     /** How often (in ticks) to log puppet position evidence while controlled. */
     private static final long PUPPET_LOG_INTERVAL = 20;
 
+    private static void logNormal(String message, Object... args) {
+        if (MarionetteConfig.logAt(Verbosity.NORMAL)) {
+            Marionette.LOGGER.info(message, args);
+        }
+    }
+
+    private static void logVerbose(String message, Object... args) {
+        if (MarionetteConfig.logAt(Verbosity.VERBOSE)) {
+            Marionette.LOGGER.info(message, args);
+        }
+    }
+
     private static MarionetteClient instance;
 
     private final ControlState controlState = new ControlState();
@@ -71,7 +84,7 @@ public class MarionetteClient {
 
     private void startBridge() {
         if (!MarionetteConfig.bridgeEnabled) {
-            Marionette.LOGGER.info("Bridge disabled by config");
+            logNormal("Bridge disabled by config");
             return;
         }
         String configured = MarionetteConfig.bindAddress;
@@ -86,7 +99,7 @@ public class MarionetteClient {
             BridgeServer server = new BridgeServer(bind, MarionetteConfig.port, modVersion);
             server.start();
             bridge = server;
-            Marionette.LOGGER.info("Bridge listening on {}:{}", bind, server.port());
+            logNormal("Bridge listening on {}:{}", bind, server.port());
         } catch (Exception e) {
             bridge = null;
             Marionette.LOGGER.error("Bridge failed to start; running without external control", e);
@@ -96,7 +109,7 @@ public class MarionetteClient {
     private void onGameShuttingDown(GameShuttingDownEvent event) {
         if (bridge != null) {
             bridge.stop();
-            Marionette.LOGGER.info("Bridge stopped");
+            logNormal("Bridge stopped");
         }
     }
 
@@ -124,7 +137,7 @@ public class MarionetteClient {
                 bridge.drainCommands(); // no world to act in: discard
             }
             if (agentLost) {
-                Marionette.LOGGER.info("Agent disconnected");
+                logNormal("Agent disconnected");
             }
             // Safety rule: no player entity to control -> nothing may stay held.
             if (controlsEngaged) {
@@ -136,10 +149,10 @@ public class MarionetteClient {
         if (agentLost) {
             controlState.releaseAll(); // drop un-applied residue from the dead agent
             if (controlsEngaged) {
-                Marionette.LOGGER.info("Agent disconnected — releasing all controls");
+                logNormal("Agent disconnected — releasing all controls");
                 releaseControls();
             } else {
-                Marionette.LOGGER.info("Agent disconnected");
+                logNormal("Agent disconnected");
             }
         }
         if (bridge != null) {
@@ -152,7 +165,7 @@ public class MarionetteClient {
             executeStunt(minecraft, player, stunt);
             if (demo.isDone()) {
                 demo = null;
-                Marionette.LOGGER.info("Demo complete");
+                logNormal("Demo complete");
             }
         }
         boolean shouldControl = demo != null || (bridge != null && bridge.hasController());
@@ -189,11 +202,11 @@ public class MarionetteClient {
         switch (stunt) {
             case OPEN_INVENTORY -> {
                 minecraft.setScreen(new InventoryScreen(player));
-                Marionette.LOGGER.info("Demo stunt: opened inventory");
+                logNormal("Demo stunt: opened inventory");
             }
             case CLOSE_SCREEN -> {
                 minecraft.setScreen(null);
-                Marionette.LOGGER.info("Demo stunt: closed screen");
+                logNormal("Demo stunt: closed screen");
             }
             case NONE -> { }
         }
@@ -204,7 +217,7 @@ public class MarionetteClient {
         controlState.releaseAll();
         applier.release();
         controlsEngaged = false;
-        Marionette.LOGGER.info("Controls released; vanilla input restored");
+        logNormal("Controls released; vanilla input restored");
     }
 
     private void onClientTickPost(ClientTickEvent.Post event) {
@@ -213,14 +226,15 @@ public class MarionetteClient {
         }
         ticksInWorld++;
         if (ticksInWorld % TICK_LOG_INTERVAL == 0) {
-            Marionette.LOGGER.info("Client tick {} in world", ticksInWorld);
+            logVerbose("Client tick {} in world", ticksInWorld);
         }
         LocalPlayer player = Minecraft.getInstance().player;
         if (controlsEngaged && player != null && ticksInWorld % PUPPET_LOG_INTERVAL == 0) {
-            Marionette.LOGGER.info(String.format("Puppet pos %.2f %.2f %.2f yaw %.1f",
+            logVerbose(String.format("Puppet pos %.2f %.2f %.2f yaw %.1f",
                     player.getX(), player.getY(), player.getZ(), player.getYRot()));
         }
-        if (bridge != null && inWorld && player != null) {
+        if (bridge != null && inWorld && player != null
+                && ticksInWorld % MarionetteConfig.observationRateDivisor == 0) {
             bridge.sendObservation(Messages.observation(ticksInWorld,
                     player.getX(), player.getY(), player.getZ(),
                     player.getYRot(), player.getXRot()));
@@ -232,9 +246,9 @@ public class MarionetteClient {
         ticksInWorld = 0;
         if (Boolean.getBoolean("marionette.demo")) {
             demo = new DemoScript(Boolean.getBoolean("marionette.demo.gui"));
-            Marionette.LOGGER.info("Demo armed (gui stunts: {})", Boolean.getBoolean("marionette.demo.gui"));
+            logNormal("Demo armed (gui stunts: {})", Boolean.getBoolean("marionette.demo.gui"));
         }
-        Marionette.LOGGER.info("Entered world");
+        logNormal("Entered world");
     }
 
     private void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
@@ -249,6 +263,6 @@ public class MarionetteClient {
         if (controlsEngaged) {
             releaseControls();
         }
-        Marionette.LOGGER.info("Left world");
+        logNormal("Left world");
     }
 }
