@@ -94,7 +94,12 @@ public final class MarionetteConfig {
 
     /** True when a tick-synced observation should be sent on this tick. */
     public static boolean observationDueAt(long tick) {
-        return tick % observationRateDivisor == 0;
+        return observationDueAt(tick, observationRateDivisor);
+    }
+
+    /** Same, with an explicit divisor (per-session override via configure). */
+    public static boolean observationDueAt(long tick, int divisor) {
+        return tick % divisor == 0;
     }
 
     /**

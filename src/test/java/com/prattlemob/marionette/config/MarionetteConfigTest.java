@@ -1,6 +1,8 @@
 package com.prattlemob.marionette.config;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
@@ -57,5 +59,14 @@ class MarionetteConfigTest {
         } finally {
             MarionetteConfig.observationRateDivisor = original;
         }
+    }
+
+    @Test
+    void observationDueAtHonorsExplicitDivisor() {
+        assertTrue(MarionetteConfig.observationDueAt(0, 4));
+        assertFalse(MarionetteConfig.observationDueAt(1, 4));
+        assertFalse(MarionetteConfig.observationDueAt(3, 4));
+        assertTrue(MarionetteConfig.observationDueAt(4, 4));
+        assertTrue(MarionetteConfig.observationDueAt(7, 1));
     }
 }

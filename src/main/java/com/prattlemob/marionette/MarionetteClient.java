@@ -62,6 +62,8 @@ public class MarionetteClient {
     private DemoScript demo;
     private boolean controlsEngaged;
     private BridgeServer bridge;
+    /** Per-session rateDivisor override from configure; null = use config. Reset on agent loss. */
+    private Integer sessionRateDivisor;
 
     private final String modVersion;
 
@@ -140,9 +142,15 @@ public class MarionetteClient {
 
         if (!inWorld || player == null) {
             if (bridge != null) {
-                bridge.drainCommands(); // no world to act in: discard
+                for (AgentCommand command : bridge.drainCommands()) {
+                    // Session settings apply without a world; actuation commands are discarded.
+                    if (command instanceof AgentCommand.Configure) {
+                        applyCommand(command);
+                    }
+                }
             }
             if (agentLost) {
+                sessionRateDivisor = null;
                 logNormal("Agent disconnected");
             }
             // Safety rule: no player entity to control -> nothing may stay held.
@@ -153,6 +161,7 @@ public class MarionetteClient {
             return;
         }
         if (agentLost) {
+            sessionRateDivisor = null;
             controlState.releaseAll(); // drop un-applied residue from the dead agent
             if (controlsEngaged) {
                 logNormal("Agent disconnected — releasing all controls");
@@ -188,6 +197,11 @@ public class MarionetteClient {
         }
     }
 
+    private int effectiveRateDivisor() {
+        Integer override = sessionRateDivisor;
+        return override != null ? override : MarionetteConfig.observationRateDivisor;
+    }
+
     private void applyCommand(AgentCommand command) {
         switch (command) {
             case AgentCommand.InputUpdate update -> {
@@ -202,7 +216,10 @@ public class MarionetteClient {
             case AgentCommand.Look look -> controlState.setLook(look.yaw(), look.pitch());
             case AgentCommand.Release release -> controlState.releaseAll();
             case AgentCommand.Configure configure -> {
-                // Per-session configuration; implementation deferred to M2.4+
+                if (configure.rateDivisor() != null) {
+                    sessionRateDivisor = configure.rateDivisor();
+                    logNormal("Observation rate divisor set to {} for this session", configure.rateDivisor());
+                }
             }
         }
     }
@@ -243,7 +260,7 @@ public class MarionetteClient {
                     player.getX(), player.getY(), player.getZ(), player.getYRot()));
         }
         if (bridge != null && inWorld && player != null
-                && MarionetteConfig.observationDueAt(ticksInWorld)) {
+                && MarionetteConfig.observationDueAt(ticksInWorld, effectiveRateDivisor())) {
             bridge.sendObservation(Messages.observation(ticksInWorld,
                     player.getX(), player.getY(), player.getZ(),
                     player.getYRot(), player.getXRot()));
