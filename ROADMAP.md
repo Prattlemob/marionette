@@ -247,8 +247,8 @@ Items:
   combination (sprint-jump, sneak-walk to a block edge without falling)
   visibly in a rendered client.
 - **Tier:** Core.
-- **Decision (minor, open):** whether movement axes are boolean (key-like) or
-  analog floats (controller-like) on the wire — spec in `protocol/` first.
+- **Decision (minor):** movement axes are boolean (key-like) on the wire —
+  **resolved in M3.1**; see docs/decisions.md.
 
 Items:
 
