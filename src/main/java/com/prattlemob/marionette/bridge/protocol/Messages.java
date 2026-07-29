@@ -22,6 +22,7 @@ public final class Messages {
         reply.addProperty("version", version);
         JsonObject capabilities = new JsonObject();
         capabilities.addProperty("configure", true);
+        capabilities.addProperty("tap", true);
         reply.add("capabilities", capabilities);
         reply.addProperty("mod", modVersion);
         return reply.toString();

@@ -23,6 +23,7 @@ class MessagesTest {
         assertEquals("hello", reply.get("type").getAsString());
         assertEquals(1, reply.get("version").getAsInt());
         assertTrue(reply.get("capabilities").getAsJsonObject().get("configure").getAsBoolean());
+        assertTrue(reply.get("capabilities").getAsJsonObject().get("tap").getAsBoolean());
         assertEquals("0.1.0", reply.get("mod").getAsString());
         assertFalse(reply.has("id"));
     }
