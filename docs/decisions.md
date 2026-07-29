@@ -254,8 +254,16 @@ earlier if outside contributions arrive.
   envelope — M4.1's D2 section mask lands in it additively. Advertised
   as the `configure` capability flag. Processed even while no world is
   loaded, unlike actuation commands.
-- Movement axes on the wire: boolean (key-like) vs. analog floats
-  (controller-like) — M3.1.
+- Movement axes on the wire — **resolved in M3.1** (2026-07-29):
+  boolean, key-like. Vanilla physics already smooths boolean input
+  (acceleration/friction ramps), curved paths come from camera yaw
+  (M3.2 smoothing), and booleans keep the D4 mixin's vanilla-parity
+  guarantees (sneak speed cap, sprint gating, edge-stop) for free.
+  Analog floats would add speed granularity, not smoothness; if a real
+  use case appears they arrive later as an additive message behind a
+  capability flag. One-shot presses ride `input.tap` (array of control
+  names, one-tick press, `tap` capability flag) — the shape M3.3
+  reuses for attack/use.
 - Item-component serialization depth (enchantments, custom names) — M4.2.
 - Crosshair ray-cast distance: vanilla reach vs. configurable gaze — M4.3.
 - Hostility classification source; client-side aggro inference depth — M4.4.

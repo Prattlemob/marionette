@@ -254,7 +254,7 @@ Items:
 
 - [ ] Sprint, sneak, jump (hold + one-shot tap)
 - [ ] All combinations behave like real key input (e.g. sneak caps speed)
-- [ ] Protocol messages specced in `protocol/` before implementation
+- [x] Protocol messages specced in `protocol/` before implementation
 - [ ] `examples/` demo exercising the full set
 
 ### M3.2 — Camera control with stream-quality smoothing
