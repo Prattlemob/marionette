@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.Set;
+
 import org.junit.jupiter.api.Test;
 
 class ControlStateTest {
@@ -68,5 +70,39 @@ class ControlStateTest {
         state.setLook(10.0F, 0.0F);
         state.setLook(20.0F, 5.0F);
         assertEquals(new ControlState.Look(20.0F, 5.0F), state.consumeLook());
+    }
+
+    @Test
+    void tapsAreConsumedExactlyOnce() {
+        ControlState state = new ControlState();
+        state.tap(TapControl.JUMP);
+        assertFalse(state.anyHeld()); // a pending tap is not a held control
+        assertEquals(Set.of(TapControl.JUMP), state.consumeTaps());
+        assertEquals(Set.of(), state.consumeTaps());
+    }
+
+    @Test
+    void duplicateTapsCollapse() {
+        ControlState state = new ControlState();
+        state.tap(TapControl.JUMP);
+        state.tap(TapControl.JUMP);
+        assertEquals(Set.of(TapControl.JUMP), state.consumeTaps());
+    }
+
+    @Test
+    void tapDoesNotDisturbHeldControls() {
+        ControlState state = new ControlState();
+        state.setJump(true);
+        state.tap(TapControl.JUMP);
+        assertEquals(Set.of(TapControl.JUMP), state.consumeTaps());
+        assertTrue(state.jump()); // tap never releases a held control
+    }
+
+    @Test
+    void releaseAllClearsPendingTaps() {
+        ControlState state = new ControlState();
+        state.tap(TapControl.JUMP);
+        state.releaseAll();
+        assertEquals(Set.of(), state.consumeTaps());
     }
 }

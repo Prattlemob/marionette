@@ -1,5 +1,8 @@
 package com.prattlemob.marionette.control;
 
+import java.util.EnumSet;
+import java.util.Set;
+
 /**
  * Set-and-hold control intent: values persist until changed by a later
  * command, mirroring keys a player holds down. One instance is owned by the
@@ -18,6 +21,7 @@ public final class ControlState {
     private boolean sneak;
     private boolean sprint;
     private Look pendingLook;
+    private final EnumSet<TapControl> pendingTaps = EnumSet.noneOf(TapControl.class);
 
     public boolean forward() { return forward; }
     public boolean back() { return back; }
@@ -47,14 +51,30 @@ public final class ControlState {
         return look;
     }
 
+    /** Queue a one-shot press of {@code control} for the next input tick. */
+    public void tap(TapControl control) {
+        pendingTaps.add(control);
+    }
+
+    /** The pending taps, clearing them; empty when none queued. */
+    public Set<TapControl> consumeTaps() {
+        if (pendingTaps.isEmpty()) {
+            return Set.of();
+        }
+        Set<TapControl> taps = EnumSet.copyOf(pendingTaps);
+        pendingTaps.clear();
+        return taps;
+    }
+
     /** True when any control is held. */
     public boolean anyHeld() {
         return forward || back || left || right || jump || sneak || sprint;
     }
 
-    /** Return every control to neutral and drop any pending look intent. */
+    /** Return every control to neutral and drop any pending look intent and pending taps. */
     public void releaseAll() {
         forward = back = left = right = jump = sneak = sprint = false;
         pendingLook = null;
+        pendingTaps.clear();
     }
 }
