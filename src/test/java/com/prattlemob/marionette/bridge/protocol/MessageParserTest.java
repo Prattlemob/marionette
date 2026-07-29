@@ -7,10 +7,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
 import com.google.gson.JsonPrimitive;
+import com.prattlemob.marionette.control.TapControl;
 
 class MessageParserTest {
     @Test
@@ -177,5 +179,45 @@ class MessageParserTest {
                     () -> MessageParser.parse("{\"type\": \"configure\", \"rateDivisor\": " + bad + "}")).code(),
                     "rateDivisor " + bad + " must be rejected");
         }
+    }
+
+    @Test
+    void inputTapArrayParses() {
+        AgentCommand.InputUpdate update = assertInstanceOf(AgentCommand.InputUpdate.class,
+                MessageParser.parse("{\"type\": \"input\", \"sprint\": true, \"tap\": [\"jump\"]}"));
+        assertEquals(Set.of(TapControl.JUMP), update.taps());
+        assertEquals(Boolean.TRUE, update.sprint());
+    }
+
+    @Test
+    void inputWithoutTapHasEmptyTaps() {
+        AgentCommand.InputUpdate update = assertInstanceOf(AgentCommand.InputUpdate.class,
+                MessageParser.parse("{\"type\": \"input\", \"forward\": true}"));
+        assertEquals(Set.of(), update.taps());
+    }
+
+    @Test
+    void duplicateTapEntriesCollapse() {
+        AgentCommand.InputUpdate update = assertInstanceOf(AgentCommand.InputUpdate.class,
+                MessageParser.parse("{\"type\": \"input\", \"tap\": [\"jump\", \"jump\"]}"));
+        assertEquals(Set.of(TapControl.JUMP), update.taps());
+    }
+
+    @Test
+    void nonArrayTapIsInvalidField() {
+        assertEquals(ErrorCode.INVALID_FIELD, assertThrows(ProtocolError.class,
+                () -> MessageParser.parse("{\"type\": \"input\", \"tap\": \"jump\"}")).code());
+    }
+
+    @Test
+    void nonStringTapEntryIsInvalidField() {
+        assertEquals(ErrorCode.INVALID_FIELD, assertThrows(ProtocolError.class,
+                () -> MessageParser.parse("{\"type\": \"input\", \"tap\": [true]}")).code());
+    }
+
+    @Test
+    void unknownTapControlIsInvalidField() {
+        assertEquals(ErrorCode.INVALID_FIELD, assertThrows(ProtocolError.class,
+                () -> MessageParser.parse("{\"type\": \"input\", \"tap\": [\"attack\"]}")).code());
     }
 }

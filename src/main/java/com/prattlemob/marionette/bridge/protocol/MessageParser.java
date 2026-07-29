@@ -3,9 +3,12 @@ package com.prattlemob.marionette.bridge.protocol;
 import java.io.IOException;
 import java.io.StringReader;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 import com.google.gson.JsonArray;
+import com.prattlemob.marionette.control.TapControl;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
@@ -80,7 +83,8 @@ public final class MessageParser {
                     optionalBoolean(json, "right"),
                     optionalBoolean(json, "jump"),
                     optionalBoolean(json, "sneak"),
-                    optionalBoolean(json, "sprint"));
+                    optionalBoolean(json, "sprint"),
+                    tapArray(json));
             case "look" -> new AgentCommand.Look(
                     requiredFiniteFloat(json, "yaw"),
                     requiredFiniteFloat(json, "pitch"));
@@ -173,5 +177,30 @@ public final class MessageParser {
             throw new ProtocolError(ErrorCode.INVALID_FIELD, requirement);
         }
         return primitive.getAsInt();
+    }
+
+    /** The "tap" array as TapControls; empty when absent. See protocol/v1.md. */
+    private static Set<TapControl> tapArray(JsonObject json) {
+        JsonElement element = json.get("tap");
+        if (element == null) {
+            return Set.of();
+        }
+        String requirement = "field \"tap\" must be an array of control names";
+        if (!(element instanceof JsonArray array)) {
+            throw new ProtocolError(ErrorCode.INVALID_FIELD, requirement);
+        }
+        EnumSet<TapControl> taps = EnumSet.noneOf(TapControl.class);
+        for (JsonElement entry : array) {
+            if (!(entry instanceof JsonPrimitive primitive) || !primitive.isString()) {
+                throw new ProtocolError(ErrorCode.INVALID_FIELD, requirement);
+            }
+            TapControl control = TapControl.fromWire(primitive.getAsString());
+            if (control == null) {
+                throw new ProtocolError(ErrorCode.INVALID_FIELD,
+                        "field \"tap\" has unknown control \"" + primitive.getAsString() + "\"");
+            }
+            taps.add(control);
+        }
+        return taps;
     }
 }
