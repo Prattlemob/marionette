@@ -167,7 +167,7 @@ dependencies {
     // Jar-in-Jar alone only unpacks at production runtime; dev-environment
     // run tasks (runClient*) need the same jar on the classpath explicitly,
     // or the mod's module can't see the codec classes (ClassNotFoundException).
-    additionalRuntimeClasspath 'io.netty:netty-codec-http:4.1.118.Final'
+    additionalRuntimeClasspath 'io.netty:netty-codec-http:4.2.16.Final'
 }
 
 tasks.named('test', Test) {
