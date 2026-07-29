@@ -1,5 +1,6 @@
 package com.prattlemob.marionette.mixin;
 
+import java.util.Set;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -7,6 +8,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import com.prattlemob.marionette.control.ControlState;
 import com.prattlemob.marionette.control.MixinInputApplier;
+import com.prattlemob.marionette.control.TapControl;
 
 import net.minecraft.client.player.ClientInput;
 import net.minecraft.client.player.KeyboardInput;
@@ -27,12 +29,13 @@ public abstract class KeyboardInputMixin extends ClientInput {
         if (state == null) {
             return;
         }
+        Set<TapControl> taps = state.consumeTaps();
         this.keyPresses = new Input(
                 this.keyPresses.forward() || state.forward(),
                 this.keyPresses.backward() || state.back(),
                 this.keyPresses.left() || state.left(),
                 this.keyPresses.right() || state.right(),
-                this.keyPresses.jump() || state.jump(),
+                this.keyPresses.jump() || state.jump() || taps.contains(TapControl.JUMP),
                 this.keyPresses.shift() || state.sneak(),
                 this.keyPresses.sprint() || state.sprint());
         // Mirrors vanilla KeyboardInput.tick()'s impulse derivation —

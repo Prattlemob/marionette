@@ -220,6 +220,7 @@ public class MarionetteClient {
                 if (update.jump() != null) controlState.setJump(update.jump());
                 if (update.sneak() != null) controlState.setSneak(update.sneak());
                 if (update.sprint() != null) controlState.setSprint(update.sprint());
+                update.taps().forEach(controlState::tap);
             }
             case AgentCommand.Look look -> controlState.setLook(look.yaw(), look.pitch());
             case AgentCommand.Release release -> controlState.releaseAll();
