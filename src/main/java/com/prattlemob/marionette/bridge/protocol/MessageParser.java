@@ -201,6 +201,6 @@ public final class MessageParser {
             }
             taps.add(control);
         }
-        return taps;
+        return Set.copyOf(taps);
     }
 }

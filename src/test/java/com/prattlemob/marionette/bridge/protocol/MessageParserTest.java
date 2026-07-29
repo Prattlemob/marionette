@@ -220,4 +220,11 @@ class MessageParserTest {
         assertEquals(ErrorCode.INVALID_FIELD, assertThrows(ProtocolError.class,
                 () -> MessageParser.parse("{\"type\": \"input\", \"tap\": [\"attack\"]}")).code());
     }
+
+    @Test
+    void parsedTapSetIsImmutable() {
+        AgentCommand.InputUpdate update = assertInstanceOf(AgentCommand.InputUpdate.class,
+                MessageParser.parse("{\"type\": \"input\", \"tap\": [\"jump\"]}"));
+        assertThrows(UnsupportedOperationException.class, () -> update.taps().add(TapControl.JUMP));
+    }
 }
