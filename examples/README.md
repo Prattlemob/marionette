@@ -12,6 +12,11 @@ joined a world.
 - `full_movement.py` — M3.1: every held control plus tap-jump vs held
   jump and a sprint-jump, with measured speeds; `--sneak-edge` runs the
   manual sneak-to-a-drop safety check.
+- `observer.py` — M2.4: read-only second connection (`role: "observer"`).
+  Run it *alongside* a controller example: it slows its own stream with
+  `configure` (the controller's cadence is untouched) and shows actuation
+  being refused with `role_forbidden`. `kill -9`-ing it must not disturb
+  the player or the controller.
 - `look_points.py` — M3.2: five smoothed look-at pans around the player,
   then contrast cases (double-speed pan, instant snap, delta burst); the
   D5 experiment driver and demo.
