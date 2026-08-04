@@ -4,6 +4,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Pin jarJar constraint in build.gradle: netty-codec-http [4.1, 4.2)
+    ignore:
+      - dependency-name: "io.netty:netty-codec-http"
+        versions: [">=4.2.0"]
 
   - package-ecosystem: github-actions
     directory: /

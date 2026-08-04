@@ -14,7 +14,7 @@ public interface SmoothingModel {
     /** Advance from {@code current} toward {@code target} by {@code dt} seconds. */
     Rotation advance(Rotation current, Rotation target, float dt);
 
-    /** True when within tolerance of target and any internal velocity has settled. */
+    /** True when current is within tolerance of target. */
     boolean converged(Rotation current, Rotation target);
 
     /** Clear per-pan internal state; called when a (re)start begins a new pan. */
