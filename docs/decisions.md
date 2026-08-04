@@ -166,14 +166,43 @@ sequencing is reliable. Record the winner here when decided.
 minor/patch mean; integer + capabilities answers every question an agent can
 ask.
 
-## D7 — Multi-client policy: single controller — **Settled**
+## D7 — Multi-client policy: single controller + observers — **Settled**
 
-- Exactly **one controlling agent connection** in v1; a second connection is
-  rejected with a documented error while a controller is attached.
-- The `hello` message includes `role: "controller"` (the only accepted value
-  in v1), so `role: "observer"` (read-only observation stream — dashboards,
-  overlays) can be added later behind a capability flag as a purely additive
-  change.
+- Exactly **one controlling agent connection**; a second controller is
+  rejected with a documented error while one is attached.
+- The `hello` message carries `role`, defaulting to `"controller"`.
+
+### D7a — Observer role — **Settled** (2026-08-04, M2.4 design)
+
+`role: "observer"` is accepted: a read-only connection that receives
+observation frames and errors, may send `hello` and `configure`, and is
+refused non-fatally (`role_forbidden`) on every actuation message. Capped
+by `bridge.maxObservers` (default 2, range 0–8; `0` disables the role).
+`"director"` — a future role owning the camera while the controller owns
+movement — is reserved as a name only.
+
+**Rationale:** the motivating shape is two agents on one client (a brains
+agent driving, a commentator agent watching and narrating a stream). Each
+connection carries its own rate divisor and its own latest-wins coalescing,
+so a slow observer drops only its own frames — the M2.3 backpressure model
+applied per connection rather than per server.
+
+**Safety asymmetry (normative):** observer loss is **not** an agent loss —
+no release-all, no watchdog action, no effect on held controls — because an
+observer can never actuate and so has nothing stuck. Controller loss is
+unchanged. M5.1 inherits this: a missed pong from an observer drops that
+observer; a missed pong from the controller releases all controls. Whether
+the panic key also disconnects observers is left to M5.1 (recommendation:
+no — panic should stop the puppet, not blind the stream).
+
+**Admission ordering:** the mod cannot know whether a new connection wants
+`controller` or `observer` until `hello` arrives, so admission necessarily
+moves *after* hello-processing; `controller_attached` is no longer sent
+pre-handshake and now carries the offending frame. This forces a hello
+timeout (`bridge.helloTimeoutSeconds`, default 10) so unauthenticated
+connections cannot accumulate. Corrected in `v1.md` in place with no version
+bump: the mod is unreleased and no third-party agents exist, so there is
+nothing to stay compatible with.
 
 ## D8 — Inventory actions: intent-level, menu-generic addressing — **Settled**
 
@@ -223,6 +252,30 @@ release-facing (Modrinth/CurseForge listings, tagged releases). Worth settling
 earlier if outside contributions arrive.
 
 ---
+
+## D13 — MCP is a harness concern, not a transport — **Settled** (2026-08-04)
+
+Marionette does **not** become an MCP server. The WebSocket bridge (D1)
+stays the wire contract. MCP's place is inside an out-of-repo harness, as
+the interface between it and whichever model fills each agent role — which
+is where per-role model swapping is actually useful. It never talks to the
+mod.
+
+**Rationale:**
+
+- **Cadence mismatch.** The core is a 20 Hz tick-synced stream with
+  latest-wins coalescing and set-and-hold actuation. MCP is host-driven
+  request/response with no notion of a stale frame to drop, and no host
+  pulls at tick rate.
+- **Event-driven agents still need a loop.** A commentator must speak
+  unprompted when something happens; MCP hosts are turn-driven, so a harness
+  loop is required either way. MCP does not remove it.
+- **Dependency footprint.** The MCP Java SDK is Project Reactor + Jackson
+  inside a NeoForge client mod, on the jar-in-jar path that already drew
+  blood once (see the D1a dev-classpath addendum).
+- **Agent-agnosticism** (CLAUDE.md). MCP is an agent-framework contract;
+  making it the transport excludes the scripted, RL, and browser agents that
+  D1 chose WebSocket to include.
 
 ## Minor open points (decide inside their milestones)
 

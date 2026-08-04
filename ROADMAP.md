@@ -11,8 +11,9 @@ depends on.
 
 **Assumptions:**
 
-1. One agent connection at a time in the core spine (D7); observers may be
-   added later behind a capability flag.
+1. One **controlling** agent connection at a time (D7); additional read-only
+   `observer` connections arrive in M2.4 behind a capability flag, capped by
+   config.
 2. The protocol is text JSON end-to-end for the core; binary WebSocket frames
    are reserved for where bandwidth demands it (block scan, framebuffer).
 3. Dev-loop testing happens in a local singleplayer world via
@@ -232,6 +233,50 @@ Items:
 - [x] Clean listener shutdown on client quit; no orphaned threads
 - [x] WebSocket ping/pong liveness (grounds the M5.1 watchdog)
 
+### M2.4 — Observer role: read-only second connection
+
+- **Goal:** Let a second agent watch without being able to touch the
+  controls — the "two agents, one client" shape a streamed setup needs (a
+  brains agent driving, a commentator agent watching and narrating).
+- **Delivers:** `role: "observer"` accepted at handshake (reserved in v1 and
+  D7, now real), advertised as the `observer` capability. Observers receive
+  observation frames with their **own** rate divisor and their own
+  latest-wins coalescing, so a slow observer can only ever drop its own
+  frames. Actuation messages from an observer are refused non-fatally
+  (`role_forbidden`). Admission moves after `hello` (the mod cannot know a
+  connection's role before it speaks), which brings a hello timeout with it.
+  The safety asymmetry is the point: **observer loss is not an agent loss** —
+  no release-all — while controller loss behaves exactly as v1 specifies.
+- **Prerequisites:** M2.3 (per-connection coalescing builds directly on it).
+  Sequenced after M3.2 so the critical path to watchable footage is not
+  disturbed.
+- **Definition of done:** With a controller walking the player and an
+  observer attached, `kill -9`-ing the observer leaves the player walking and
+  the controller undisturbed; `kill -9`-ing the controller releases all
+  controls within one tick while the observer stays connected and keeps
+  receiving frames.
+- **Tier:** Core.
+- **Decision:** **D7 amended** (observer settled, admission ordering, cap);
+  **D13** records why MCP is a harness concern rather than a transport. Full
+  design: `docs/superpowers/specs/2026-08-04-m2.4-observer-role-design.md`.
+
+Items:
+
+- [ ] Per-connection state hoisted out of `BridgeServer` into an
+      `AgentConnection` type (channel, session, role, pending frame, drop
+      counter, last pong, divisor override)
+- [ ] `role: "observer"` accepted; `observer` capability flag; `director`
+      reserved as a future role name
+- [ ] `role_forbidden` (non-fatal) and `observer_attached` (fatal, 1013) in
+      the error taxonomy; `configure` allowed for both roles
+- [ ] Admission moved post-`hello`; `bridge.helloTimeoutSeconds` closes
+      connections that never handshake
+- [ ] `bridge.maxObservers` config (default 2, range 0–8); observation
+      fanout with independent per-connection backpressure
+- [ ] Inbound queue entries tagged with their originating connection
+- [ ] Observer loss does not trigger release-all; controller loss unchanged
+- [ ] `examples/observer.py` + side-by-side run documented
+
 ---
 
 ## Phase 3 — Full Actuation (Core) — *the whole body, still zero intelligence*
@@ -331,6 +376,13 @@ Items:
 ---
 
 ## Phase 4 — Perception (Core) — *what the puppet feels*
+
+> **Implementation order within this phase: M4.1 → M4.6 → M4.2 → M4.3 →
+> M4.4 → M4.5.** Milestone numbers are kept stable (they are referenced
+> throughout this file and in `protocol/`), but M4.6's one-shot events are
+> what a commentator/observer agent actually consumes — *things that
+> happened* — so events land straight after the base frame, ahead of
+> inventory, target, entity, and block-scan detail. See M2.4.
 
 ### M4.1 — Player state observation stream
 
@@ -737,9 +789,10 @@ All design decisions, their status, and rationale live in
 | D4 | Input injection mechanism | **Settled: input-path mixin** (M1.1 experiment) | M1.1 |
 | D5 | Camera smoothing model | **Experiment-gated** (pass criteria defined) | M3.2 |
 | D6 | Protocol versioning | **Settled: integer version + capability flags** | M2.1 |
-| D7 | Multi-client policy | **Settled: single controller; `role` field reserved** | M2.1 |
+| D7 | Multi-client policy | **Settled: single controller + capped read-only observers** | M2.1, M2.4 |
 | D8 | Inventory granularity | **Settled: intent-level, menu-generic addressing** | M3.4 |
 | D9 | Baritone surface | **Settled: adapter behind `NavigationBackend` interface** | M6.1 |
 | D10 | Server component scope | **Deferred by design** (Phase-4 gap list; opt-in rule settled) | M7.1 |
 | D11 | Framebuffer capture | Open | M8.1 |
 | D12 | License confirmation | Open — **blocking release** | M9.2 |
+| D13 | MCP positioning | **Settled: harness-side concern, never the transport** | M2.4 |
