@@ -133,6 +133,17 @@ class BridgeServerTest {
         return client;
     }
 
+    private static final String OBSERVER_HELLO =
+            "{\"type\": \"hello\", \"versions\": [1], \"role\": \"observer\"}";
+
+    private TestClient connectObserver() throws Exception {
+        TestClient client = TestClient.connect(server.port());
+        client.send(OBSERVER_HELLO);
+        JsonObject reply = JsonParser.parseString(client.awaitMessage()).getAsJsonObject();
+        assertEquals("hello", reply.get("type").getAsString());
+        return client;
+    }
+
     @Test
     void helloHandshakeRepliesWithVersionCapabilitiesAndModVersion() throws Exception {
         TestClient client = TestClient.connect(server.port());
@@ -453,5 +464,150 @@ class BridgeServerTest {
         JsonObject error = JsonParser.parseString(a.awaitMessage()).getAsJsonObject();
         assertEquals("controller_attached", error.get("code").getAsString());
         assertEquals(1013, (int) a.closeCode.get(5, TimeUnit.SECONDS));
+    }
+
+    @Test
+    void helloTimeoutDoesNotFireOnACompletedSession() throws Exception {
+        BridgeServer fast = new BridgeServer("127.0.0.1", 0, "test-version", 2, 10_000, 200);
+        fast.start();
+        try {
+            TestClient client = TestClient.connect(fast.port());
+            client.send(HELLO);
+            JsonObject reply = JsonParser.parseString(client.awaitMessage()).getAsJsonObject();
+            assertEquals("hello", reply.get("type").getAsString());
+            await(fast::hasController);
+            Thread.sleep(500); // well past the 200ms hello-timeout window
+            assertTrue(fast.hasController(), "an established session must survive the hello timeout");
+            assertFalse(client.closeCode.isDone(), "no close should have been received");
+        } finally {
+            fast.stop();
+        }
+    }
+
+    @Test
+    void observerConnectsAlongsideTheControllerInEitherOrder() throws Exception {
+        TestClient observer = connectObserver();
+        TestClient controller = connectAndHello();
+        await(server::hasController);
+        server.sendObservation("{\"type\": \"observation\", \"tick\": 5}");
+        assertEquals(5, JsonParser.parseString(observer.awaitMessage())
+                .getAsJsonObject().get("tick").getAsInt());
+        assertEquals(5, JsonParser.parseString(controller.awaitMessage())
+                .getAsJsonObject().get("tick").getAsInt());
+    }
+
+    @Test
+    void observerBeyondTheCapIsRefused1013() throws Exception {
+        connectObserver();
+        connectObserver(); // cap is 2
+        TestClient third = TestClient.connect(server.port());
+        third.send(OBSERVER_HELLO);
+        JsonObject error = JsonParser.parseString(third.awaitMessage()).getAsJsonObject();
+        assertEquals("observer_attached", error.get("code").getAsString());
+        assertEquals(1013, (int) third.closeCode.get(5, TimeUnit.SECONDS));
+    }
+
+    @Test
+    void zeroMaxObserversDisablesTheRole() throws Exception {
+        BridgeServer locked = new BridgeServer("127.0.0.1", 0, "test-version", 0, 10_000);
+        locked.start();
+        try {
+            TestClient client = TestClient.connect(locked.port());
+            client.send(OBSERVER_HELLO);
+            JsonObject error = JsonParser.parseString(client.awaitMessage()).getAsJsonObject();
+            assertEquals("observer_attached", error.get("code").getAsString());
+            assertEquals(1013, (int) client.closeCode.get(5, TimeUnit.SECONDS));
+        } finally {
+            locked.stop();
+        }
+    }
+
+    @Test
+    void observerLossIsNotAnAgentLoss() throws Exception {
+        connectAndHello();
+        TestClient observer = connectObserver();
+        observer.ws.abort(); // kill -9 analogue
+        // Deterministic settle: a replacement observer can attach only after
+        // the dead one's channelInactive freed its slot (cap is 2, so attach
+        // a second first to fill it back up deterministically).
+        await(() -> {
+            try {
+                connectObserver();
+                return true;
+            } catch (Exception | AssertionError slotStillHeld) {
+                return false;
+            }
+        });
+        assertFalse(server.pollDisconnected(), "observer loss must never latch release-all");
+        assertTrue(server.hasController(), "controller undisturbed");
+    }
+
+    @Test
+    void controllerLossReleasesWhileTheObserverKeepsWatching() throws Exception {
+        TestClient controller = connectAndHello();
+        TestClient observer = connectObserver();
+        controller.ws.abort();
+        await(server::pollDisconnected); // release-all latch fires
+        await(() -> !server.hasController());
+        server.sendObservation("{\"type\": \"observation\", \"tick\": 9}");
+        assertEquals(9, JsonParser.parseString(observer.awaitMessage())
+                .getAsJsonObject().get("tick").getAsInt());
+    }
+
+    @Test
+    void observerActuationIsRefusedButConfigureLands() throws Exception {
+        TestClient observer = connectObserver();
+        observer.send("{\"type\": \"input\", \"forward\": true}");
+        JsonObject error = JsonParser.parseString(observer.awaitMessage()).getAsJsonObject();
+        assertEquals("role_forbidden", error.get("code").getAsString());
+        observer.send("{\"type\": \"configure\", \"rateDivisor\": 40}");
+        await(() -> server.drainCommands().stream()
+                .anyMatch(r -> r.command() instanceof AgentCommand.Configure
+                        && r.from().role() == com.prattlemob.marionette.bridge.protocol.Role.OBSERVER));
+    }
+
+    @Test
+    void dueAwareSendHonorsPerConnectionDivisorsAndSerializesOnce() throws Exception {
+        TestClient controller = connectAndHello();
+        TestClient observer = connectObserver();
+        // Give the observer a divisor of 4 via its connection object.
+        observer.send("{\"type\": \"configure\", \"rateDivisor\": 4}");
+        List<BridgeServer.Received> drained = new java.util.ArrayList<>();
+        await(() -> {
+            drained.addAll(server.drainCommands());
+            return drained.stream().anyMatch(r -> r.command() instanceof AgentCommand.Configure);
+        });
+        drained.stream().filter(r -> r.command() instanceof AgentCommand.Configure)
+                .forEach(r -> r.from().setRateDivisor(
+                        ((AgentCommand.Configure) r.command()).rateDivisor()));
+
+        java.util.concurrent.atomic.AtomicInteger builds = new java.util.concurrent.atomic.AtomicInteger();
+        for (long tick = 1; tick <= 4; tick++) {
+            final long t = tick;
+            server.sendObservation(t, 1, () -> {
+                builds.incrementAndGet();
+                return "{\"type\": \"observation\", \"tick\": " + t + "}";
+            });
+        }
+        // Controller (divisor 1) got ticks 1..4; observer (divisor 4) got only tick 4.
+        for (int expected = 1; expected <= 4; expected++) {
+            assertEquals(expected, JsonParser.parseString(controller.awaitMessage())
+                    .getAsJsonObject().get("tick").getAsInt());
+        }
+        assertEquals(4, JsonParser.parseString(observer.awaitMessage())
+                .getAsJsonObject().get("tick").getAsInt());
+        assertEquals(4, builds.get(), "frame built once per due tick, not per recipient");
+        assertTrue(observer.messages.isEmpty(), "observer saw only its due tick");
+    }
+
+    @Test
+    void nobodyDueMeansNoFrameBuild() throws Exception {
+        connectAndHello();
+        java.util.concurrent.atomic.AtomicInteger builds = new java.util.concurrent.atomic.AtomicInteger();
+        server.sendObservation(3, 2, () -> { // tick 3, divisor 2: not due
+            builds.incrementAndGet();
+            return "{}";
+        });
+        assertEquals(0, builds.get());
     }
 }

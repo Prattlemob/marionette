@@ -10,6 +10,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 import com.prattlemob.marionette.bridge.protocol.AgentCommand;
@@ -182,6 +183,26 @@ public final class BridgeServer {
         connections().forEach(connection -> connection.sendObservation(json));
     }
 
+    /**
+     * Tick-cadence observation send: each ready connection receives the
+     * frame only on ticks its effective divisor divides. The frame is
+     * serialized at most once, and not at all when nobody is due. (When
+     * D2 section masks arrive in M4.1, recipients with different masks
+     * will need per-mask serialization — group by mask then.)
+     */
+    public void sendObservation(long tick, int defaultDivisor, Supplier<String> frame) {
+        String json = null;
+        for (AgentConnection connection : (Iterable<AgentConnection>) connections()::iterator) {
+            if (!connection.ready() || tick % connection.effectiveDivisor(defaultDivisor) != 0) {
+                continue;
+            }
+            if (json == null) {
+                json = frame.get();
+            }
+            connection.sendObservation(json);
+        }
+    }
+
     /** Observation frames deferred/dropped across all connections since they attached. */
     public long coalescedObservations() {
         return connections().mapToLong(AgentConnection::coalescedObservations).sum();
@@ -272,6 +293,9 @@ public final class BridgeServer {
             ErrorCode refusal = tryAdmit(connection, role);
             if (refusal == null) {
                 connection.setRole(role);
+                if (helloTimeoutTask != null) {
+                    helloTimeoutTask.cancel(false);
+                }
             }
             return refusal;
         }
@@ -283,7 +307,8 @@ public final class BridgeServer {
             }
             if (frame instanceof PongWebSocketFrame) {
                 connection.recordPong();
-                LOG.debug("Pong from {}", connection.role());
+                Role pongRole = connection.role();
+                LOG.debug("Pong from {}", pongRole != null ? pongRole : "pre-hello");
                 return;
             }
             if (!(frame instanceof TextWebSocketFrame text)) {

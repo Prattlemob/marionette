@@ -81,6 +81,10 @@ public final class AgentConnection {
             pendingObservation.set(null);
             channel.writeAndFlush(new TextWebSocketFrame(json));
         } else {
+            // Edge case accepted: a frame stashed here just after a writability
+            // flush (channelWritabilityChanged already ran) waits for the next
+            // observation to supersede it rather than flushing immediately.
+            // Benign — the stream is continuous while in a world.
             pendingObservation.set(json);
             coalesced.incrementAndGet();
         }
