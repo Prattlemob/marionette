@@ -2,13 +2,17 @@ package com.prattlemob.marionette;
 
 import com.prattlemob.marionette.bridge.BridgeServer;
 import com.prattlemob.marionette.bridge.protocol.AgentCommand;
+import com.prattlemob.marionette.bridge.protocol.ErrorCode;
 import com.prattlemob.marionette.bridge.protocol.Messages;
 import com.prattlemob.marionette.config.MarionetteConfig;
 import com.prattlemob.marionette.config.Verbosity;
+import com.prattlemob.marionette.control.CameraSmoother;
 import com.prattlemob.marionette.control.ControlState;
 import com.prattlemob.marionette.control.ControlStateApplier;
 import com.prattlemob.marionette.control.DemoScript;
 import com.prattlemob.marionette.control.MixinInputApplier;
+import com.prattlemob.marionette.control.Rotation;
+import com.prattlemob.marionette.control.SmoothingModel;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
@@ -21,6 +25,7 @@ import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.event.RenderFrameEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.GameShuttingDownEvent;
 
@@ -39,6 +44,8 @@ public class MarionetteClient {
     private static final long TICK_LOG_INTERVAL = 100;
     /** How often (in ticks) to log puppet position evidence while controlled. */
     private static final long PUPPET_LOG_INTERVAL = 20;
+    /** Longest dt one render frame may advance a pan, seconds (hitch/pause clamp). */
+    private static final float MAX_FRAME_DT = 0.1f;
 
     private static void logNormal(String message, Object... args) {
         if (MarionetteConfig.logAt(Verbosity.NORMAL)) {
@@ -56,6 +63,11 @@ public class MarionetteClient {
 
     private final ControlState controlState = new ControlState();
     private final ControlStateApplier applier = new MixinInputApplier();
+    private final CameraSmoother cameraSmoother = new CameraSmoother();
+    /** nanoTime of the previous render frame; 0 = no previous frame. */
+    private long lastFrameNanos;
+    /** nanoTime when the active pan started, for the t= log field. */
+    private long panStartNanos;
 
     private boolean inWorld;
     private long ticksInWorld;
@@ -75,6 +87,7 @@ public class MarionetteClient {
         modBus.addListener(this::onClientSetup);
         NeoForge.EVENT_BUS.addListener(this::onClientTickPre);
         NeoForge.EVENT_BUS.addListener(this::onClientTickPost);
+        NeoForge.EVENT_BUS.addListener(this::onRenderFramePre);
         NeoForge.EVENT_BUS.addListener(this::onLoggingIn);
         NeoForge.EVENT_BUS.addListener(this::onLoggingOut);
         NeoForge.EVENT_BUS.addListener(this::onGameShuttingDown);
@@ -157,7 +170,7 @@ public class MarionetteClient {
                 for (AgentCommand command : bridge.drainCommands()) {
                     // Session settings apply without a world; actuation commands are discarded.
                     if (command instanceof AgentCommand.Configure) {
-                        applyCommand(command);
+                        applyCommand(command, null);
                     }
                 }
             }
@@ -180,7 +193,7 @@ public class MarionetteClient {
         }
         if (bridge != null) {
             for (AgentCommand command : bridge.drainCommands()) {
-                applyCommand(command);
+                applyCommand(command, player);
             }
         }
         if (demo != null) {
@@ -198,6 +211,13 @@ public class MarionetteClient {
                 player.setYRot(look.yaw());
                 player.setXRot(look.pitch());
             }
+            ControlState.LookDelta delta = controlState.consumeLookDelta();
+            if (delta != null) {
+                player.setYRot(player.getYRot() + delta.yaw());
+                player.setXRot(Rotation.clampPitch(player.getXRot() + delta.pitch()));
+            }
+            cameraSmoother.onTick(new Rotation(player.getYRot(), player.getXRot()),
+                    player.getX(), player.getEyeY(), player.getZ());
             applier.apply(controlState);
             controlsEngaged = true;
         } else if (controlsEngaged) {
@@ -210,7 +230,7 @@ public class MarionetteClient {
         return override != null ? override : MarionetteConfig.observationRateDivisor;
     }
 
-    private void applyCommand(AgentCommand command) {
+    private void applyCommand(AgentCommand command, LocalPlayer player) {
         switch (command) {
             case AgentCommand.InputUpdate update -> {
                 if (update.forward() != null) controlState.setForward(update.forward());
@@ -222,17 +242,36 @@ public class MarionetteClient {
                 if (update.sprint() != null) controlState.setSprint(update.sprint());
                 update.taps().forEach(controlState::tap);
             }
-            case AgentCommand.Look look -> controlState.setLook(look.yaw(), look.pitch());
+            case AgentCommand.Look look -> {
+                cameraSmoother.cancel();
+                controlState.setLook(look.yaw(), look.pitch());
+            }
             case AgentCommand.LookDelta delta -> {
-                // Implemented in M3.2 task 9 (apply-tick camera smoothing)
+                cameraSmoother.cancel();
+                controlState.addLookDelta(delta.yaw(), delta.pitch());
             }
             case AgentCommand.LookSmoothAngles smooth -> {
-                // Implemented in M3.2 task 9 (apply-tick camera smoothing)
+                cameraSmoother.startAngles(smooth.yaw(), smooth.pitch(), newModel(smooth.speed()),
+                        new Rotation(player.getYRot(), player.getXRot()));
+                logPanStart(smooth.speed());
             }
             case AgentCommand.LookSmoothPoint smooth -> {
-                // Implemented in M3.2 task 9 (apply-tick camera smoothing)
+                boolean started = cameraSmoother.startPoint(smooth.x(), smooth.y(), smooth.z(),
+                        newModel(smooth.speed()),
+                        new Rotation(player.getYRot(), player.getXRot()),
+                        player.getX(), player.getEyeY(), player.getZ());
+                if (started) {
+                    logPanStart(smooth.speed());
+                } else if (bridge != null) {
+                    bridge.sendError(Messages.error(ErrorCode.INVALID_FIELD,
+                            "smooth look target is the player's eye position",
+                            smooth.id(), smooth.raw()));
+                }
             }
-            case AgentCommand.Release release -> controlState.releaseAll();
+            case AgentCommand.Release release -> {
+                controlState.releaseAll();
+                cameraSmoother.cancel();
+            }
             case AgentCommand.Configure configure -> {
                 if (configure.rateDivisor() != null) {
                     sessionRateDivisor = configure.rateDivisor();
@@ -240,6 +279,23 @@ public class MarionetteClient {
                 }
             }
         }
+    }
+
+    /** A fresh per-pan model at config speed × the message's multiplier. */
+    private SmoothingModel newModel(Float speedMultiplier) {
+        float speed = (float) (MarionetteConfig.cameraSmoothingSpeed
+                * (speedMultiplier != null ? speedMultiplier : 1.0f));
+        return MarionetteConfig.cameraSmoothingModel.create(speed);
+    }
+
+    /** Pan-start log marker; scripts/analyze_pan.py parses this format. */
+    private void logPanStart(Float speedMultiplier) {
+        panStartNanos = System.nanoTime();
+        Rotation target = cameraSmoother.target();
+        float speed = (float) (MarionetteConfig.cameraSmoothingSpeed
+                * (speedMultiplier != null ? speedMultiplier : 1.0f));
+        logVerbose(String.format("Pan start target yaw=%.3f pitch=%.3f speed=%.1f model=%s",
+                target.yaw(), target.pitch(), speed, MarionetteConfig.cameraSmoothingModel));
     }
 
     private void executeStunt(Minecraft minecraft, LocalPlayer player, DemoScript.Stunt stunt) {
@@ -258,6 +314,7 @@ public class MarionetteClient {
 
     /** The safety rule: neutral ControlState, applier released, evidence logged. */
     private void releaseControls() {
+        cameraSmoother.cancel();
         controlState.releaseAll();
         applier.release();
         controlsEngaged = false;
@@ -292,6 +349,44 @@ public class MarionetteClient {
             bridge.sendObservation(Messages.observation(ticksInWorld,
                     player.getX(), player.getY(), player.getZ(),
                     player.getYRot(), player.getXRot()));
+        }
+    }
+
+    /**
+     * Advance an active smoothed pan by the real frame delta and write the
+     * player's rotation — the same per-frame path vanilla mouse input uses,
+     * so footage is smooth at any fps (M3.2, D5). State changes happen
+     * tick-side only; tick and render share the client thread.
+     */
+    private void onRenderFramePre(RenderFrameEvent.Pre event) {
+        long now = System.nanoTime();
+        float dt = lastFrameNanos == 0 ? 0.0f
+                : Math.min((now - lastFrameNanos) / 1_000_000_000.0f, MAX_FRAME_DT);
+        lastFrameNanos = now;
+        if (!cameraSmoother.active()) {
+            return;
+        }
+        Minecraft minecraft = Minecraft.getInstance();
+        LocalPlayer player = minecraft.player;
+        if (player == null || !inWorld) {
+            return; // cancellation is tick-side; just don't advance
+        }
+        if (minecraft.isPaused()) {
+            return; // frames render while paused; a frozen world's camera must not move
+        }
+        Rotation next = cameraSmoother.advanceFrame(
+                new Rotation(player.getYRot(), player.getXRot()), dt);
+        if (next == null) {
+            return;
+        }
+        player.setYRot(next.yaw());
+        player.setXRot(next.pitch());
+        float t = (now - panStartNanos) / 1_000_000.0f;
+        if (cameraSmoother.active()) {
+            // Frame log marker; scripts/analyze_pan.py parses this format.
+            logVerbose(String.format("Pan yaw=%.3f pitch=%.3f t=%.1f", next.yaw(), next.pitch(), t));
+        } else {
+            logVerbose(String.format("Pan converged t=%.1f", t));
         }
     }
 
