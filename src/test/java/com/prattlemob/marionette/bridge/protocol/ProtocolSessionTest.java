@@ -70,13 +70,77 @@ class ProtocolSessionTest {
     }
 
     @Test
-    void unsupportedRoleSendsErrorThenCloses1002() {
-        List<ProtocolSession.Action> actions =
-                session.onFrame("{\"type\": \"hello\", \"versions\": [1], \"role\": \"observer\"}");
+    void observerHelloActivatesWithObserverRole() {
+        List<ProtocolSession.Action> actions = session.onFrame(
+                "{\"type\": \"hello\", \"versions\": [1], \"role\": \"observer\"}");
+        assertEquals("hello", json(actions.get(0)).get("type").getAsString());
+        assertTrue(session.isActive());
+        assertEquals(Role.OBSERVER, session.role());
+    }
+
+    @Test
+    void controllerHelloRecordsControllerRole() {
+        activate();
+        assertEquals(Role.CONTROLLER, session.role());
+    }
+
+    @Test
+    void reservedDirectorRoleSendsErrorThenCloses1002() {
+        List<ProtocolSession.Action> actions = session.onFrame(
+                "{\"type\": \"hello\", \"versions\": [1], \"role\": \"director\"}");
         assertEquals(2, actions.size());
         assertEquals("unsupported_role", json(actions.get(0)).get("code").getAsString());
         assertEquals(1002, assertInstanceOf(ProtocolSession.Action.Close.class, actions.get(1)).code());
         assertFalse(session.isActive());
+    }
+
+    @Test
+    void refusedAdmissionSendsTheRefusalCodeThenCloses1013() {
+        ProtocolSession refused = new ProtocolSession("test-version",
+                role -> ErrorCode.CONTROLLER_ATTACHED);
+        String frame = "{\"type\": \"hello\", \"versions\": [1], \"id\": 3}";
+        List<ProtocolSession.Action> actions = refused.onFrame(frame);
+        assertEquals(2, actions.size());
+        JsonObject error = json(actions.get(0));
+        assertEquals("controller_attached", error.get("code").getAsString());
+        assertEquals(3, error.get("id").getAsInt());
+        assertEquals(frame, error.get("input").getAsString());
+        assertEquals(1013, assertInstanceOf(ProtocolSession.Action.Close.class, actions.get(1)).code());
+        assertFalse(refused.isActive());
+        assertFalse(refused.helloCompleted(), "a refused connection never counts as an agent");
+    }
+
+    @Test
+    void observerActuationCommandsAreRefusedNonFatally() {
+        session.onFrame("{\"type\": \"hello\", \"versions\": [1], \"role\": \"observer\"}");
+        for (String frame : List.of(
+                "{\"type\": \"input\", \"forward\": true, \"id\": 9}",
+                "{\"type\": \"look\", \"yaw\": 0, \"pitch\": 0}",
+                "{\"type\": \"release\"}")) {
+            List<ProtocolSession.Action> actions = session.onFrame(frame);
+            assertEquals(1, actions.size(), "non-fatal: error only, no close");
+            JsonObject error = json(actions.get(0));
+            assertEquals("role_forbidden", error.get("code").getAsString());
+            assertEquals(frame, error.get("input").getAsString());
+        }
+        assertTrue(session.isActive(), "connection survives");
+    }
+
+    @Test
+    void observerRoleForbiddenEchoesTheEnvelopeId() {
+        session.onFrame("{\"type\": \"hello\", \"versions\": [1], \"role\": \"observer\"}");
+        List<ProtocolSession.Action> actions =
+                session.onFrame("{\"type\": \"input\", \"forward\": true, \"id\": 9}");
+        assertEquals(9, json(actions.get(0)).get("id").getAsInt());
+    }
+
+    @Test
+    void observerConfigureStillEnqueues() {
+        session.onFrame("{\"type\": \"hello\", \"versions\": [1], \"role\": \"observer\"}");
+        List<ProtocolSession.Action> actions =
+                session.onFrame("{\"type\": \"configure\", \"rateDivisor\": 40}");
+        assertInstanceOf(AgentCommand.Configure.class,
+                assertInstanceOf(ProtocolSession.Action.Enqueue.class, actions.get(0)).command());
     }
 
     @Test

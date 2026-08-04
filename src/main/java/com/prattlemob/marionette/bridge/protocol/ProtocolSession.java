@@ -20,19 +20,42 @@ public final class ProtocolSession {
         record Close(int code, String reason) implements Action {}
     }
 
+    /**
+     * Transport admission check, consulted during hello processing before
+     * the session activates. Returns null to admit, or the refusal code
+     * (controller_attached / observer_attached) to reject with its close
+     * code. Runs on the single network thread.
+     */
+    @FunctionalInterface
+    public interface RoleAdmission {
+        ErrorCode tryAdmit(Role role);
+    }
+
     private enum State { AWAITING_HELLO, ACTIVE, CLOSED }
 
     private final String modVersion;
+    private final RoleAdmission admission;
     private State state = State.AWAITING_HELLO;
     private boolean helloCompleted;
+    private Role role;
 
     public ProtocolSession(String modVersion) {
-        this.modVersion = modVersion;
+        this(modVersion, r -> null);
     }
 
-    /** True once the hello handshake completed; the connection counts as the controller. */
+    public ProtocolSession(String modVersion, RoleAdmission admission) {
+        this.modVersion = modVersion;
+        this.admission = admission;
+    }
+
+    /** True once the hello handshake completed; the connection is an admitted controller or observer. */
     public boolean isActive() {
         return state == State.ACTIVE;
+    }
+
+    /** The admitted role; null until the hello handshake completes. */
+    public Role role() {
+        return role;
     }
 
     public List<Action> onFrame(String text) {
@@ -64,13 +87,26 @@ public final class ProtocolSession {
                             List.of(PROTOCOL_VERSION), hello.id(), text)),
                     new Action.Close(1002, ErrorCode.UNSUPPORTED_VERSION.wire()));
         }
-        if (!"controller".equals(hello.role())) {
+        Role requested = Role.fromWire(hello.role());
+        if (requested == null) {
             state = State.CLOSED;
             return List.of(
                     new Action.Send(Messages.error(ErrorCode.UNSUPPORTED_ROLE,
                             "unsupported role: " + hello.role(), hello.id(), text)),
                     new Action.Close(1002, ErrorCode.UNSUPPORTED_ROLE.wire()));
         }
+        ErrorCode refusal = admission.tryAdmit(requested);
+        if (refusal != null) {
+            state = State.CLOSED;
+            return List.of(
+                    new Action.Send(Messages.error(refusal,
+                            refusal == ErrorCode.CONTROLLER_ATTACHED
+                                    ? "controller already connected"
+                                    : "observer limit reached",
+                            hello.id(), text)),
+                    new Action.Close(refusal.closeCode(), refusal.wire()));
+        }
+        role = requested;
         state = State.ACTIVE;
         helloCompleted = true;
         return List.of(new Action.Send(
@@ -80,6 +116,11 @@ public final class ProtocolSession {
     private List<Action> onCommand(AgentCommand command, String text) {
         if (state != State.ACTIVE) {
             return errorActions(ErrorCode.HELLO_REQUIRED, "hello required first", null, text);
+        }
+        if (role == Role.OBSERVER && !(command instanceof AgentCommand.Configure)) {
+            return List.of(new Action.Send(Messages.error(ErrorCode.ROLE_FORBIDDEN,
+                    "role \"observer\" may only send hello and configure",
+                    MessageParser.idOf(text), text)));
         }
         return List.of(new Action.Enqueue(command));
     }
