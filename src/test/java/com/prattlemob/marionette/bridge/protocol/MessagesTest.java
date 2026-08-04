@@ -78,4 +78,11 @@ class MessagesTest {
         assertEquals(90.0F, frame.get("yaw").getAsFloat());
         assertEquals(0.0F, frame.get("pitch").getAsFloat());
     }
+
+    @Test
+    void helloReplyAdvertisesCameraCapability() {
+        JsonObject reply = JsonParser.parseString(
+                Messages.helloReply(1, "0.1.0", null)).getAsJsonObject();
+        assertTrue(reply.getAsJsonObject("capabilities").get("camera").getAsBoolean());
+    }
 }

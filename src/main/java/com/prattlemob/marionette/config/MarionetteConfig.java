@@ -4,6 +4,7 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 
 import com.prattlemob.marionette.Marionette;
+import com.prattlemob.marionette.control.SmoothingModelType;
 
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -30,6 +31,8 @@ public final class MarionetteConfig {
     private static final ModConfigSpec.IntValue ENTITY_MAX_COUNT;
     private static final ModConfigSpec.IntValue BLOCK_SCAN_RADIUS;
     private static final ModConfigSpec.BooleanValue SUPPRESS_PAUSE;
+    private static final ModConfigSpec.DoubleValue SMOOTHING_SPEED;
+    private static final ModConfigSpec.EnumValue<SmoothingModelType> SMOOTHING_MODEL;
     private static final ModConfigSpec.EnumValue<Verbosity> VERBOSITY;
     public static final ModConfigSpec SPEC;
 
@@ -66,6 +69,16 @@ public final class MarionetteConfig {
                         "the session keeps running and streaming when unfocused. (live)")
                 .define("suppressPauseOnLostFocus", true);
         builder.pop();
+        builder.push("camera");
+        SMOOTHING_SPEED = builder
+                .comment("Characteristic speed of smoothed camera pans, in degrees/second. (live)",
+                        "Agents scale it per pan with the `speed` multiplier on look mode \"smooth\".")
+                .defineInRange("smoothingSpeed", 180.0, 10.0, 1080.0);
+        SMOOTHING_MODEL = builder
+                .comment("EXPERIMENTAL (D5, M3.2): which smoothing candidate drives smoothed pans.",
+                        "This entry is removed once the D5 winner is recorded in docs/decisions.md. (live)")
+                .defineEnum("smoothingModel", SmoothingModelType.DAMPED_SPRING);
+        builder.pop();
         builder.push("logging");
         VERBOSITY = builder
                 .comment("QUIET: warnings/errors only. NORMAL: lifecycle + connection events.",
@@ -84,6 +97,8 @@ public final class MarionetteConfig {
     public static volatile int entityMaxCount = 64;
     public static volatile int blockScanRadius = 16;
     public static volatile boolean suppressPauseOnLostFocus = true;
+    public static volatile double cameraSmoothingSpeed = 180.0;
+    public static volatile SmoothingModelType cameraSmoothingModel = SmoothingModelType.DAMPED_SPRING;
     public static volatile Verbosity verbosity = Verbosity.NORMAL;
 
     private MarionetteConfig() {
@@ -142,6 +157,8 @@ public final class MarionetteConfig {
         entityMaxCount = ENTITY_MAX_COUNT.get();
         blockScanRadius = BLOCK_SCAN_RADIUS.get();
         suppressPauseOnLostFocus = SUPPRESS_PAUSE.get();
+        cameraSmoothingSpeed = SMOOTHING_SPEED.get();
+        cameraSmoothingModel = SMOOTHING_MODEL.get();
         verbosity = VERBOSITY.get();
     }
 }
