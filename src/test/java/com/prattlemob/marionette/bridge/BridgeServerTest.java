@@ -525,11 +525,14 @@ class BridgeServerTest {
     @Test
     void observerLossIsNotAnAgentLoss() throws Exception {
         connectAndHello();
-        TestClient observer = connectObserver();
-        observer.ws.abort(); // kill -9 analogue
-        // Deterministic settle: a replacement observer can attach only after
-        // the dead one's channelInactive freed its slot (cap is 2, so attach
-        // a second first to fill it back up deterministically).
+        TestClient doomed = connectObserver();
+        connectObserver(); // fill the cap (2) so both slots are genuinely full
+        doomed.ws.abort(); // kill -9 analogue
+        // Deterministic settle: with the cap full, a replacement observer's
+        // hello can only be admitted once the dead one's channelInactive
+        // frees its slot — the retry below is a real synchronization point
+        // (it fails on every attempt until that happens), not a vacuously
+        // first-try success.
         await(() -> {
             try {
                 connectObserver();
