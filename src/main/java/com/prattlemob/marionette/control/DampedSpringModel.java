@@ -3,12 +3,12 @@ package com.prattlemob.marionette.control;
 /**
  * D5 candidate 1: critically damped spring — natural accel/decel, no
  * overshoot by construction (from rest). Closed-form step, so it is
- * unconditionally stable for any frame dt. ω = speed/30 makes a 90° pan at
+ * unconditionally stable for any frame dt. ω = speed/18 makes a 90° pan at
  * the default 180 deg/s settle in about a second.
  */
 public final class DampedSpringModel implements SmoothingModel {
     /** Angular velocity below which the spring counts as settled, deg/s. */
-    static final float VELOCITY_EPSILON = 2.0f;
+    static final float VELOCITY_EPSILON = 0.5f;
 
     private final float omega;
     private float yawVelocity;
