@@ -262,20 +262,20 @@ Items:
 
 Items:
 
-- [ ] Per-connection state hoisted out of `BridgeServer` into an
+- [x] Per-connection state hoisted out of `BridgeServer` into an
       `AgentConnection` type (channel, session, role, pending frame, drop
       counter, last pong, divisor override)
-- [ ] `role: "observer"` accepted; `observer` capability flag; `director`
+- [x] `role: "observer"` accepted; `observer` capability flag; `director`
       reserved as a future role name
-- [ ] `role_forbidden` (non-fatal) and `observer_attached` (fatal, 1013) in
+- [x] `role_forbidden` (non-fatal) and `observer_attached` (fatal, 1013) in
       the error taxonomy; `configure` allowed for both roles
-- [ ] Admission moved post-`hello`; `bridge.helloTimeoutSeconds` closes
+- [x] Admission moved post-`hello`; `bridge.helloTimeoutSeconds` closes
       connections that never handshake
-- [ ] `bridge.maxObservers` config (default 2, range 0–8); observation
+- [x] `bridge.maxObservers` config (default 2, range 0–8); observation
       fanout with independent per-connection backpressure
-- [ ] Inbound queue entries tagged with their originating connection
-- [ ] Observer loss does not trigger release-all; controller loss unchanged
-- [ ] `examples/observer.py` + side-by-side run documented
+- [x] Inbound queue entries tagged with their originating connection
+- [x] Observer loss does not trigger release-all; controller loss unchanged
+- [x] `examples/observer.py` + side-by-side run documented
 
 ---
 
