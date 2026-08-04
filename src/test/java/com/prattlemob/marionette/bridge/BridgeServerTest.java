@@ -408,6 +408,72 @@ class BridgeServerTest {
     }
 
     @Test
+    void stalledObserverDropsItsOwnFramesWhileControllerStreamsUnaffected() throws Exception {
+        TestClient controller = connectAndHello();
+        TestClient observer = connectObserver();
+        observer.stallReads();
+        // Hammer frames from this (tick-analogue) thread until the observer's
+        // writability gate engages. The controller keeps reading normally, so
+        // every coalesced frame counted here can only be the observer's own.
+        String lastSent = null;
+        long tick = 0;
+        while (server.coalescedObservations() < 101 && tick < 500_000) {
+            lastSent = "{\"type\": \"observation\", \"tick\": " + tick++ + "}";
+            server.sendObservation(lastSent);
+        }
+        assertTrue(server.coalescedObservations() > 0, "writability gate never engaged");
+        long coalescedAtStall = server.coalescedObservations();
+        // The controller's stream is unaffected: it keeps receiving fresh
+        // frames the whole time the observer is stalled.
+        String finalTick = lastSent;
+        await(() -> {
+            String message;
+            while ((message = controller.messages.poll()) != null) {
+                if (message.equals(finalTick)) {
+                    return true;
+                }
+            }
+            return false;
+        });
+        // Latest-wins for the observer too, once it resumes.
+        observer.resumeReads();
+        String expected = lastSent;
+        await(() -> {
+            String message;
+            while ((message = observer.messages.poll()) != null) {
+                if (message.equals(expected)) {
+                    return true;
+                }
+            }
+            return false;
+        });
+        assertTrue(coalescedAtStall > 100,
+                "expected sustained coalescing on the observer while stalled, saw " + coalescedAtStall);
+    }
+
+    @Test
+    void controllerLossPrunesOnlyControllerOriginatedInboundCommands() throws Exception {
+        TestClient controller = connectAndHello();
+        TestClient observer = connectObserver();
+        observer.send("{\"type\": \"configure\", \"rateDivisor\": 7}");
+        controller.send("{\"type\": \"release\"}"); // deliberately not drained
+        controller.ws.abort();
+        await(server::pollDisconnected);
+        // Collect across drains: the observer's Configure may enqueue after
+        // the abort races the drain loop, so keep polling until it shows up
+        // rather than asserting on a single drain snapshot.
+        List<BridgeServer.Received> collected = new java.util.ArrayList<>();
+        await(() -> {
+            collected.addAll(server.drainCommands());
+            return collected.stream().anyMatch(r -> r.command() instanceof AgentCommand.Configure
+                    && r.from().role() == com.prattlemob.marionette.bridge.protocol.Role.OBSERVER);
+        });
+        assertTrue(collected.stream().noneMatch(
+                r -> r.from().role() == com.prattlemob.marionette.bridge.protocol.Role.CONTROLLER),
+                "no controller-originated command should have survived the controller's loss");
+    }
+
+    @Test
     void sendReliableRoutesAnErrorToTheOriginConnection() throws Exception {
         TestClient client = connectAndHello();
         client.send("{\"type\": \"release\"}");

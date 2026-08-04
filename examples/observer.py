@@ -26,7 +26,7 @@ async def watch(ws, seconds):
     while (remaining := end - loop.time()) > 0:
         try:
             message = json.loads(await asyncio.wait_for(ws.recv(), timeout=remaining))
-        except TimeoutError:
+        except (asyncio.TimeoutError, TimeoutError):
             break
         tag = "ERROR" if message.get("type") == "error" else "frame"
         print(f"[{tag}] {message}")
