@@ -13,6 +13,9 @@ public final class ControlState {
     /** A one-shot raw camera rotation intent, consumed when applied. */
     public record Look(float yaw, float pitch) {}
 
+    /** An accumulated relative camera offset, consumed when applied. */
+    public record LookDelta(float yaw, float pitch) {}
+
     private boolean forward;
     private boolean back;
     private boolean left;
@@ -21,6 +24,9 @@ public final class ControlState {
     private boolean sneak;
     private boolean sprint;
     private Look pendingLook;
+    private float pendingDeltaYaw;
+    private float pendingDeltaPitch;
+    private boolean hasPendingDelta;
     private final EnumSet<TapControl> pendingTaps = EnumSet.noneOf(TapControl.class);
 
     public boolean forward() { return forward; }
@@ -51,6 +57,25 @@ public final class ControlState {
         return look;
     }
 
+    /** Accumulate a relative camera offset for the next tick (mode "delta"). */
+    public void addLookDelta(float yaw, float pitch) {
+        pendingDeltaYaw += yaw;
+        pendingDeltaPitch += pitch;
+        hasPendingDelta = true;
+    }
+
+    /** The accumulated delta, clearing it; {@code null} when none queued. */
+    public LookDelta consumeLookDelta() {
+        if (!hasPendingDelta) {
+            return null;
+        }
+        LookDelta delta = new LookDelta(pendingDeltaYaw, pendingDeltaPitch);
+        pendingDeltaYaw = 0.0f;
+        pendingDeltaPitch = 0.0f;
+        hasPendingDelta = false;
+        return delta;
+    }
+
     /** Queue a one-shot press of {@code control} for the next input tick. */
     public void tap(TapControl control) {
         pendingTaps.add(control);
@@ -71,10 +96,13 @@ public final class ControlState {
         return forward || back || left || right || jump || sneak || sprint;
     }
 
-    /** Return every control to neutral and drop any pending look intent and pending taps. */
+    /** Return every control to neutral and drop any pending look intent, look delta, and pending taps. */
     public void releaseAll() {
         forward = back = left = right = jump = sneak = sprint = false;
         pendingLook = null;
+        pendingDeltaYaw = 0.0f;
+        pendingDeltaPitch = 0.0f;
+        hasPendingDelta = false;
         pendingTaps.clear();
     }
 }

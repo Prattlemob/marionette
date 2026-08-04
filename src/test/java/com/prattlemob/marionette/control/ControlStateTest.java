@@ -2,6 +2,7 @@ package com.prattlemob.marionette.control;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -104,5 +105,32 @@ class ControlStateTest {
         state.tap(TapControl.JUMP);
         state.releaseAll();
         assertEquals(Set.of(), state.consumeTaps());
+    }
+
+    @Test
+    void lookDeltasAccumulateUntilConsumed() {
+        ControlState state = new ControlState();
+        assertNull(state.consumeLookDelta());
+        state.addLookDelta(10.0f, -5.0f);
+        state.addLookDelta(2.5f, 1.0f);
+        ControlState.LookDelta delta = state.consumeLookDelta();
+        assertEquals(12.5f, delta.yaw());
+        assertEquals(-4.0f, delta.pitch());
+        assertNull(state.consumeLookDelta()); // consumed
+    }
+
+    @Test
+    void zeroLookDeltaIsStillQueued() {
+        ControlState state = new ControlState();
+        state.addLookDelta(0.0f, 0.0f);
+        assertNotNull(state.consumeLookDelta());
+    }
+
+    @Test
+    void releaseAllClearsPendingLookDelta() {
+        ControlState state = new ControlState();
+        state.addLookDelta(10.0f, 0.0f);
+        state.releaseAll();
+        assertNull(state.consumeLookDelta());
     }
 }
