@@ -31,4 +31,17 @@ class ErrorCodeTest {
         assertEquals(1002, ErrorCode.UNSUPPORTED_ROLE.closeCode());
         assertEquals(1013, ErrorCode.CONTROLLER_ATTACHED.closeCode());
     }
+
+    @Test
+    void roleForbiddenIsNonFatal() {
+        assertEquals("role_forbidden", ErrorCode.ROLE_FORBIDDEN.wire());
+        assertFalse(ErrorCode.ROLE_FORBIDDEN.fatal());
+    }
+
+    @Test
+    void observerAttachedIsFatal1013() {
+        assertEquals("observer_attached", ErrorCode.OBSERVER_ATTACHED.wire());
+        assertTrue(ErrorCode.OBSERVER_ATTACHED.fatal());
+        assertEquals(1013, ErrorCode.OBSERVER_ATTACHED.closeCode());
+    }
 }

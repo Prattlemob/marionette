@@ -14,7 +14,9 @@ public enum ErrorCode {
     HELLO_REQUIRED("hello_required", 1002),
     UNSUPPORTED_VERSION("unsupported_version", 1002),
     UNSUPPORTED_ROLE("unsupported_role", 1002),
-    CONTROLLER_ATTACHED("controller_attached", 1013);
+    CONTROLLER_ATTACHED("controller_attached", 1013),
+    ROLE_FORBIDDEN("role_forbidden"),
+    OBSERVER_ATTACHED("observer_attached", 1013);
 
     private final String wire;
     private final int closeCode;
