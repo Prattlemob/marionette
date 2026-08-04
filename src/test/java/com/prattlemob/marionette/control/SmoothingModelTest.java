@@ -46,35 +46,21 @@ class SmoothingModelTest {
     }
 
     @Test
-    void dampedSpringConvergesWithoutOvershoot() {
-        assertConvergesWithoutOvershoot(new DampedSpringModel(SPEED));
-    }
-
-    @Test
-    void exponentialConvergesWithoutOvershoot() {
-        assertConvergesWithoutOvershoot(new ExponentialModel(SPEED));
-    }
-
-    @Test
     void cappedRateConvergesWithoutOvershoot() {
         assertConvergesWithoutOvershoot(new CappedRateModel(SPEED));
     }
 
     @Test
     void doubledSpeedConvergesFaster() {
-        for (SmoothingModelType type : SmoothingModelType.values()) {
-            int slow = simulate(type.create(SPEED), new Rotation(0, 0), new Rotation(90, 0)).size();
-            int fast = simulate(type.create(2 * SPEED), new Rotation(0, 0), new Rotation(90, 0)).size();
-            assertTrue(fast < slow, type + ": " + fast + " !< " + slow);
-        }
+        int slow = simulate(new CappedRateModel(SPEED), new Rotation(0, 0), new Rotation(90, 0)).size();
+        int fast = simulate(new CappedRateModel(2 * SPEED), new Rotation(0, 0), new Rotation(90, 0)).size();
+        assertTrue(fast < slow, "fast=" + fast + " !< slow=" + slow);
     }
 
     @Test
     void ninetyDegreePanAtDefaultSpeedSettlesWithinBudget() {
-        for (SmoothingModelType type : SmoothingModelType.values()) {
-            int frames = simulate(type.create(SPEED), new Rotation(0, 0), new Rotation(90, 0)).size();
-            assertTrue(frames <= 90, type + " took " + frames + " frames (> 1.5 s)");
-        }
+        int frames = simulate(new CappedRateModel(SPEED), new Rotation(0, 0), new Rotation(90, 0)).size();
+        assertTrue(frames <= 90, "took " + frames + " frames (> 1.5 s)");
     }
 
     @Test
@@ -85,22 +71,5 @@ class SmoothingModelTest {
             float step = trajectory.get(i).yaw() - trajectory.get(i - 1).yaw();
             assertTrue(step <= SPEED * DT + 1e-3f, "step " + step + " exceeds max velocity");
         }
-    }
-
-    @Test
-    void resetClearsSpringVelocity() {
-        DampedSpringModel model = new DampedSpringModel(SPEED);
-        simulate(model, new Rotation(0, 0), new Rotation(90, 0)); // builds internal velocity
-        // A fresh pan from rest must not inherit the old velocity.
-        model.reset();
-        Rotation first = model.advance(new Rotation(0, 0), new Rotation(-90, 0), DT);
-        assertTrue(first.yaw() <= 0.0f, "spring carried stale velocity: " + first.yaw());
-    }
-
-    @Test
-    void typeCreatesMatchingModel() {
-        assertTrue(SmoothingModelType.DAMPED_SPRING.create(SPEED) instanceof DampedSpringModel);
-        assertTrue(SmoothingModelType.EXPONENTIAL.create(SPEED) instanceof ExponentialModel);
-        assertTrue(SmoothingModelType.CAPPED_RATE.create(SPEED) instanceof CappedRateModel);
     }
 }

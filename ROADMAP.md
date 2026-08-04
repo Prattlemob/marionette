@@ -321,13 +321,13 @@ Items:
 
 Items:
 
-- [ ] Instant, delta, and smoothed look-at camera messages
-- [ ] D5 experiment: damped spring vs. exponential vs. capped-rate easing,
+- [x] Instant, delta, and smoothed look-at camera messages
+- [x] D5 experiment: damped spring vs. exponential vs. capped-rate easing,
       judged on 60 fps footage; result recorded in docs/decisions.md
-- [ ] Configurable smoothing speed; per-message override
-- [ ] Smoothing is frame-interpolated (render-time), state changes tick-side
+- [x] Configurable smoothing speed; per-message override
+- [x] Smoothing is frame-interpolated (render-time), state changes tick-side
       only
-- [ ] Visual verification demo script
+- [x] Visual verification demo script
 
 ### M3.3 — Attack / use / hotbar
 
@@ -787,7 +787,7 @@ All design decisions, their status, and rationale live in
 | D2 | Observation composition | **Settled: composite frame + section mask** | M4.1 |
 | D3 | Block-scan strategy | **Settled: on-demand, JSON palette + indices; deltas reserved** | M4.5 |
 | D4 | Input injection mechanism | **Settled: input-path mixin** (M1.1 experiment) | M1.1 |
-| D5 | Camera smoothing model | **Experiment-gated** (pass criteria defined) | M3.2 |
+| D5 | Camera smoothing model | **Settled: capped-rate easing** (M3.2 experiment) | M3.2 |
 | D6 | Protocol versioning | **Settled: integer version + capability flags** | M2.1 |
 | D7 | Multi-client policy | **Settled: single controller + capped read-only observers** | M2.1, M2.4 |
 | D8 | Inventory granularity | **Settled: intent-level, menu-generic addressing** | M3.4 |

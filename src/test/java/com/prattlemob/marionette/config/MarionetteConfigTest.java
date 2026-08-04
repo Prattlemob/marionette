@@ -6,8 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
-import com.prattlemob.marionette.control.SmoothingModelType;
-
 class MarionetteConfigTest {
     @Test
     void loopbackAddressesPassThrough() {
@@ -41,7 +39,6 @@ class MarionetteConfigTest {
         assertEquals(16, MarionetteConfig.blockScanRadius);
         assertEquals(true, MarionetteConfig.suppressPauseOnLostFocus);
         assertEquals(180.0, MarionetteConfig.cameraSmoothingSpeed);
-        assertEquals(SmoothingModelType.DAMPED_SPRING, MarionetteConfig.cameraSmoothingModel);
     }
 
     @Test

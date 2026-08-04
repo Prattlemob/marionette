@@ -1,11 +1,11 @@
 package com.prattlemob.marionette.control;
 
 /**
- * D5 candidate 3: constant max angular velocity with ease-in/out — a
- * trapezoidal velocity profile along the straight yaw/pitch line to the
- * target. Max velocity = speed; acceleration = 4·speed. The ease-out is
- * brake-limited: velocity never exceeds what can still decelerate to zero
- * exactly at the target.
+ * The settled D5 camera smoothing model (see docs/decisions.md): constant
+ * max angular velocity with ease-in/out — a trapezoidal velocity profile
+ * along the straight yaw/pitch line to the target. Max velocity = speed;
+ * acceleration = 4·speed. The ease-out is brake-limited: velocity never
+ * exceeds what can still decelerate to zero exactly at the target.
  */
 public final class CappedRateModel implements SmoothingModel {
     private final float maxVelocity;

@@ -7,6 +7,7 @@ import com.prattlemob.marionette.bridge.protocol.Messages;
 import com.prattlemob.marionette.config.MarionetteConfig;
 import com.prattlemob.marionette.config.Verbosity;
 import com.prattlemob.marionette.control.CameraSmoother;
+import com.prattlemob.marionette.control.CappedRateModel;
 import com.prattlemob.marionette.control.ControlState;
 import com.prattlemob.marionette.control.ControlStateApplier;
 import com.prattlemob.marionette.control.DemoScript;
@@ -288,7 +289,7 @@ public class MarionetteClient {
     private SmoothingModel newModel(Float speedMultiplier) {
         float speed = (float) (MarionetteConfig.cameraSmoothingSpeed
                 * (speedMultiplier != null ? speedMultiplier : 1.0f));
-        return MarionetteConfig.cameraSmoothingModel.create(speed);
+        return new CappedRateModel(speed);
     }
 
     /** Pan-start log marker; scripts/analyze_pan.py parses this format. */
@@ -298,7 +299,7 @@ public class MarionetteClient {
         float speed = (float) (MarionetteConfig.cameraSmoothingSpeed
                 * (speedMultiplier != null ? speedMultiplier : 1.0f));
         logVerbose(String.format("Pan start target yaw=%.3f pitch=%.3f speed=%.1f model=%s",
-                target.yaw(), target.pitch(), speed, MarionetteConfig.cameraSmoothingModel));
+                target.yaw(), target.pitch(), speed, CappedRateModel.class.getSimpleName()));
     }
 
     private void executeStunt(Minecraft minecraft, LocalPlayer player, DemoScript.Stunt stunt) {

@@ -84,10 +84,6 @@ config files); values marked *(restart required)* are read once at startup.
 	# Default: 180.0
 	# Range: 10.0 ~ 1080.0
 	smoothingSpeed = 180.0
-	#EXPERIMENTAL (D5, M3.2): which smoothing candidate drives smoothed pans.
-	#This entry is removed once the D5 winner is recorded in docs/decisions.md. (live)
-	#Allowed Values: DAMPED_SPRING, EXPONENTIAL, CAPPED_RATE
-	smoothingModel = "DAMPED_SPRING"
 
 [logging]
 	#QUIET: warnings/errors only. NORMAL: lifecycle + connection events.

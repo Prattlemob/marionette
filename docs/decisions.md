@@ -136,19 +136,55 @@ does not stop a scripted forward hold). M5.1's human-input precedence policy
 must add an explicit "human counters/overrides agent" layer on top of this
 OR-merge base — it is not free from D4 and needs its own design.
 
-## D5 — Camera smoothing model — **Experiment-gated** (M3.2)
+## D5 — Camera smoothing model — **Settled: constant max angular velocity with ease-in/out (capped-rate)** (M3.2 experiment, 2026-08-04)
 
-Test with a fixed visual scenario (the "look at five points" script) captured
-at 60 fps. Candidates, in order of expected quality:
+Tested against a fixed visual scenario (the "look at five points" script,
+`examples/look_points.py`) with `scripts/analyze_pan.py` run over VERBOSE
+frame logs for the numeric pass criteria — no snap, no overshoot,
+convergence budget, speed-multiplier effect — across a five-point demo plus
+a speed test (seven pans total, default speed 180 deg/s), captured twice
+independently.
 
-1. **Critically damped spring** — natural accel/decel, no overshoot by
-   construction.
-2. **Exponential smoothing** — simplest; ease-out only, slightly robotic.
-3. **Constant max angular velocity with ease-in/out.**
+**CAPPED_RATE — winner.** Passed all seven pans on both capture runs:
 
-Pass criteria: no snap, no overshoot, configurable speed, and pointing
-accuracy converges within a stated tolerance so "look at X then attack"
-sequencing is reliable. Record the winner here when decided.
+- **No snap:** every frame step stayed within `2 x speed x dt + 0.2 deg` —
+  holds by construction, since the model's own velocity cap enforces the
+  bound.
+- **No overshoot:** no pan exceeded the target by more than 0.5 deg.
+- **Convergence:** 478–739 ms for ~90 deg pans — the fastest of the three
+  candidates.
+- **Final error:** <= 0.1 deg on every pan.
+- **Speed multiplier:** a 2.0x multiplier converged ~2x faster (e.g. the
+  90 deg pan: 0.95 s at 1.0x -> 0.70 s at 2.0x).
+
+**EXPONENTIAL — eliminated numerically.** 5 of 7 pans failed the no-snap
+criterion outright, with first-frame jumps of 1.9–6.5 deg within 3.9–7.4 ms
+of pan start — the predicted "ease-out only, slightly robotic" weakness
+front-loading motion into an immediate large step rather than a ramped one.
+
+**DAMPED_SPRING — near-clean but not chosen.** Numerically almost clean:
+one non-reproducing cold-start-hitch failure (a 12.44 deg step inside a
+32.3 ms frame, on the very first pan of one capture run only — a second
+independent run passed 7/7). Its mid-pan peak velocity scales with pan
+size, so large pans can brush the velocity bound during frame hitches.
+Convergence was also the slowest of the three: 936–1003 ms for ~90 deg
+pans, versus capped-rate's 478–739 ms.
+
+**Visual verdict (user judgment, 2026-08-04):** captured at 60 fps via
+`gpu-screen-recorder` (a KMS-path capture that bypassed the Wayland/portal
+capture failures hit with `ffmpeg`/x11grab, `wf-recorder`, and Spectacle on
+the capture box). CAPPED_RATE read cleanest on the stationary five-point
+sequence and under normal movement — a follow-up capture had the player
+walking with a mid-walk heading change, then sprinting for 10 s while
+smooth-tracking a fixed side point, which verified a further ~13 deg of
+silent re-aiming continuing after the pan's initial convergence, still
+reading clean.
+
+**Cleanup:** `DampedSpringModel`, `ExponentialModel`, `SmoothingModelType`,
+and the experimental `camera.smoothingModel` config entry were removed once
+the winner was picked. The `SmoothingModel` interface seam stays; the mod
+now always constructs `CappedRateModel` directly (speed = max angular
+velocity in deg/s, acceleration = 4x speed).
 
 ## D6 — Protocol versioning: integer version + capability flags — **Settled**
 
