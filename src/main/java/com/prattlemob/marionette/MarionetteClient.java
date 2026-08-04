@@ -223,6 +223,15 @@ public class MarionetteClient {
                 update.taps().forEach(controlState::tap);
             }
             case AgentCommand.Look look -> controlState.setLook(look.yaw(), look.pitch());
+            case AgentCommand.LookDelta delta -> {
+                // Implemented in M3.2 task 9 (apply-tick camera smoothing)
+            }
+            case AgentCommand.LookSmoothAngles smooth -> {
+                // Implemented in M3.2 task 9 (apply-tick camera smoothing)
+            }
+            case AgentCommand.LookSmoothPoint smooth -> {
+                // Implemented in M3.2 task 9 (apply-tick camera smoothing)
+            }
             case AgentCommand.Release release -> controlState.releaseAll();
             case AgentCommand.Configure configure -> {
                 if (configure.rateDivisor() != null) {

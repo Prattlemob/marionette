@@ -2,6 +2,7 @@ package com.prattlemob.marionette.bridge.protocol;
 
 import java.util.Set;
 
+import com.google.gson.JsonPrimitive;
 import com.prattlemob.marionette.control.TapControl;
 
 /**
@@ -15,8 +16,23 @@ public sealed interface AgentCommand extends ParsedMessage {
                        Boolean jump, Boolean sneak, Boolean sprint,
                        Set<TapControl> taps) implements AgentCommand {}
 
-    /** Raw instant camera set (smoothing arrives in M3.2). */
+    /** Raw instant camera set (look mode "instant", the default). */
     record Look(float yaw, float pitch) implements AgentCommand {}
+
+    /** Relative camera offset in degrees, applied next tick (look mode "delta"). */
+    record LookDelta(float yaw, float pitch) implements AgentCommand {}
+
+    /** Smoothed pan toward absolute angles (look mode "smooth"); null speed = config default. */
+    record LookSmoothAngles(float yaw, float pitch, Float speed) implements AgentCommand {}
+
+    /**
+     * Smoothed pan toward a world point (look mode "smooth"); null speed =
+     * config default. Carries the envelope id and raw frame so the tick
+     * thread can send a spec-complete invalid_field error if the direction
+     * is degenerate at apply time (see protocol/v1.md).
+     */
+    record LookSmoothPoint(double x, double y, double z, Float speed,
+                           JsonPrimitive id, String raw) implements AgentCommand {}
 
     /** Release every held control immediately. */
     record Release() implements AgentCommand {}

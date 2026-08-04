@@ -26,7 +26,7 @@ public final class MessageParser {
         JsonObject json = strictJsonObject(text);
         JsonPrimitive id = envelopeId(json);
         try {
-            return parseTyped(json, id);
+            return parseTyped(json, id, text);
         } catch (ProtocolError e) {
             // Attach the envelope id so error replies can echo it.
             throw e.id() != null ? e : new ProtocolError(e.code(), e.getMessage(), id);
@@ -69,7 +69,7 @@ public final class MessageParser {
         throw new ProtocolError(ErrorCode.INVALID_FIELD, "field \"id\" must be a string or number");
     }
 
-    private static ParsedMessage parseTyped(JsonObject json, JsonPrimitive id) {
+    private static ParsedMessage parseTyped(JsonObject json, JsonPrimitive id, String raw) {
         String type = optionalString(json, "type");
         if (type == null) {
             throw new ProtocolError(ErrorCode.INVALID_FIELD, "missing \"type\"");
@@ -85,9 +85,7 @@ public final class MessageParser {
                     optionalBoolean(json, "sneak"),
                     optionalBoolean(json, "sprint"),
                     tapArray(json));
-            case "look" -> new AgentCommand.Look(
-                    requiredFiniteFloat(json, "yaw"),
-                    requiredFiniteFloat(json, "pitch"));
+            case "look" -> parseLook(json, id, raw);
             case "release" -> new AgentCommand.Release();
             case "configure" -> new AgentCommand.Configure(
                     optionalRangedInt(json, "rateDivisor", 1, 100));
@@ -202,5 +200,78 @@ public final class MessageParser {
             taps.add(control);
         }
         return Set.copyOf(taps);
+    }
+
+    private static ParsedMessage parseLook(JsonObject json, JsonPrimitive id, String raw) {
+        String mode = optionalString(json, "mode");
+        return switch (mode == null ? "instant" : mode) {
+            case "instant" -> new AgentCommand.Look(
+                    requiredFiniteFloat(json, "yaw"),
+                    requiredFiniteFloat(json, "pitch"));
+            case "delta" -> new AgentCommand.LookDelta(
+                    requiredFiniteFloat(json, "yaw"),
+                    requiredFiniteFloat(json, "pitch"));
+            case "smooth" -> parseLookSmooth(json, id, raw);
+            default -> throw new ProtocolError(ErrorCode.INVALID_FIELD,
+                    "field \"mode\" must be \"instant\", \"delta\", or \"smooth\"");
+        };
+    }
+
+    private static ParsedMessage parseLookSmooth(JsonObject json, JsonPrimitive id, String raw) {
+        boolean hasAngles = json.has("yaw") || json.has("pitch");
+        boolean hasPoint = json.has("x") || json.has("y") || json.has("z");
+        if (hasAngles && hasPoint) {
+            throw new ProtocolError(ErrorCode.INVALID_FIELD,
+                    "smooth look takes either yaw/pitch or x/y/z, not both");
+        }
+        if (!hasAngles && !hasPoint) {
+            throw new ProtocolError(ErrorCode.INVALID_FIELD,
+                    "smooth look requires yaw/pitch or x/y/z");
+        }
+        Float speed = optionalPositiveFiniteFloat(json, "speed");
+        if (hasAngles) {
+            return new AgentCommand.LookSmoothAngles(
+                    requiredFiniteFloat(json, "yaw"),
+                    requiredFiniteFloat(json, "pitch"),
+                    speed);
+        }
+        return new AgentCommand.LookSmoothPoint(
+                requiredFiniteDouble(json, "x"),
+                requiredFiniteDouble(json, "y"),
+                requiredFiniteDouble(json, "z"),
+                speed, id, raw);
+    }
+
+    private static double requiredFiniteDouble(JsonObject json, String name) {
+        JsonElement element = json.get(name);
+        if (element == null) {
+            throw new ProtocolError(ErrorCode.INVALID_FIELD, "missing \"" + name + "\"");
+        }
+        if (!(element instanceof JsonPrimitive primitive) || !primitive.isNumber()) {
+            throw new ProtocolError(ErrorCode.INVALID_FIELD,
+                    "field \"" + name + "\" must be a number");
+        }
+        double value = primitive.getAsDouble();
+        if (!Double.isFinite(value)) {
+            throw new ProtocolError(ErrorCode.INVALID_FIELD,
+                    "field \"" + name + "\" must be finite");
+        }
+        return value;
+    }
+
+    private static Float optionalPositiveFiniteFloat(JsonObject json, String name) {
+        JsonElement element = json.get(name);
+        if (element == null) {
+            return null;
+        }
+        String requirement = "field \"" + name + "\" must be a positive finite number";
+        if (!(element instanceof JsonPrimitive primitive) || !primitive.isNumber()) {
+            throw new ProtocolError(ErrorCode.INVALID_FIELD, requirement);
+        }
+        float value = primitive.getAsFloat();
+        if (!Float.isFinite(value) || value <= 0.0f) {
+            throw new ProtocolError(ErrorCode.INVALID_FIELD, requirement);
+        }
+        return value;
     }
 }

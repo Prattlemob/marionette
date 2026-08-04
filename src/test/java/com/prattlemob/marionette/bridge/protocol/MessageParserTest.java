@@ -227,4 +227,89 @@ class MessageParserTest {
                 MessageParser.parse("{\"type\": \"input\", \"tap\": [\"jump\"]}"));
         assertThrows(UnsupportedOperationException.class, () -> update.taps().add(TapControl.JUMP));
     }
+
+    @Test
+    void lookWithoutModeStaysInstant() {
+        var look = assertInstanceOf(AgentCommand.Look.class,
+                MessageParser.parse("{\"type\": \"look\", \"yaw\": 90.0, \"pitch\": 0.0}"));
+        assertEquals(90.0f, look.yaw());
+    }
+
+    @Test
+    void lookModeInstantParsesExplicitly() {
+        assertInstanceOf(AgentCommand.Look.class, MessageParser.parse(
+                "{\"type\": \"look\", \"mode\": \"instant\", \"yaw\": 1.0, \"pitch\": 2.0}"));
+    }
+
+    @Test
+    void lookModeDeltaParses() {
+        var delta = assertInstanceOf(AgentCommand.LookDelta.class, MessageParser.parse(
+                "{\"type\": \"look\", \"mode\": \"delta\", \"yaw\": 15.0, \"pitch\": -5.0}"));
+        assertEquals(15.0f, delta.yaw());
+        assertEquals(-5.0f, delta.pitch());
+    }
+
+    @Test
+    void lookModeSmoothWithAnglesParses() {
+        var smooth = assertInstanceOf(AgentCommand.LookSmoothAngles.class, MessageParser.parse(
+                "{\"type\": \"look\", \"mode\": \"smooth\", \"yaw\": 90.0, \"pitch\": 10.0, \"speed\": 1.5}"));
+        assertEquals(90.0f, smooth.yaw());
+        assertEquals(1.5f, smooth.speed());
+    }
+
+    @Test
+    void lookModeSmoothSpeedDefaultsToNull() {
+        var smooth = assertInstanceOf(AgentCommand.LookSmoothAngles.class, MessageParser.parse(
+                "{\"type\": \"look\", \"mode\": \"smooth\", \"yaw\": 0.0, \"pitch\": 0.0}"));
+        assertNull(smooth.speed());
+    }
+
+    @Test
+    void lookModeSmoothWithPointCarriesIdAndRawFrame() {
+        String raw = "{\"type\": \"look\", \"mode\": \"smooth\", \"id\": 7, \"x\": 1.0, \"y\": 2.0, \"z\": 3.0}";
+        var smooth = assertInstanceOf(AgentCommand.LookSmoothPoint.class, MessageParser.parse(raw));
+        assertEquals(1.0, smooth.x());
+        assertEquals(2.0, smooth.y());
+        assertEquals(3.0, smooth.z());
+        assertEquals(7, smooth.id().getAsInt());
+        assertEquals(raw, smooth.raw());
+        assertNull(smooth.speed());
+    }
+
+    @Test
+    void lookModeSmoothRejectsBothAnglesAndPoint() {
+        assertInvalidField("{\"type\": \"look\", \"mode\": \"smooth\", \"yaw\": 0.0, \"pitch\": 0.0, \"x\": 1.0, \"y\": 2.0, \"z\": 3.0}");
+    }
+
+    @Test
+    void lookModeSmoothRejectsNeitherShape() {
+        assertInvalidField("{\"type\": \"look\", \"mode\": \"smooth\"}");
+    }
+
+    @Test
+    void lookModeSmoothRejectsPartialPoint() {
+        assertInvalidField("{\"type\": \"look\", \"mode\": \"smooth\", \"x\": 1.0, \"y\": 2.0}");
+    }
+
+    @Test
+    void lookModeSmoothRejectsBadSpeed() {
+        assertInvalidField("{\"type\": \"look\", \"mode\": \"smooth\", \"yaw\": 0.0, \"pitch\": 0.0, \"speed\": 0}");
+        assertInvalidField("{\"type\": \"look\", \"mode\": \"smooth\", \"yaw\": 0.0, \"pitch\": 0.0, \"speed\": -1.5}");
+        assertInvalidField("{\"type\": \"look\", \"mode\": \"smooth\", \"yaw\": 0.0, \"pitch\": 0.0, \"speed\": \"fast\"}");
+    }
+
+    @Test
+    void lookRejectsUnknownMode() {
+        assertInvalidField("{\"type\": \"look\", \"mode\": \"teleport\", \"yaw\": 0.0, \"pitch\": 0.0}");
+    }
+
+    @Test
+    void lookModeDeltaRequiresBothFields() {
+        assertInvalidField("{\"type\": \"look\", \"mode\": \"delta\", \"yaw\": 15.0}");
+    }
+
+    private void assertInvalidField(String json) {
+        assertEquals(ErrorCode.INVALID_FIELD, assertThrows(ProtocolError.class,
+                () -> MessageParser.parse(json)).code());
+    }
 }
