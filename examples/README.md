@@ -12,3 +12,6 @@ joined a world.
 - `full_movement.py` — M3.1: every held control plus tap-jump vs held
   jump and a sprint-jump, with measured speeds; `--sneak-edge` runs the
   manual sneak-to-a-drop safety check.
+- `look_points.py` — M3.2: five smoothed look-at pans around the player,
+  then contrast cases (double-speed pan, instant snap, delta burst); the
+  D5 experiment driver and demo.
