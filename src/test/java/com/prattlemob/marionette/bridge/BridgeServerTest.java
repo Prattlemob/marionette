@@ -393,4 +393,26 @@ class BridgeServerTest {
         assertTrue(coalescedAtStall > 100,
                 "expected sustained coalescing while stalled, saw " + coalescedAtStall);
     }
+
+    @Test
+    void sendErrorReachesTheController() throws Exception {
+        TestClient client = TestClient.connect(server.port());
+        client.send(HELLO);
+        await(server::hasController);
+        client.messages.poll(5, TimeUnit.SECONDS); // hello reply
+
+        server.sendError("{\"type\": \"error\", \"code\": \"invalid_field\", \"message\": \"test\"}");
+
+        String received = client.messages.poll(5, TimeUnit.SECONDS);
+        assertNotNull(received);
+        JsonObject json = JsonParser.parseString(received).getAsJsonObject();
+        assertEquals("error", json.get("type").getAsString());
+        assertEquals("invalid_field", json.get("code").getAsString());
+    }
+
+    @Test
+    void sendErrorWithoutControllerIsANoOp() {
+        server.sendError("{\"type\": \"error\", \"code\": \"invalid_field\", \"message\": \"dropped\"}");
+        // No controller attached: must not throw, nothing to assert beyond that.
+    }
 }

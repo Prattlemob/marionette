@@ -183,6 +183,21 @@ public final class BridgeServer {
         }
     }
 
+    /**
+     * Send an error frame from the tick thread — for commands that fail
+     * apply-time validation (e.g. a degenerate smooth look-at target, M3.2).
+     * Reliable: errors are never coalesced or dropped for a slow reader
+     * (they are rare and small; the coalescing contract covers observation
+     * frames only). Silently a no-op when no controller is ready.
+     */
+    public void sendError(String json) {
+        Channel channel = controller.get();
+        if (!controllerReady.get() || channel == null || !channel.isActive()) {
+            return;
+        }
+        channel.writeAndFlush(new TextWebSocketFrame(json));
+    }
+
     /** Observation frames deferred/dropped for a slow reader since this controller attached. */
     public long coalescedObservations() {
         return coalesced.get();
