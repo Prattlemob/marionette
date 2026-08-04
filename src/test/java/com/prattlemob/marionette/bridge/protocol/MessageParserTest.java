@@ -312,4 +312,17 @@ class MessageParserTest {
         assertEquals(ErrorCode.INVALID_FIELD, assertThrows(ProtocolError.class,
                 () -> MessageParser.parse(json)).code());
     }
+
+    @Test
+    void idOfExtractsTheEnvelopeId() {
+        assertEquals(12, MessageParser.idOf("{\"type\": \"release\", \"id\": 12}").getAsInt());
+        assertEquals("a", MessageParser.idOf("{\"type\": \"release\", \"id\": \"a\"}").getAsString());
+    }
+
+    @Test
+    void idOfIsNullForAbsentInvalidOrUnparseableIds() {
+        assertNull(MessageParser.idOf("{\"type\": \"release\"}"));
+        assertNull(MessageParser.idOf("{\"type\": \"release\", \"id\": true}"));
+        assertNull(MessageParser.idOf("not json"));
+    }
 }

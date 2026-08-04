@@ -34,6 +34,19 @@ public final class MessageParser {
     }
 
     /**
+     * The envelope id of a frame, or null when absent, invalid, or
+     * unparseable. For error echoes on refusals decided after parsing
+     * (role_forbidden), where the parsed command does not carry the id.
+     */
+    public static JsonPrimitive idOf(String text) {
+        try {
+            return envelopeId(strictJsonObject(text));
+        } catch (ProtocolError e) {
+            return null;
+        }
+    }
+
+    /**
      * RFC 8259 parsing. Gson's JsonParser.parseString is lenient (unquoted
      * keys, single quotes, NaN); the wire contract is strict JSON, and
      * protocol/README.md makes later tightening a breaking change — so be
