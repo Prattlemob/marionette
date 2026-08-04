@@ -5,16 +5,17 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 
 import com.prattlemob.marionette.bridge.protocol.AgentCommand;
 import com.prattlemob.marionette.bridge.protocol.ErrorCode;
-import com.prattlemob.marionette.bridge.protocol.Messages;
 import com.prattlemob.marionette.bridge.protocol.ProtocolSession;
+import com.prattlemob.marionette.bridge.protocol.Role;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,12 +47,16 @@ import io.netty.util.concurrent.DefaultThreadFactory;
 /**
  * Localhost-only WebSocket transport for protocol v1. All protocol logic
  * lives in {@link ProtocolSession}; this class only moves frames and
- * executes the session's instructions. One controller connection at a
- * time; a later connect while one is attached is refused with a
- * controller_attached error and close code 1013. The single Netty
- * event-loop thread parses and enqueues commands but never touches game
- * state; the tick thread drains them. Deliberately free of Minecraft
- * imports so it is testable headless.
+ * executes the session's instructions. One controller connection, plus up
+ * to {@code maxObservers} observers, at a time. Admission happens at
+ * hello-processing time, not at socket-accept time: two sockets may coexist
+ * pre-hello, and the first to complete a controller hello wins the slot; a
+ * later one is refused with a controller_attached or observer_attached
+ * error and close code 1013. A connection that never sends hello within
+ * {@code helloTimeoutMillis} is closed 1002. The single Netty event-loop
+ * thread parses and enqueues commands but never touches game state; the
+ * tick thread drains them. Deliberately free of Minecraft imports so it is
+ * testable headless.
  */
 public final class BridgeServer {
     private static final Logger LOG = LoggerFactory.getLogger(BridgeServer.class);
@@ -62,17 +67,20 @@ public final class BridgeServer {
     /** Liveness ping cadence; constant in M2.3, the watchdog timeout knob is M5.1's. */
     private static final long PING_INTERVAL_MILLIS = 10_000;
 
+    /** One inbound command plus the connection it came from (configure and
+     *  apply-time error replies are per-connection). */
+    public record Received(AgentCommand command, AgentConnection from) {}
+
     private final String bindAddress;
     private final int requestedPort;
     private final String modVersion;
+    private final int maxObservers;
     private final long pingIntervalMillis;
-    private final Queue<AgentCommand> inbound = new ConcurrentLinkedQueue<>();
-    private final AtomicReference<Channel> controller = new AtomicReference<>();
-    private final AtomicBoolean controllerReady = new AtomicBoolean();
+    private final long helloTimeoutMillis;
+    private final Queue<Received> inbound = new ConcurrentLinkedQueue<>();
+    private final AtomicReference<AgentConnection> controller = new AtomicReference<>();
+    private final List<AgentConnection> observers = new CopyOnWriteArrayList<>();
     private final AtomicBoolean disconnected = new AtomicBoolean();
-    private final AtomicReference<String> pendingObservation = new AtomicReference<>();
-    private final AtomicLong coalesced = new AtomicLong();
-    private volatile long lastPongNanos;
 
     private NioEventLoopGroup group;
     private Channel listener;
@@ -81,21 +89,28 @@ public final class BridgeServer {
      * @param bindAddress address to bind; callers are responsible for
      *        loopback clamping (MarionetteConfig.resolveBindAddress)
      * @param port TCP port; 0 binds an ephemeral port (tests).
+     * @param maxObservers cap on concurrently attached observers.
+     * @param helloTimeoutMillis close a connection that has not completed hello within this window
      */
-    public BridgeServer(String bindAddress, int port, String modVersion) {
-        this(bindAddress, port, modVersion, PING_INTERVAL_MILLIS);
+    public BridgeServer(String bindAddress, int port, String modVersion,
+                        int maxObservers, long helloTimeoutMillis) {
+        this(bindAddress, port, modVersion, maxObservers, PING_INTERVAL_MILLIS, helloTimeoutMillis);
     }
 
-    BridgeServer(String bindAddress, int port, String modVersion, long pingIntervalMillis) {
+    BridgeServer(String bindAddress, int port, String modVersion, int maxObservers,
+                 long pingIntervalMillis, long helloTimeoutMillis) {
         this.bindAddress = bindAddress;
         this.requestedPort = port;
         this.modVersion = modVersion;
+        this.maxObservers = maxObservers;
         this.pingIntervalMillis = pingIntervalMillis;
+        this.helloTimeoutMillis = helloTimeoutMillis;
     }
 
     /** nanoTime of the newest pong from the controller; 0 before the first. For the M5.1 watchdog. */
     public long lastPongNanos() {
-        return lastPongNanos;
+        AgentConnection current = controller.get();
+        return current != null ? current.lastPongNanos() : 0;
     }
 
     /** Bind to the configured address. Blocks briefly; call once. Throws on bind failure. */
@@ -134,78 +149,65 @@ public final class BridgeServer {
 
     /** True while a controller that completed the hello handshake is attached. */
     public boolean hasController() {
-        return controllerReady.get();
+        AgentConnection current = controller.get();
+        return current != null && current.ready();
     }
 
     /**
      * True exactly once after a hello-completed controller is lost; the tick
      * loop turns this into release-all. The one-tick safety guarantee rests
      * on the tick loop calling this every tick. Connections that never
-     * completed hello do not signal here.
+     * completed hello (controller or observer) do not signal here.
      */
     public boolean pollDisconnected() {
         return disconnected.getAndSet(false);
     }
 
-    /** All commands received since the last drain, in arrival order. */
-    public List<AgentCommand> drainCommands() {
-        List<AgentCommand> commands = new ArrayList<>();
-        AgentCommand command;
-        while ((command = inbound.poll()) != null) {
-            commands.add(command);
+    /** All commands received since the last drain, in arrival order, tagged with origin. */
+    public List<Received> drainCommands() {
+        List<Received> commands = new ArrayList<>();
+        Received received;
+        while ((received = inbound.poll()) != null) {
+            commands.add(received);
         }
         return commands;
     }
 
     /**
-     * Send one observation frame; silently dropped when no controller is
-     * ready. A slow-reading agent (channel unwritable) gets frames coalesced
-     * to latest: the newest frame waits in a one-slot stash, flushed when the
-     * channel drains; intermediate frames are dropped and counted. Setting
-     * the stash to null before a direct write is what keeps latest-wins
-     * ordering: a newer frame always supersedes a stashed older one.
+     * Broadcast one observation frame to every ready connection (controller
+     * and observers), each with its own writability gate and latest-wins
+     * stash: a slow reader only ever drops its own frames.
      */
     public void sendObservation(String json) {
-        Channel channel = controller.get();
-        if (!controllerReady.get() || channel == null || !channel.isActive()) {
-            return;
-        }
-        if (channel.isWritable()) {
-            pendingObservation.set(null);
-            channel.writeAndFlush(new TextWebSocketFrame(json));
-        } else {
-            // Edge case accepted: a frame stashed here just after a writability
-            // flush (channelWritabilityChanged already ran) waits for the next
-            // observation to supersede it rather than flushing immediately.
-            // Benign — the stream is continuous while in a world.
-            pendingObservation.set(json);
-            coalesced.incrementAndGet();
-        }
+        connections().forEach(connection -> connection.sendObservation(json));
     }
 
-    /**
-     * Send an error frame from the tick thread — for commands that fail
-     * apply-time validation (e.g. a degenerate smooth look-at target, M3.2).
-     * Reliable: errors are never coalesced or dropped for a slow reader
-     * (they are rare and small; the coalescing contract covers observation
-     * frames only). Silently a no-op when no controller is ready.
-     */
-    public void sendError(String json) {
-        Channel channel = controller.get();
-        if (!controllerReady.get() || channel == null || !channel.isActive()) {
-            return;
-        }
-        channel.writeAndFlush(new TextWebSocketFrame(json));
-    }
-
-    /** Observation frames deferred/dropped for a slow reader since this controller attached. */
+    /** Observation frames deferred/dropped across all connections since they attached. */
     public long coalescedObservations() {
-        return coalesced.get();
+        return connections().mapToLong(AgentConnection::coalescedObservations).sum();
+    }
+
+    private Stream<AgentConnection> connections() {
+        AgentConnection current = controller.get();
+        return current == null ? observers.stream()
+                : Stream.concat(Stream.of(current), observers.stream());
+    }
+
+    /** Claim a slot for a hello-processing connection; null admits. Event-loop only. */
+    private ErrorCode tryAdmit(AgentConnection connection, Role role) {
+        if (role == Role.CONTROLLER) {
+            return controller.compareAndSet(null, connection) ? null : ErrorCode.CONTROLLER_ATTACHED;
+        }
+        if (observers.size() >= maxObservers) {
+            return ErrorCode.OBSERVER_ATTACHED;
+        }
+        observers.add(connection);
+        return null;
     }
 
     /**
-     * Close listener, connection (1001 going away), and event loop. The
-     * group shutdown is bounded (2s shutdown timeout, 3s await); daemon
+     * Close listener, every connection (1001 going away), and event loop.
+     * The group shutdown is bounded (2s shutdown timeout, 3s await); daemon
      * threads are the final backstop if that window is somehow exceeded.
      * Ordering rule (docs/decisions.md): the caller releases controls
      * before stopping the bridge. Safe to call repeatedly.
@@ -215,10 +217,19 @@ public final class BridgeServer {
             listener.close().syncUninterruptibly();
             listener = null;
         }
-        Channel channel = controller.getAndSet(null);
-        if (channel != null && channel.isActive()) {
-            channel.writeAndFlush(new CloseWebSocketFrame(1001, "server shutting down"))
-                    .addListener(ChannelFutureListener.CLOSE);
+        AgentConnection current = controller.getAndSet(null);
+        List<AgentConnection> watching = new ArrayList<>(observers);
+        observers.clear();
+        List<AgentConnection> all = new ArrayList<>();
+        if (current != null) {
+            all.add(current);
+        }
+        all.addAll(watching);
+        for (AgentConnection connection : all) {
+            if (connection.channel().isActive()) {
+                connection.channel().writeAndFlush(new CloseWebSocketFrame(1001, "server shutting down"))
+                        .addListener(ChannelFutureListener.CLOSE);
+            }
         }
         if (group != null) {
             group.shutdownGracefully(0, 2, TimeUnit.SECONDS)
@@ -228,88 +239,101 @@ public final class BridgeServer {
     }
 
     private final class AgentConnectionHandler extends SimpleChannelInboundHandler<WebSocketFrame> {
-        private ProtocolSession session;
+        private AgentConnection connection;
         private ScheduledFuture<?> pingTask;
+        private ScheduledFuture<?> helloTimeoutTask;
 
         @Override
         public void userEventTriggered(ChannelHandlerContext ctx, Object event) throws Exception {
             if (event instanceof WebSocketServerProtocolHandler.HandshakeComplete) {
-                if (controller.compareAndSet(null, ctx.channel())) {
-                    session = new ProtocolSession(modVersion);
-                    pingTask = ctx.executor().scheduleAtFixedRate(
-                            () -> {
-                                if (ctx.channel().isWritable()) {
-                                    ctx.writeAndFlush(new PingWebSocketFrame());
-                                }
-                            },
-                            pingIntervalMillis, pingIntervalMillis, TimeUnit.MILLISECONDS);
-                } else {
-                    ctx.write(new TextWebSocketFrame(Messages.error(
-                            ErrorCode.CONTROLLER_ATTACHED, "controller already connected",
-                            null, null)));
-                    ctx.writeAndFlush(new CloseWebSocketFrame(
-                                    ErrorCode.CONTROLLER_ATTACHED.closeCode(),
-                                    "controller already connected"))
-                            .addListener(ChannelFutureListener.CLOSE);
-                }
+                ProtocolSession session = new ProtocolSession(modVersion, this::admit);
+                connection = new AgentConnection(ctx.channel(), session);
+                pingTask = ctx.executor().scheduleAtFixedRate(
+                        () -> {
+                            if (ctx.channel().isWritable()) {
+                                ctx.writeAndFlush(new PingWebSocketFrame());
+                            }
+                        },
+                        pingIntervalMillis, pingIntervalMillis, TimeUnit.MILLISECONDS);
+                helloTimeoutTask = ctx.executor().schedule(
+                        () -> {
+                            if (!connection.session().isActive()) {
+                                ctx.writeAndFlush(new CloseWebSocketFrame(1002, "hello timeout"))
+                                        .addListener(ChannelFutureListener.CLOSE);
+                            }
+                        },
+                        helloTimeoutMillis, TimeUnit.MILLISECONDS);
             }
             super.userEventTriggered(ctx, event);
         }
 
+        /** RoleAdmission callback: claim a slot and stamp the role on success. */
+        private ErrorCode admit(Role role) {
+            ErrorCode refusal = tryAdmit(connection, role);
+            if (refusal == null) {
+                connection.setRole(role);
+            }
+            return refusal;
+        }
+
         @Override
         protected void channelRead0(ChannelHandlerContext ctx, WebSocketFrame frame) {
-            if (controller.get() != ctx.channel() || session == null) {
-                return; // a refused extra connection; it is already closing
+            if (connection == null) {
+                return; // frame raced the handshake-complete event; nothing to do
             }
             if (frame instanceof PongWebSocketFrame) {
-                lastPongNanos = System.nanoTime();
-                LOG.debug("Pong from controller");
+                connection.recordPong();
+                LOG.debug("Pong from {}", connection.role());
                 return;
             }
             if (!(frame instanceof TextWebSocketFrame text)) {
-                session.close(); // ignore text already pipelined behind the violation
+                connection.session().close();
                 ctx.writeAndFlush(new CloseWebSocketFrame(1003, "text frames only"))
                         .addListener(ChannelFutureListener.CLOSE);
                 return;
             }
-            for (ProtocolSession.Action action : session.onFrame(text.text())) {
+            for (ProtocolSession.Action action : connection.session().onFrame(text.text())) {
                 switch (action) {
                     case ProtocolSession.Action.Send send ->
                             ctx.writeAndFlush(new TextWebSocketFrame(send.json()));
-                    case ProtocolSession.Action.Enqueue enqueue -> inbound.add(enqueue.command());
+                    case ProtocolSession.Action.Enqueue enqueue ->
+                            inbound.add(new Received(enqueue.command(), connection));
                     case ProtocolSession.Action.Close close ->
                             ctx.writeAndFlush(new CloseWebSocketFrame(close.code(), close.reason()))
                                     .addListener(ChannelFutureListener.CLOSE);
                 }
             }
-            controllerReady.set(session.isActive());
+            connection.setReady(connection.session().isActive());
         }
 
         @Override
         public void channelWritabilityChanged(ChannelHandlerContext ctx) throws Exception {
-            if (ctx.channel() == controller.get() && ctx.channel().isWritable()) {
-                String pending = pendingObservation.getAndSet(null);
-                if (pending != null) {
-                    ctx.writeAndFlush(new TextWebSocketFrame(pending));
-                }
+            if (connection != null && ctx.channel().isWritable() && connection.ready()) {
+                connection.flushPending();
             }
             super.channelWritabilityChanged(ctx);
         }
 
         @Override
         public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-            if (controller.compareAndSet(ctx.channel(), null)) {
-                controllerReady.set(false);
-                inbound.clear(); // commands from a dead controller must not act
-                pendingObservation.set(null);
-                coalesced.set(0);
-                if (pingTask != null) {
-                    pingTask.cancel(false);
-                }
-                lastPongNanos = 0;
-                if (session != null && session.helloCompleted()) {
-                    // Only a hello-completed controller counts as an agent loss.
-                    disconnected.set(true);
+            if (pingTask != null) {
+                pingTask.cancel(false);
+            }
+            if (helloTimeoutTask != null) {
+                helloTimeoutTask.cancel(false);
+            }
+            if (connection != null) {
+                connection.setReady(false);
+                if (controller.compareAndSet(connection, null)) {
+                    // Commands from a dead controller must not act; an
+                    // observer's queued configure must survive it.
+                    inbound.removeIf(received -> received.from() == connection);
+                    if (connection.session().helloCompleted()) {
+                        disconnected.set(true); // only a controller loss is an agent loss
+                    }
+                } else if (observers.remove(connection)) {
+                    inbound.removeIf(received -> received.from() == connection);
+                    LOG.info("Observer disconnected; {} still watching", observers.size());
                 }
             }
             super.channelInactive(ctx);

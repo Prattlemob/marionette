@@ -113,7 +113,7 @@ public class MarionetteClient {
                     configured);
         }
         try {
-            BridgeServer server = new BridgeServer(bind, MarionetteConfig.port, modVersion);
+            BridgeServer server = new BridgeServer(bind, MarionetteConfig.port, modVersion, 2, 10_000);
             server.start();
             bridge = server;
             logNormal("Bridge listening on {}:{}", bind, server.port());
@@ -168,10 +168,10 @@ public class MarionetteClient {
                 logNormal("Agent disconnected");
             }
             if (bridge != null) {
-                for (AgentCommand command : bridge.drainCommands()) {
+                for (BridgeServer.Received received : bridge.drainCommands()) {
                     // Session settings apply without a world; actuation commands are discarded.
-                    if (command instanceof AgentCommand.Configure) {
-                        applyCommand(command, null);
+                    if (received.command() instanceof AgentCommand.Configure) {
+                        applyCommand(received, null);
                     }
                 }
             }
@@ -193,8 +193,8 @@ public class MarionetteClient {
             }
         }
         if (bridge != null) {
-            for (AgentCommand command : bridge.drainCommands()) {
-                applyCommand(command, player);
+            for (BridgeServer.Received received : bridge.drainCommands()) {
+                applyCommand(received, player);
             }
         }
         if (demo != null) {
@@ -234,8 +234,8 @@ public class MarionetteClient {
         return override != null ? override : MarionetteConfig.observationRateDivisor;
     }
 
-    private void applyCommand(AgentCommand command, LocalPlayer player) {
-        switch (command) {
+    private void applyCommand(BridgeServer.Received received, LocalPlayer player) {
+        switch (received.command()) {
             case AgentCommand.InputUpdate update -> {
                 if (update.forward() != null) controlState.setForward(update.forward());
                 if (update.back() != null) controlState.setBack(update.back());
@@ -266,8 +266,8 @@ public class MarionetteClient {
                         player.getX(), player.getEyeY(), player.getZ());
                 if (started) {
                     logPanStart(smooth.speed());
-                } else if (bridge != null) {
-                    bridge.sendError(Messages.error(ErrorCode.INVALID_FIELD,
+                } else {
+                    received.from().sendReliable(Messages.error(ErrorCode.INVALID_FIELD,
                             "smooth look target is the player's eye position",
                             smooth.id(), smooth.raw()));
                 }

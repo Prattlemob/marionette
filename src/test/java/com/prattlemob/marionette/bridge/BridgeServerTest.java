@@ -34,7 +34,7 @@ class BridgeServerTest {
 
     @BeforeEach
     void startServer() {
-        server = new BridgeServer("127.0.0.1", 0, "test-version");
+        server = new BridgeServer("127.0.0.1", 0, "test-version", 2, 10_000);
         server.start();
     }
 
@@ -167,16 +167,18 @@ class BridgeServerTest {
     }
 
     @Test
-    void secondConnectionGetsControllerAttachedThenCloses1013() throws Exception {
+    void secondControllerHelloGetsControllerAttachedThenCloses1013() throws Exception {
         TestClient first = connectAndHello();
         TestClient second = TestClient.connect(server.port());
+        second.send(HELLO);
         JsonObject error = JsonParser.parseString(second.awaitMessage()).getAsJsonObject();
         assertEquals("controller_attached", error.get("code").getAsString());
+        assertEquals(HELLO, error.get("input").getAsString());
         assertEquals(1013, (int) second.closeCode.get(5, TimeUnit.SECONDS));
         // the original controller is unaffected:
         first.send("{\"type\": \"input\", \"forward\": true}");
         await(() -> server.drainCommands().stream()
-                .anyMatch(c -> c instanceof AgentCommand.InputUpdate));
+                .anyMatch(r -> r.command() instanceof AgentCommand.InputUpdate));
     }
 
     @Test
@@ -184,13 +186,13 @@ class BridgeServerTest {
         TestClient client = connectAndHello();
         client.send("{\"type\": \"input\", \"forward\": true}");
         client.send("{\"type\": \"look\", \"yaw\": 90.0, \"pitch\": 0.0}");
-        List<AgentCommand> drained = new java.util.ArrayList<>();
+        List<BridgeServer.Received> drained = new java.util.ArrayList<>();
         await(() -> {
             drained.addAll(server.drainCommands());
             return drained.size() >= 2;
         });
-        assertInstanceOf(AgentCommand.InputUpdate.class, drained.get(0));
-        assertInstanceOf(AgentCommand.Look.class, drained.get(1));
+        assertInstanceOf(AgentCommand.InputUpdate.class, drained.get(0).command());
+        assertInstanceOf(AgentCommand.Look.class, drained.get(1).command());
     }
 
     @Test
@@ -203,7 +205,7 @@ class BridgeServerTest {
         assertNotNull(error.get("code"));
         // still alive and functional:
         client.send("{\"type\": \"release\"}");
-        await(() -> server.drainCommands().stream().anyMatch(c -> c instanceof AgentCommand.Release));
+        await(() -> server.drainCommands().stream().anyMatch(r -> r.command() instanceof AgentCommand.Release));
     }
 
     @Test
@@ -257,7 +259,7 @@ class BridgeServerTest {
         assertEquals("unexpected_hello", error.get("code").getAsString());
         // still alive and functional:
         client.send("{\"type\": \"release\"}");
-        await(() -> server.drainCommands().stream().anyMatch(c -> c instanceof AgentCommand.Release));
+        await(() -> server.drainCommands().stream().anyMatch(r -> r.command() instanceof AgentCommand.Release));
     }
 
     @Test
@@ -319,7 +321,7 @@ class BridgeServerTest {
     @Test
     void bindsTheConfiguredNonDefaultLoopbackAddress() throws Exception {
         // 127.0.0.53 is a valid loopback address on Linux without configuration.
-        BridgeServer other = new BridgeServer("127.0.0.53", 0, "test-version");
+        BridgeServer other = new BridgeServer("127.0.0.53", 0, "test-version", 2, 10_000);
         other.start();
         try {
             TestClient client = TestClient.connect("127.0.0.53", other.port());
@@ -349,7 +351,7 @@ class BridgeServerTest {
 
     @Test
     void serverPingsPeriodicallyAndRecordsThePong() throws Exception {
-        BridgeServer fast = new BridgeServer("127.0.0.1", 0, "test-version", 100);
+        BridgeServer fast = new BridgeServer("127.0.0.1", 0, "test-version", 2, 100, 10_000);
         fast.start();
         try {
             TestClient client = TestClient.connect(fast.port());
@@ -395,24 +397,61 @@ class BridgeServerTest {
     }
 
     @Test
-    void sendErrorReachesTheController() throws Exception {
-        TestClient client = TestClient.connect(server.port());
-        client.send(HELLO);
-        await(server::hasController);
-        client.messages.poll(5, TimeUnit.SECONDS); // hello reply
-
-        server.sendError("{\"type\": \"error\", \"code\": \"invalid_field\", \"message\": \"test\"}");
-
-        String received = client.messages.poll(5, TimeUnit.SECONDS);
-        assertNotNull(received);
-        JsonObject json = JsonParser.parseString(received).getAsJsonObject();
+    void sendReliableRoutesAnErrorToTheOriginConnection() throws Exception {
+        TestClient client = connectAndHello();
+        client.send("{\"type\": \"release\"}");
+        List<BridgeServer.Received> drained = new java.util.ArrayList<>();
+        await(() -> {
+            drained.addAll(server.drainCommands());
+            return !drained.isEmpty();
+        });
+        drained.get(0).from().sendReliable(
+                "{\"type\": \"error\", \"code\": \"invalid_field\", \"message\": \"test\"}");
+        JsonObject json = JsonParser.parseString(client.awaitMessage()).getAsJsonObject();
         assertEquals("error", json.get("type").getAsString());
-        assertEquals("invalid_field", json.get("code").getAsString());
     }
 
     @Test
-    void sendErrorWithoutControllerIsANoOp() {
-        server.sendError("{\"type\": \"error\", \"code\": \"invalid_field\", \"message\": \"dropped\"}");
-        // No controller attached: must not throw, nothing to assert beyond that.
+    void connectionThatNeverSendsHelloIsClosedAtTheTimeout() throws Exception {
+        BridgeServer fast = new BridgeServer("127.0.0.1", 0, "test-version", 2, 10_000, 200);
+        fast.start();
+        try {
+            TestClient idle = TestClient.connect(fast.port());
+            assertEquals(1002, (int) idle.closeCode.get(5, TimeUnit.SECONDS));
+            assertFalse(fast.pollDisconnected(), "a never-hello close is not an agent loss");
+        } finally {
+            fast.stop();
+        }
+    }
+
+    @Test
+    void slowHelloWithinTheTimeoutStillWorks() throws Exception {
+        BridgeServer fast = new BridgeServer("127.0.0.1", 0, "test-version", 2, 10_000, 2_000);
+        fast.start();
+        try {
+            TestClient client = TestClient.connect(fast.port());
+            Thread.sleep(300); // well inside the window
+            client.send(HELLO);
+            JsonObject reply = JsonParser.parseString(client.awaitMessage()).getAsJsonObject();
+            assertEquals("hello", reply.get("type").getAsString());
+            await(fast::hasController);
+        } finally {
+            fast.stop();
+        }
+    }
+
+    @Test
+    void twoPreHelloConnectionsMayCoexistUntilRolesAreKnown() throws Exception {
+        // Admission is post-hello now: a second socket is not refused at
+        // upgrade time. The first to send a controller hello wins the slot.
+        TestClient a = TestClient.connect(server.port());
+        TestClient b = TestClient.connect(server.port());
+        b.send(HELLO);
+        JsonObject reply = JsonParser.parseString(b.awaitMessage()).getAsJsonObject();
+        assertEquals("hello", reply.get("type").getAsString());
+        a.send(HELLO);
+        JsonObject error = JsonParser.parseString(a.awaitMessage()).getAsJsonObject();
+        assertEquals("controller_attached", error.get("code").getAsString());
+        assertEquals(1013, (int) a.closeCode.get(5, TimeUnit.SECONDS));
     }
 }
