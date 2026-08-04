@@ -220,8 +220,11 @@ public class MarionetteClient {
                     player.getX(), player.getEyeY(), player.getZ());
             applier.apply(controlState);
             controlsEngaged = true;
-        } else if (controlsEngaged) {
-            releaseControls();
+        } else {
+            cameraSmoother.cancel(); // nothing may keep driving the camera
+            if (controlsEngaged) {
+                releaseControls();
+            }
         }
     }
 
