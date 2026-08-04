@@ -53,6 +53,16 @@ config files); values marked *(restart required)* are read once at startup.
 	#Bind address. Non-loopback values are ignored and clamped to 127.0.0.1
 	#with a warning until the explicit opt-out gate ships (M5.1). (restart required)
 	bindAddress = "127.0.0.1"
+	#Maximum simultaneous read-only observer connections (role "observer");
+	#0 disables the observer role entirely. (restart required)
+	# Default: 2
+	# Range: 0 ~ 8
+	maxObservers = 2
+	#Seconds a new connection may take to complete the hello handshake
+	#before it is closed. (restart required)
+	# Default: 10
+	# Range: 1 ~ 60
+	helloTimeoutSeconds = 10
 
 [observation]
 	#Send one observation frame every N client ticks. (live)

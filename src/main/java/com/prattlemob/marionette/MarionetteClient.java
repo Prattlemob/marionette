@@ -1,5 +1,7 @@
 package com.prattlemob.marionette;
 
+import java.util.concurrent.TimeUnit;
+
 import com.prattlemob.marionette.bridge.BridgeServer;
 import com.prattlemob.marionette.bridge.protocol.AgentCommand;
 import com.prattlemob.marionette.bridge.protocol.ErrorCode;
@@ -75,8 +77,6 @@ public class MarionetteClient {
     private DemoScript demo;
     private boolean controlsEngaged;
     private BridgeServer bridge;
-    /** Per-session rateDivisor override from configure; null = use config. Reset on agent loss. */
-    private Integer sessionRateDivisor;
     private long reportedCoalesced;
 
     private final String modVersion;
@@ -113,7 +113,9 @@ public class MarionetteClient {
                     configured);
         }
         try {
-            BridgeServer server = new BridgeServer(bind, MarionetteConfig.port, modVersion, 2, 10_000);
+            BridgeServer server = new BridgeServer(bind, MarionetteConfig.port, modVersion,
+                    MarionetteConfig.maxObservers,
+                    TimeUnit.SECONDS.toMillis(MarionetteConfig.helloTimeoutSeconds));
             server.start();
             bridge = server;
             logNormal("Bridge listening on {}:{}", bind, server.port());
@@ -161,10 +163,7 @@ public class MarionetteClient {
         boolean agentLost = bridge != null && bridge.pollDisconnected();
 
         if (!inWorld || player == null) {
-            // Reset before drain: a same-tick reconnect's configure must survive
-            // the disconnected agent's reset, not be wiped by it.
             if (agentLost) {
-                sessionRateDivisor = null;
                 logNormal("Agent disconnected");
             }
             if (bridge != null) {
@@ -183,7 +182,6 @@ public class MarionetteClient {
             return;
         }
         if (agentLost) {
-            sessionRateDivisor = null;
             controlState.releaseAll(); // drop un-applied residue from the dead agent
             if (controlsEngaged) {
                 logNormal("Agent disconnected — releasing all controls");
@@ -227,11 +225,6 @@ public class MarionetteClient {
                 releaseControls();
             }
         }
-    }
-
-    private int effectiveRateDivisor() {
-        Integer override = sessionRateDivisor;
-        return override != null ? override : MarionetteConfig.observationRateDivisor;
     }
 
     private void applyCommand(BridgeServer.Received received, LocalPlayer player) {
@@ -278,8 +271,9 @@ public class MarionetteClient {
             }
             case AgentCommand.Configure configure -> {
                 if (configure.rateDivisor() != null) {
-                    sessionRateDivisor = configure.rateDivisor();
-                    logNormal("Observation rate divisor set to {} for this session", configure.rateDivisor());
+                    received.from().setRateDivisor(configure.rateDivisor());
+                    logNormal("Observation rate divisor set to {} for a {} session",
+                            configure.rateDivisor(), received.from().role());
                 }
             }
         }
@@ -340,7 +334,13 @@ public class MarionetteClient {
                         total - reportedCoalesced, total);
                 reportedCoalesced = total;
             } else if (total < reportedCoalesced) {
-                reportedCoalesced = total; // counter reset by a reconnect
+                // coalescedObservations() sums only LIVE connections, so the total
+                // drops whenever any connection (controller or observer) detaches,
+                // not just on a reconnect — its already-reported drops leave the
+                // sum with it. Rebase silently instead of reporting a negative
+                // delta; the next increase is measured from this lower baseline,
+                // so nothing already reported gets counted twice.
+                reportedCoalesced = total;
             }
         }
         LocalPlayer player = Minecraft.getInstance().player;
@@ -348,11 +348,11 @@ public class MarionetteClient {
             logVerbose(String.format("Puppet pos %.2f %.2f %.2f yaw %.1f",
                     player.getX(), player.getY(), player.getZ(), player.getYRot()));
         }
-        if (bridge != null && inWorld && player != null
-                && MarionetteConfig.observationDueAt(ticksInWorld, effectiveRateDivisor())) {
-            bridge.sendObservation(Messages.observation(ticksInWorld,
-                    player.getX(), player.getY(), player.getZ(),
-                    player.getYRot(), player.getXRot()));
+        if (bridge != null && inWorld && player != null) {
+            bridge.sendObservation(ticksInWorld, MarionetteConfig.observationRateDivisor,
+                    () -> Messages.observation(ticksInWorld,
+                            player.getX(), player.getY(), player.getZ(),
+                            player.getYRot(), player.getXRot()));
         }
     }
 

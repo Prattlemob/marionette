@@ -25,6 +25,8 @@ public final class MarionetteConfig {
     private static final ModConfigSpec.BooleanValue BRIDGE_ENABLED;
     private static final ModConfigSpec.IntValue PORT;
     private static final ModConfigSpec.ConfigValue<String> BIND_ADDRESS;
+    private static final ModConfigSpec.IntValue MAX_OBSERVERS;
+    private static final ModConfigSpec.IntValue HELLO_TIMEOUT;
     private static final ModConfigSpec.IntValue RATE_DIVISOR;
     private static final ModConfigSpec.IntValue ENTITY_RADIUS;
     private static final ModConfigSpec.IntValue ENTITY_MAX_COUNT;
@@ -47,6 +49,14 @@ public final class MarionetteConfig {
                 .comment("Bind address. Non-loopback values are ignored and clamped to 127.0.0.1",
                         "with a warning until the explicit opt-out gate ships (M5.1). (restart required)")
                 .define("bindAddress", "127.0.0.1");
+        MAX_OBSERVERS = builder
+                .comment("Maximum simultaneous read-only observer connections (role \"observer\");",
+                        "0 disables the observer role entirely. (restart required)")
+                .defineInRange("maxObservers", 2, 0, 8);
+        HELLO_TIMEOUT = builder
+                .comment("Seconds a new connection may take to complete the hello handshake",
+                        "before it is closed. (restart required)")
+                .defineInRange("helloTimeoutSeconds", 10, 1, 60);
         builder.pop();
         builder.push("observation");
         RATE_DIVISOR = builder
@@ -86,6 +96,8 @@ public final class MarionetteConfig {
     public static volatile boolean bridgeEnabled = true;
     public static volatile int port = 24680;
     public static volatile String bindAddress = "127.0.0.1";
+    public static volatile int maxObservers = 2;
+    public static volatile int helloTimeoutSeconds = 10;
     public static volatile int observationRateDivisor = 1;
     public static volatile int entityRadius = 32;
     public static volatile int entityMaxCount = 64;
@@ -145,6 +157,8 @@ public final class MarionetteConfig {
         bridgeEnabled = BRIDGE_ENABLED.get();
         port = PORT.get();
         bindAddress = BIND_ADDRESS.get();
+        maxObservers = MAX_OBSERVERS.get();
+        helloTimeoutSeconds = HELLO_TIMEOUT.get();
         observationRateDivisor = RATE_DIVISOR.get();
         entityRadius = ENTITY_RADIUS.get();
         entityMaxCount = ENTITY_MAX_COUNT.get();

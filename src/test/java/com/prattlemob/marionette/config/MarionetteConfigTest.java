@@ -42,6 +42,12 @@ class MarionetteConfigTest {
     }
 
     @Test
+    void observerDefaultsMatchTheSpec() {
+        assertEquals(2, MarionetteConfig.maxObservers);
+        assertEquals(10, MarionetteConfig.helloTimeoutSeconds);
+    }
+
+    @Test
     void observationDueAtRespectsDivisor() {
         int original = MarionetteConfig.observationRateDivisor;
         try {
