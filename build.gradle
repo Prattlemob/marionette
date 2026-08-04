@@ -170,7 +170,7 @@ dependencies {
     // Must track the jarJar pin above (currently 4.1.118.Final) — an
     // automated bump of just this line breaks runClient* dependency
     // resolution (M3.2).
-    additionalRuntimeClasspath 'io.netty:netty-codec-http:4.1.118.Final'
+    additionalRuntimeClasspath 'io.netty:netty-codec-http:4.1.136.Final'
 }
 
 tasks.named('test', Test) {
