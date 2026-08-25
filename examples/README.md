@@ -20,3 +20,7 @@ joined a world.
 - `look_points.py` — M3.2: five smoothed look-at pans around the player,
   then contrast cases (double-speed pan, instant snap, delta burst); the
   D5 experiment driver and demo.
+- `interact.py` — M3.3: attack/use/hotbar. Provision the hotbar first
+  (slot 0 iron pickaxe, slot 1 dirt, slot 2 cooked beef, hunger not
+  full): mines a block to completion, places a block, eats — no
+  keyboard. Watch the rendered client.
