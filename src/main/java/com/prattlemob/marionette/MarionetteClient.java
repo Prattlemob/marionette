@@ -217,6 +217,18 @@ public class MarionetteClient {
             }
             cameraSmoother.onTick(new Rotation(player.getYRot(), player.getXRot()),
                     player.getX(), player.getEyeY(), player.getZ());
+            if (minecraft.screen != null) {
+                // Screen-open rule (M3.3 spec): a screen releases agent
+                // attack/use — vanilla releases real keys on setScreen, and
+                // a hold that resumed on close would stall against the
+                // screen's missTime. Movement continues through GUIs (D4).
+                controlState.releaseInteractions();
+            } else {
+                Integer hotbar = controlState.consumeHotbar();
+                if (hotbar != null) {
+                    player.getInventory().setSelectedSlot(hotbar);
+                }
+            }
             applier.apply(controlState);
             controlsEngaged = true;
         } else {
@@ -237,6 +249,9 @@ public class MarionetteClient {
                 if (update.jump() != null) controlState.setJump(update.jump());
                 if (update.sneak() != null) controlState.setSneak(update.sneak());
                 if (update.sprint() != null) controlState.setSprint(update.sprint());
+                if (update.attack() != null) controlState.setAttack(update.attack());
+                if (update.use() != null) controlState.setUse(update.use());
+                if (update.hotbar() != null) controlState.selectHotbar(update.hotbar());
                 update.taps().forEach(controlState::tap);
             }
             case AgentCommand.Look look -> {
@@ -323,6 +338,10 @@ public class MarionetteClient {
         if (!inWorld) {
             return;
         }
+        // ClientTickEvent.Post fires after handleKeybinds in Minecraft.tick:
+        // an attack/use tap nothing consumed this tick (screen open) dies
+        // here rather than firing when the menu closes later.
+        controlState.dropInteractionTaps();
         ticksInWorld++;
         if (ticksInWorld % TICK_LOG_INTERVAL == 0) {
             logVerbose("Client tick {} in world", ticksInWorld);
