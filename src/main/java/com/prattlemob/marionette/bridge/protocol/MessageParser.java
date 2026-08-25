@@ -97,6 +97,9 @@ public final class MessageParser {
                     optionalBoolean(json, "jump"),
                     optionalBoolean(json, "sneak"),
                     optionalBoolean(json, "sprint"),
+                    optionalBoolean(json, "attack"),
+                    optionalBoolean(json, "use"),
+                    optionalRangedInt(json, "hotbar", 0, 8),
                     tapArray(json));
             case "look" -> parseLook(json, id, raw);
             case "release" -> new AgentCommand.Release();

@@ -92,4 +92,10 @@ class MessagesTest {
                 Messages.helloReply(1, "1.0", null)).getAsJsonObject();
         assertTrue(reply.get("capabilities").getAsJsonObject().get("observer").getAsBoolean());
     }
+
+    @Test
+    void helloReplyAdvertisesInteract() {
+        JsonObject reply = parse(Messages.helloReply(1, "0.1.0", null));
+        assertTrue(reply.get("capabilities").getAsJsonObject().get("interact").getAsBoolean());
+    }
 }
