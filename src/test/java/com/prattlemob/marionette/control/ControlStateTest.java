@@ -213,4 +213,61 @@ class ControlStateTest {
         assertFalse(state.consumeTap(TapControl.ATTACK)); // edge clicks dropped too
         assertFalse(state.consumeTap(TapControl.USE));
     }
+
+    @Test
+    void hotbarIntentIsConsumedExactlyOnce() {
+        ControlState state = new ControlState();
+        assertNull(state.consumeHotbar());
+        state.selectHotbar(3);
+        assertEquals(Integer.valueOf(3), state.consumeHotbar());
+        assertNull(state.consumeHotbar());
+    }
+
+    @Test
+    void newestHotbarSelectWins() {
+        ControlState state = new ControlState();
+        state.selectHotbar(1);
+        state.selectHotbar(7);
+        assertEquals(Integer.valueOf(7), state.consumeHotbar());
+    }
+
+    @Test
+    void releaseAllClearsHotbarIntent() {
+        ControlState state = new ControlState();
+        state.selectHotbar(2);
+        state.releaseAll();
+        assertNull(state.consumeHotbar());
+    }
+
+    @Test
+    void dropInteractionTapsKeepsJumpTaps() {
+        ControlState state = new ControlState();
+        state.tap(TapControl.ATTACK);
+        state.tap(TapControl.USE);
+        state.tap(TapControl.JUMP);
+        state.dropInteractionTaps();
+        assertFalse(state.consumeTap(TapControl.ATTACK));
+        assertFalse(state.consumeTap(TapControl.USE));
+        assertTrue(state.consumeTap(TapControl.JUMP));
+    }
+
+    @Test
+    void releaseInteractionsClearsOnlyInteractionState() {
+        ControlState state = new ControlState();
+        state.setForward(true);
+        state.setJump(true);
+        state.tap(TapControl.JUMP);
+        state.setAttack(true);
+        state.setUse(true);
+        state.selectHotbar(4);
+        state.releaseInteractions();
+        assertFalse(state.attack());
+        assertFalse(state.use());
+        assertNull(state.consumeHotbar());
+        assertFalse(state.consumeTap(TapControl.ATTACK)); // the edge click too
+        assertFalse(state.consumeTap(TapControl.USE));
+        assertTrue(state.forward()); // movement continues through GUIs (D4)
+        assertTrue(state.jump());
+        assertTrue(state.consumeTap(TapControl.JUMP));
+    }
 }

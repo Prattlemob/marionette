@@ -29,6 +29,7 @@ public final class ControlState {
     private float pendingDeltaPitch;
     private boolean hasPendingDelta;
     private final EnumSet<TapControl> pendingTaps = EnumSet.noneOf(TapControl.class);
+    private Integer pendingHotbar;
 
     public boolean forward() { return forward; }
     public boolean back() { return back; }
@@ -118,12 +119,55 @@ public final class ControlState {
         return pendingTaps.remove(control);
     }
 
+    /** Queue a one-shot hotbar slot select (0–8); replaces any unconsumed intent. */
+    public void selectHotbar(int slot) {
+        pendingHotbar = slot;
+    }
+
+    /** The pending hotbar slot, clearing it; {@code null} when none queued. */
+    public Integer consumeHotbar() {
+        Integer slot = pendingHotbar;
+        pendingHotbar = null;
+        return slot;
+    }
+
+    /**
+     * Drop attack/use taps nothing consumed this tick (the one-tick tap
+     * lifetime: a screen kept handleKeybinds from running, and a stale
+     * click must not fire when the menu closes later). Called at tick
+     * post; jump taps are consumed unconditionally by the input mixin
+     * and need no lifetime rule.
+     */
+    public void dropInteractionTaps() {
+        pendingTaps.remove(TapControl.ATTACK);
+        pendingTaps.remove(TapControl.USE);
+    }
+
+    /**
+     * The screen-open rule (M3.3 spec): opening a screen releases
+     * attack/use and drops interaction intents, mirroring vanilla's
+     * key release on setScreen — a hold that "resumed" on close would
+     * stall against the screen's missTime=10000. Movement holds are
+     * deliberately untouched (D4: movement continues through GUIs).
+     */
+    public void releaseInteractions() {
+        attack = false;
+        use = false;
+        pendingHotbar = null;
+        dropInteractionTaps();
+    }
+
     /** True when any control is held. */
     public boolean anyHeld() {
         return forward || back || left || right || jump || sneak || sprint || attack || use;
     }
 
-    /** Return every control to neutral and drop any pending look intent, look delta, and pending taps. */
+    /**
+     * Return every control to neutral and drop every pending intent:
+     * look, look delta, taps (including attack/use edge clicks), and the
+     * hotbar select. The selected hotbar slot itself is world state and
+     * is not restored (M3.3 spec).
+     */
     public void releaseAll() {
         forward = back = left = right = jump = sneak = sprint = false;
         attack = use = false;
@@ -132,5 +176,6 @@ public final class ControlState {
         pendingDeltaPitch = 0.0f;
         hasPendingDelta = false;
         pendingTaps.clear();
+        pendingHotbar = null;
     }
 }
