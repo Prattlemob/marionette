@@ -343,10 +343,10 @@ Items:
 
 Items:
 
-- [ ] Attack: hold + one-shot
-- [ ] Use: hold + one-shot
-- [ ] Hotbar slot select (0–8)
-- [ ] Interactions respect vanilla timing (attack cooldown, use ticks)
+- [x] Attack: hold + one-shot
+- [x] Use: hold + one-shot
+- [x] Hotbar slot select (0–8)
+- [x] Interactions respect vanilla timing (attack cooldown, use ticks)
 
 ### M3.4 — Inventory & container actions
 

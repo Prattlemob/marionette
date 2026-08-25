@@ -136,6 +136,31 @@ does not stop a scripted forward hold). M5.1's human-input precedence policy
 must add an explicit "human counters/overrides agent" layer on top of this
 OR-merge base — it is not free from D4 and needs its own design.
 
+### D4a — Interaction injection (attack/use/hotbar) — **Settled** (2026-08-05, M3.3 design)
+
+Attack/use route through a second scoped mixin on
+`Minecraft.handleKeybinds()`: three `@Redirect`s OR agent intent into
+`KeyMapping.isDown()`, `KeyMapping.consumeClick()` (consume-once taps;
+a hold's rising edge queues the click a vanilla press carries), and
+`MouseHandler.isMouseGrabbed()` (vanilla gates held-mining on a grabbed
+mouse — false while unfocused, which the M2.2 suppress-pause feature
+makes a normal operating state). Vanilla runs
+startAttack/startUseItem/continueAttack itself, so attack cooldown,
+missTime, rightClickDelay, and use ticks stay vanilla. Hotbar is a
+consumed one-shot intent applied via `Inventory.setSelectedSlot`, not
+routed through key state. Rejected: KeyMapping forcing (held mining
+dies unfocused; release stomps a human-held button — the D4 family
+failure), direct invoker calls (duplicates vanilla orchestration).
+
+**Screen-open rule (normative):** opening any screen releases agent
+attack/use holds and drops pending interaction taps and hotbar selects;
+holds do not resume on close. Vanilla releases every real key on
+setScreen, and while a screen is open it sets `missTime = 10000` each
+tick (decaying 1/tick) — an agent hold that "resumed" on close would
+keep it huge and silently stall mining for ~8 minutes. Movement's
+continue-through-GUI divergence (D4) is unaffected. Full design:
+`docs/superpowers/specs/2026-08-05-m3.3-attack-use-hotbar-design.md`.
+
 ## D5 — Camera smoothing model — **Settled: constant max angular velocity with ease-in/out (capped-rate)** (M3.2 experiment, 2026-08-04)
 
 Tested against a fixed visual scenario (the "look at five points" script,
