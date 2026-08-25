@@ -218,7 +218,7 @@ class MessageParserTest {
     @Test
     void unknownTapControlIsInvalidField() {
         assertEquals(ErrorCode.INVALID_FIELD, assertThrows(ProtocolError.class,
-                () -> MessageParser.parse("{\"type\": \"input\", \"tap\": [\"attack\"]}")).code());
+                () -> MessageParser.parse("{\"type\": \"input\", \"tap\": [\"fly\"]}")).code());
     }
 
     @Test

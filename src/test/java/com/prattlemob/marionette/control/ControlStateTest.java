@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
@@ -74,12 +73,12 @@ class ControlStateTest {
     }
 
     @Test
-    void tapsAreConsumedExactlyOnce() {
+    void tapIsConsumedExactlyOnce() {
         ControlState state = new ControlState();
         state.tap(TapControl.JUMP);
         assertFalse(state.anyHeld()); // a pending tap is not a held control
-        assertEquals(Set.of(TapControl.JUMP), state.consumeTaps());
-        assertEquals(Set.of(), state.consumeTaps());
+        assertTrue(state.consumeTap(TapControl.JUMP));
+        assertFalse(state.consumeTap(TapControl.JUMP));
     }
 
     @Test
@@ -87,7 +86,8 @@ class ControlStateTest {
         ControlState state = new ControlState();
         state.tap(TapControl.JUMP);
         state.tap(TapControl.JUMP);
-        assertEquals(Set.of(TapControl.JUMP), state.consumeTaps());
+        assertTrue(state.consumeTap(TapControl.JUMP));
+        assertFalse(state.consumeTap(TapControl.JUMP));
     }
 
     @Test
@@ -95,8 +95,16 @@ class ControlStateTest {
         ControlState state = new ControlState();
         state.setJump(true);
         state.tap(TapControl.JUMP);
-        assertEquals(Set.of(TapControl.JUMP), state.consumeTaps());
+        assertTrue(state.consumeTap(TapControl.JUMP));
         assertTrue(state.jump()); // tap never releases a held control
+    }
+
+    @Test
+    void consumingOneTapLeavesOthersPending() {
+        ControlState state = new ControlState();
+        state.tap(TapControl.JUMP);
+        assertFalse(state.consumeTap(TapControl.ATTACK));
+        assertTrue(state.consumeTap(TapControl.JUMP));
     }
 
     @Test
@@ -104,7 +112,7 @@ class ControlStateTest {
         ControlState state = new ControlState();
         state.tap(TapControl.JUMP);
         state.releaseAll();
-        assertEquals(Set.of(), state.consumeTaps());
+        assertFalse(state.consumeTap(TapControl.JUMP));
     }
 
     @Test

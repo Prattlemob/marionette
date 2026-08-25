@@ -1,7 +1,6 @@
 package com.prattlemob.marionette.control;
 
 import java.util.EnumSet;
-import java.util.Set;
 
 /**
  * Set-and-hold control intent: values persist until changed by a later
@@ -81,14 +80,9 @@ public final class ControlState {
         pendingTaps.add(control);
     }
 
-    /** The pending taps, clearing them; empty when none queued. */
-    public Set<TapControl> consumeTaps() {
-        if (pendingTaps.isEmpty()) {
-            return Set.of();
-        }
-        Set<TapControl> taps = EnumSet.copyOf(pendingTaps);
-        pendingTaps.clear();
-        return taps;
+    /** True exactly once per queued tap of {@code control}, clearing only it. */
+    public boolean consumeTap(TapControl control) {
+        return pendingTaps.remove(control);
     }
 
     /** True when any control is held. */
