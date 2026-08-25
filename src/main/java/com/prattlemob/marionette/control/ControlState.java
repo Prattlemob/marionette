@@ -22,6 +22,8 @@ public final class ControlState {
     private boolean jump;
     private boolean sneak;
     private boolean sprint;
+    private boolean attack;
+    private boolean use;
     private Look pendingLook;
     private float pendingDeltaYaw;
     private float pendingDeltaPitch;
@@ -43,6 +45,25 @@ public final class ControlState {
     public void setJump(boolean held) { jump = held; }
     public void setSneak(boolean held) { sneak = held; }
     public void setSprint(boolean held) { sprint = held; }
+
+    public boolean attack() { return attack; }
+    public boolean use() { return use; }
+
+    /** Hold/release attack; a rising edge queues the click a vanilla press carries. */
+    public void setAttack(boolean held) {
+        if (held && !attack) {
+            pendingTaps.add(TapControl.ATTACK);
+        }
+        attack = held;
+    }
+
+    /** Hold/release use; a rising edge queues the click a vanilla press carries. */
+    public void setUse(boolean held) {
+        if (held && !use) {
+            pendingTaps.add(TapControl.USE);
+        }
+        use = held;
+    }
 
     /** Queue a raw camera set; replaces any unconsumed intent. */
     public void setLook(float yaw, float pitch) {
@@ -75,8 +96,20 @@ public final class ControlState {
         return delta;
     }
 
-    /** Queue a one-shot press of {@code control} for the next input tick. */
+    /**
+     * Queue a one-shot press of {@code control} for the next input tick.
+     * A tap of a currently held attack/use is ignored: the hold's own
+     * edge click already happened, and an extra consumed click would
+     * fire a real extra swing (for jump the OR-merge makes this case
+     * invisible, so no guard is needed).
+     */
     public void tap(TapControl control) {
+        if (control == TapControl.ATTACK && attack) {
+            return;
+        }
+        if (control == TapControl.USE && use) {
+            return;
+        }
         pendingTaps.add(control);
     }
 
@@ -87,12 +120,13 @@ public final class ControlState {
 
     /** True when any control is held. */
     public boolean anyHeld() {
-        return forward || back || left || right || jump || sneak || sprint;
+        return forward || back || left || right || jump || sneak || sprint || attack || use;
     }
 
     /** Return every control to neutral and drop any pending look intent, look delta, and pending taps. */
     public void releaseAll() {
         forward = back = left = right = jump = sneak = sprint = false;
+        attack = use = false;
         pendingLook = null;
         pendingDeltaYaw = 0.0f;
         pendingDeltaPitch = 0.0f;

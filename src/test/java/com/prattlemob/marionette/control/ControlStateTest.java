@@ -141,4 +141,76 @@ class ControlStateTest {
         state.releaseAll();
         assertNull(state.consumeLookDelta());
     }
+
+    @Test
+    void risingEdgeOfHoldQueuesOneClick() {
+        ControlState state = new ControlState();
+        state.setAttack(true);
+        assertTrue(state.attack());
+        assertTrue(state.consumeTap(TapControl.ATTACK)); // the press's click
+        assertFalse(state.consumeTap(TapControl.ATTACK)); // exactly one
+    }
+
+    @Test
+    void reassertingAHeldControlClicksNothing() {
+        ControlState state = new ControlState();
+        state.setAttack(true);
+        state.consumeTap(TapControl.ATTACK);
+        state.setAttack(true); // no edge
+        assertFalse(state.consumeTap(TapControl.ATTACK));
+    }
+
+    @Test
+    void reholdingAfterReleaseClicksAgain() {
+        ControlState state = new ControlState();
+        state.setUse(true);
+        state.consumeTap(TapControl.USE);
+        state.setUse(false);
+        state.setUse(true);
+        assertTrue(state.consumeTap(TapControl.USE));
+    }
+
+    @Test
+    void tapOfAHeldInteractionControlIsIgnored() {
+        // For jump the held-tap no-op is invisible (OR-merge); for
+        // attack/use an extra consumed click would fire a real swing,
+        // so the no-op rule is enforced here (see the M3.3 spec).
+        ControlState state = new ControlState();
+        state.setAttack(true);
+        state.consumeTap(TapControl.ATTACK); // drain the edge click
+        state.tap(TapControl.ATTACK);
+        assertFalse(state.consumeTap(TapControl.ATTACK));
+        assertTrue(state.attack()); // and it releases nothing
+    }
+
+    @Test
+    void quickPressReleaseBetweenTicksStillLandsItsClick() {
+        ControlState state = new ControlState();
+        state.setUse(true);
+        state.setUse(false);
+        assertFalse(state.use());
+        assertTrue(state.consumeTap(TapControl.USE));
+    }
+
+    @Test
+    void anyHeldIncludesAttackAndUse() {
+        ControlState state = new ControlState();
+        state.setAttack(true);
+        assertTrue(state.anyHeld());
+        state.releaseAll();
+        state.setUse(true);
+        assertTrue(state.anyHeld());
+    }
+
+    @Test
+    void releaseAllClearsAttackAndUse() {
+        ControlState state = new ControlState();
+        state.setAttack(true);
+        state.setUse(true);
+        state.releaseAll();
+        assertFalse(state.attack());
+        assertFalse(state.use());
+        assertFalse(state.consumeTap(TapControl.ATTACK)); // edge clicks dropped too
+        assertFalse(state.consumeTap(TapControl.USE));
+    }
 }
