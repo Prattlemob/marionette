@@ -22,6 +22,12 @@ on:
       - 'gradlew.bat'
       - '.github/workflows/build.yml'
 
+concurrency:
+  # One in-flight build per branch (or PR): a newer push supersedes the older
+  # run so only the latest commit is built.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
