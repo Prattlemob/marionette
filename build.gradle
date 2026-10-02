@@ -155,22 +155,22 @@ dependencies {
 
     // D1a: MC bundles only Netty core; the WebSocket codecs live in
     // netty-codec-http, so we jar-in-jar exactly the version matching MC's
-    // Netty (4.1.118.Final on 1.21.8). transitive=false keeps the bundled
+    // Netty (netty_version in gradle.properties). transitive=false keeps the bundled
     // jar codec-only.
     jarJar(implementation('io.netty:netty-codec-http')) {
         version {
             strictly '[4.1, 4.2)'
-            prefer '4.1.118.Final'
+            prefer netty_version
         }
         transitive = false
     }
     // Jar-in-Jar alone only unpacks at production runtime; dev-environment
     // run tasks (runClient*) need the same jar on the classpath explicitly,
     // or the mod's module can't see the codec classes (ClassNotFoundException).
-    // Must track the jarJar pin above (currently 4.1.118.Final) — an
-    // automated bump of just this line breaks runClient* dependency
-    // resolution (M3.2).
-    additionalRuntimeClasspath 'io.netty:netty-codec-http:4.1.137.Final'
+    // Share the packaged version and use Minecraft's existing Netty core.
+    additionalRuntimeClasspath("io.netty:netty-codec-http:${netty_version}") {
+        transitive = false
+    }
 }
 
 tasks.named('test', Test) {
