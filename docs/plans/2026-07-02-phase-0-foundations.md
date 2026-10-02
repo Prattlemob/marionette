@@ -1,7 +1,5 @@
 # Phase 0 — Foundations Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** A verified, green do-nothing scaffold (M0.1) plus the mod's heartbeat: a client-tick hook with in-world awareness and world join/leave detection (M0.2).
 
 **Architecture:** Two `@Mod` entrypoints already exist: `Marionette` (loads on both dists, stays a no-op shell) and `MarionetteClient` (`dist = Dist.CLIENT`, never loads on dedicated servers). M0.1 adds a startup log line proving the entrypoint ran. M0.2 turns `MarionetteClient` into the lifecycle singleton: it registers listeners on the NeoForge game bus for client ticks and client-player login/logout, tracks an `inWorld` flag, and no-ops every handler while not in a world. Everything later (input injection, the bridge, observations) hangs off this class.

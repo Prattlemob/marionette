@@ -21,12 +21,16 @@ Marionette aims to provide:
 
 ## Project status
 
-**Phase 1 walking skeleton works.** An external script can already drive the rendered player over a localhost WebSocket — see [examples/](examples/) for a working agent. The design direction for what's next is settled:
+**Protocol v1, bridge hardening, movement, and camera smoothing are implemented.** An external script can drive the rendered player over a localhost WebSocket, with read-only observers alongside the controller — see [examples/](examples/) for working clients. Phases 0–2 and milestones M3.1–M3.2 are complete; attack/use/hotbar control is next (M3.3).
 
 - The implementation plan lives in [ROADMAP.md](ROADMAP.md) — phases, milestones, and definitions of done.
 - Design decisions (settled, experiment-gated, and still open) are recorded in [docs/decisions.md](docs/decisions.md). Highlights: the transport is a localhost WebSocket carrying JSON; the core is client-only with an optional server component later; [Baritone](https://github.com/cabaletta/baritone) is planned as an optional (never bundled) integration for high-level navigation.
 
 Design discussion happens in [issues](https://github.com/Prattlemob/marionette/issues) — see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Repository layout and coding-agent guidance live in [AGENTS.md](AGENTS.md).
+The [documentation index](docs/README.md) links the protocol, decisions, and
+historical milestone designs and plans.
 
 ## Installation
 

@@ -258,7 +258,7 @@ Items:
 - **Tier:** Core.
 - **Decision:** **D7 amended** (observer settled, admission ordering, cap);
   **D13** records why MCP is a harness concern rather than a transport. Full
-  design: `docs/superpowers/specs/2026-08-04-m2.4-observer-role-design.md`.
+  design: `docs/specs/2026-08-04-m2.4-observer-role-design.md`.
 
 Items:
 

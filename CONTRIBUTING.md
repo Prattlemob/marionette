@@ -1,25 +1,39 @@
 # Contributing to Marionette
 
-Thanks for your interest in Marionette. The project is very early — the design is not finalized and the mod is still an empty scaffold — so the most valuable contributions right now are ideas, not code.
+Marionette implements protocol v1, controller and observer connections,
+configuration, movement, and camera smoothing. See [ROADMAP.md](ROADMAP.md)
+for completed milestones and upcoming work, and [docs/decisions.md](docs/decisions.md)
+for the design rationale.
 
-## Right now
+## Development
 
-- **Open an issue** to discuss use cases, design questions, or the shape of the observation/action protocol. Early design input has the most leverage.
-- **Hold off on large pull requests.** Until the core design lands, substantial code contributions are likely to conflict with it. If you want to build something sizeable, open an issue first so we can align.
+1. Use a Java 21 toolchain and the checked-in Gradle wrapper.
+2. Run `./gradlew build` to compile, run headless tests, and package the mod.
+3. Run `./gradlew runClient` for interactive verification in a local world.
+4. Use the reference clients in [examples/](examples/) to exercise the bridge.
 
-## Once the project takes shape
+The source layout, threading boundaries, and verification guidance are in
+[AGENTS.md](AGENTS.md). No AI tool or workflow plugin is required.
 
-The usual flow will apply:
+## Changes and pull requests
 
-1. Open an issue describing the change before starting work.
-2. Fork, branch, and keep pull requests small and focused.
-3. Make sure the project builds (`gradlew build`) before submitting.
+- Discuss substantial features or design changes in an issue before starting.
+- Keep pull requests focused and describe the behavior changed and checks run.
+- Specify wire changes in [protocol/](protocol/) before implementing them, and
+  update relevant examples alongside the implementation.
+- Add regression coverage for behavior changes. Input, mixin, rendering, and
+  lifecycle changes also need in-game verification; state what was not tested.
+- For documentation-only changes, check links and paths.
 
 ## Ground rules
 
 - Be respectful and constructive.
-- Marionette is agent-agnostic infrastructure. Contributions that hard-wire a particular AI model, service, or agent framework into the mod itself are out of scope; they belong in [examples](examples/) or in your own project built on the protocol.
+- Keep Marionette agent-agnostic. Integrations tied to a particular AI model,
+  service, or agent framework belong in examples or external projects.
+- Preserve the runtime and safety boundaries described in [AGENTS.md](AGENTS.md)
+  and [SECURITY.md](SECURITY.md).
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the same license as the project (see [LICENSE](LICENSE)).
+By contributing, you agree that your contributions will be licensed under the
+same license as the project (see [LICENSE](LICENSE)).

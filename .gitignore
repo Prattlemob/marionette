@@ -35,6 +35,10 @@ bin/
 ### Claude Code ###
 # settings.json and CLAUDE.md are shared; local overrides are per-developer
 .claude/settings.local.json
+.claude/worktrees/
+
+### Legacy local workflow artifacts ###
+.superpowers/
 
 ### Minecraft Modding ###
 run/

@@ -1,10 +1,8 @@
 # Phase 1 — Walking Skeleton Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** An external Python script drives the real, rendered Minecraft player over a localhost WebSocket (walk a square, turn, stop), with all controls released within one tick of the agent dying — ROADMAP milestones M1.1, M1.2, M1.3.
 
-**Architecture:** Three bounded subsystems per the approved spec (`docs/superpowers/specs/2026-07-08-phase-1-walking-skeleton-design.md`): a `control` package (pure `ControlState` + a `ControlStateApplier` seam behind which the D4 injection experiment runs), a `bridge` package (Netty WebSocket server, Minecraft-free and headless-testable), and wiring in the existing `MarionetteClient` singleton (mailbox drain → apply → observe, plus the safety release). The network thread never touches game state; the client tick thread is the only reader/writer of game state.
+**Architecture:** Three bounded subsystems per the approved spec (`docs/specs/2026-07-08-phase-1-walking-skeleton-design.md`): a `control` package (pure `ControlState` + a `ControlStateApplier` seam behind which the D4 injection experiment runs), a `bridge` package (Netty WebSocket server, Minecraft-free and headless-testable), and wiring in the existing `MarionetteClient` singleton (mailbox drain → apply → observe, plus the safety release). The network thread never touches game state; the client tick thread is the only reader/writer of game state.
 
 **Tech Stack:** Java 21, NeoForge 21.8.53 / MC 1.21.8, ModDevGradle 2.0.141, Mojang mappings at runtime (no refmaps needed), MC-bundled Netty core 4.1.118.Final + Jar-in-Jar'd `netty-codec-http:4.1.118.Final` (D1a), MC-bundled Gson 2.11, JUnit 5 (new in this phase), Python 3 + `websockets` for examples.
 
@@ -827,7 +825,7 @@ Expected evidence, in order:
 4. COAST samples: position change < 0.5 blocks between samples (stopping momentum only), then `Demo complete` followed by `Controls released; vanilla input restored`.
 5. Clean `Left world` from the window close.
 
-If position doesn't advance, debug before proceeding (superpowers:systematic-debugging) — this is the milestone gate risk, not a formality.
+If position doesn't advance, debug before proceeding — this is the milestone gate risk, not a formality.
 
 - [ ] **Step 9: Commit**
 
@@ -2380,7 +2378,7 @@ git commit -m "Add walk-square demo agent; verify disconnect and error safety (M
 
 - [ ] **Step 1: Confirm every verification actually passed**
 
-Re-check the evidence trail (superpowers:verification-before-completion):
+Re-check the evidence trail:
 archived D4 logs, probe output, walk-square output, kill-9 log excerpt,
 reconnect output. Anything missing or ambiguous → go back and redo that
 verification, do not tick boxes on memory.
@@ -2419,5 +2417,4 @@ git add -A
 git commit -m "Close out Phase 1: walking skeleton verified end-to-end"
 ```
 
-Then stop: merging `phase-1-walking-skeleton` → `1.21.8` is the user's call
-(superpowers:finishing-a-development-branch).
+Then stop: merging `phase-1-walking-skeleton` → `1.21.8` is the user's call.

@@ -20,7 +20,7 @@ language target that document, not the mod's source.
 ## Change process
 
 1. Spec first: the change lands in `protocol/` (this directory) before
-   any implementation lands in `src/` (see CLAUDE.md).
+   any implementation lands in `src/` (see AGENTS.md).
 2. Anything that is a design decision — not just a field addition — is
    recorded in [docs/decisions.md](../docs/decisions.md).
 3. Breaking changes bump the integer version and document a migration

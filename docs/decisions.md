@@ -309,7 +309,7 @@ mod.
 - **Dependency footprint.** The MCP Java SDK is Project Reactor + Jackson
   inside a NeoForge client mod, on the jar-in-jar path that already drew
   blood once (see the D1a dev-classpath addendum).
-- **Agent-agnosticism** (CLAUDE.md). MCP is an agent-framework contract;
+- **Agent-agnosticism** (AGENTS.md). MCP is an agent-framework contract;
   making it the transport excludes the scripted, RL, and browser agents that
   D1 chose WebSocket to include.
 
