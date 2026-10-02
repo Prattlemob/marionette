@@ -343,10 +343,13 @@ Items:
 
 Items:
 
-- [ ] Attack: hold + one-shot
-- [ ] Use: hold + one-shot
-- [ ] Hotbar slot select (0–8)
-- [ ] Interactions respect vanilla timing (attack cooldown, use ticks)
+- [x] Attack: hold + one-shot
+- [x] Use: hold + one-shot
+- [x] Hotbar slot select (0–8)
+- [x] Interactions respect vanilla timing (attack cooldown, use ticks)
+- [ ] Visual acceptance: mining/placement/eating animations and physical alt-tab
+  check. Automated checks in a rendered client passed; see the
+  [M3.3 verification record](docs/specs/2026-08-05-m3.3-attack-use-hotbar-design.md#verification-record-2026-10-02).
 
 ### M3.4 — Inventory & container actions
 

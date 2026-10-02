@@ -1,6 +1,5 @@
 package com.prattlemob.marionette.mixin;
 
-import java.util.Set;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -29,13 +28,15 @@ public abstract class KeyboardInputMixin extends ClientInput {
         if (state == null) {
             return;
         }
-        Set<TapControl> taps = state.consumeTaps();
+        // Consume even when jump is already held, so a tap cannot survive
+        // short-circuit evaluation and fire after the held key is released.
+        boolean jumpTap = state.consumeTap(TapControl.JUMP);
         this.keyPresses = new Input(
                 this.keyPresses.forward() || state.forward(),
                 this.keyPresses.backward() || state.back(),
                 this.keyPresses.left() || state.left(),
                 this.keyPresses.right() || state.right(),
-                this.keyPresses.jump() || state.jump() || taps.contains(TapControl.JUMP),
+                this.keyPresses.jump() || state.jump() || jumpTap,
                 this.keyPresses.shift() || state.sneak(),
                 this.keyPresses.sprint() || state.sprint());
         // Mirrors vanilla KeyboardInput.tick()'s impulse derivation —

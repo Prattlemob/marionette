@@ -25,6 +25,7 @@ public final class Messages {
         capabilities.addProperty("tap", true);
         capabilities.addProperty("camera", true);
         capabilities.addProperty("observer", true);
+        capabilities.addProperty("interact", true);
         reply.add("capabilities", capabilities);
         reply.addProperty("mod", modVersion);
         return reply.toString();

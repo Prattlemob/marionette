@@ -220,6 +220,24 @@ class BridgeServerTest {
     }
 
     @Test
+    void invalidHotbarRejectsTheWholeInteractionWithoutClosingTheSession() throws Exception {
+        TestClient client = connectAndHello();
+        client.send("{\"type\":\"input\",\"id\":\"bad-slot\",\"hotbar\":9,\"attack\":true,\"tap\":[\"use\"]}");
+        JsonObject error = JsonParser.parseString(client.awaitMessage()).getAsJsonObject();
+        assertEquals("invalid_field", error.get("code").getAsString());
+        assertEquals("bad-slot", error.get("id").getAsString());
+        client.send("{\"type\":\"release\"}");
+        List<BridgeServer.Received> drained = new java.util.ArrayList<>();
+        await(() -> {
+            drained.addAll(server.drainCommands());
+            return !drained.isEmpty();
+        });
+        assertEquals(1, drained.size(), "invalid input must not queue attack or use");
+        assertInstanceOf(AgentCommand.Release.class, drained.getFirst().command());
+        assertTrue(server.hasController());
+    }
+
+    @Test
     void abruptDisconnectSignalsOnceAndAllowsReconnect() throws Exception {
         TestClient client = connectAndHello();
         client.ws.abort(); // no close frame — the kill -9 analogue

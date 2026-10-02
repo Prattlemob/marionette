@@ -218,7 +218,7 @@ class MessageParserTest {
     @Test
     void unknownTapControlIsInvalidField() {
         assertEquals(ErrorCode.INVALID_FIELD, assertThrows(ProtocolError.class,
-                () -> MessageParser.parse("{\"type\": \"input\", \"tap\": [\"attack\"]}")).code());
+                () -> MessageParser.parse("{\"type\": \"input\", \"tap\": [\"fly\"]}")).code());
     }
 
     @Test
@@ -324,5 +324,49 @@ class MessageParserTest {
         assertNull(MessageParser.idOf("{\"type\": \"release\"}"));
         assertNull(MessageParser.idOf("{\"type\": \"release\", \"id\": true}"));
         assertNull(MessageParser.idOf("not json"));
+    }
+
+    @Test
+    void inputAttackAndUseHoldsParse() {
+        AgentCommand.InputUpdate update = (AgentCommand.InputUpdate)
+                MessageParser.parse("{\"type\": \"input\", \"attack\": true, \"use\": false}");
+        assertEquals(true, update.attack());
+        assertEquals(false, update.use());
+        assertNull(update.hotbar());
+        assertNull(update.forward()); // omitted = unchanged
+    }
+
+    @Test
+    void attackAndUseTapNamesParse() {
+        AgentCommand.InputUpdate update = (AgentCommand.InputUpdate)
+                MessageParser.parse("{\"type\": \"input\", \"tap\": [\"attack\", \"use\"]}");
+        assertEquals(Set.of(TapControl.ATTACK, TapControl.USE), update.taps());
+    }
+
+    @Test
+    void hotbarParses() {
+        AgentCommand.InputUpdate update = (AgentCommand.InputUpdate)
+                MessageParser.parse("{\"type\": \"input\", \"hotbar\": 8}");
+        assertEquals(Integer.valueOf(8), update.hotbar());
+    }
+
+    @Test
+    void hotbarOutOfRangeIsInvalidField() {
+        assertEquals(ErrorCode.INVALID_FIELD, assertThrows(ProtocolError.class,
+                () -> MessageParser.parse("{\"type\": \"input\", \"hotbar\": 9}")).code());
+    }
+
+    @Test
+    void hotbarNonIntegerIsInvalidField() {
+        assertEquals(ErrorCode.INVALID_FIELD, assertThrows(ProtocolError.class,
+                () -> MessageParser.parse("{\"type\": \"input\", \"hotbar\": 2.5}")).code());
+        assertEquals(ErrorCode.INVALID_FIELD, assertThrows(ProtocolError.class,
+                () -> MessageParser.parse("{\"type\": \"input\", \"hotbar\": \"3\"}")).code());
+    }
+
+    @Test
+    void nonBooleanAttackIsInvalidField() {
+        assertEquals(ErrorCode.INVALID_FIELD, assertThrows(ProtocolError.class,
+                () -> MessageParser.parse("{\"type\": \"input\", \"attack\": 1}")).code());
     }
 }

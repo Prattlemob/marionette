@@ -11,9 +11,11 @@ import com.prattlemob.marionette.control.TapControl;
  */
 public sealed interface AgentCommand extends ParsedMessage {
     /** Partial set-and-hold update; a null field means "unchanged".
+     *  {@code hotbar} is a one-shot slot select (0–8), not held state.
      *  {@code taps} is never null — empty means no one-shot presses. */
     record InputUpdate(Boolean forward, Boolean back, Boolean left, Boolean right,
                        Boolean jump, Boolean sneak, Boolean sprint,
+                       Boolean attack, Boolean use, Integer hotbar,
                        Set<TapControl> taps) implements AgentCommand {}
 
     /** Raw instant camera set (look mode "instant", the default). */

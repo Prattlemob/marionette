@@ -4,11 +4,15 @@ import java.util.Locale;
 
 /**
  * Controls that support one-shot taps: pressed for exactly one client
- * tick, then auto-released. M3.3 adds ATTACK and USE. Wire names in the
- * protocol's {@code input.tap} array are the lowercase enum names.
+ * tick, then auto-released. Wire names in the protocol's
+ * {@code input.tap} array are the lowercase enum names. JUMP is
+ * consumed by KeyboardInputMixin; ATTACK and USE by
+ * MinecraftInteractionMixin (M3.3).
  */
 public enum TapControl {
-    JUMP;
+    JUMP,
+    ATTACK,
+    USE;
 
     /** The name used on the wire in the {@code input.tap} array. */
     public String wire() {

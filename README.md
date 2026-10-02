@@ -21,7 +21,7 @@ Marionette aims to provide:
 
 ## Project status
 
-**Protocol v1, bridge hardening, movement, and camera smoothing are implemented.** An external script can drive the rendered player over a localhost WebSocket, with read-only observers alongside the controller — see [examples/](examples/) for working clients. Phases 0–2 and milestones M3.1–M3.2 are complete; attack/use/hotbar control is next (M3.3).
+**Protocol v1, bridge hardening, movement, camera smoothing, and attack/use/hotbar control are implemented.** An external script can drive the rendered player over a localhost WebSocket, with read-only observers alongside the controller — see [examples/](examples/) for working clients. See [ROADMAP.md](ROADMAP.md) for verification status and upcoming inventory/container work (M3.4).
 
 - The implementation plan lives in [ROADMAP.md](ROADMAP.md) — phases, milestones, and definitions of done.
 - Design decisions (settled, experiment-gated, and still open) are recorded in [docs/decisions.md](docs/decisions.md). Highlights: the transport is a localhost WebSocket carrying JSON; the core is client-only with an optional server component later; [Baritone](https://github.com/cabaletta/baritone) is planned as an optional (never bundled) integration for high-level navigation.
