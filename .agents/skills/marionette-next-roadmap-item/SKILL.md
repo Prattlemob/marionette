@@ -23,6 +23,11 @@ Use only the current Task; never create another coordinator or recursively
 hand off the entire roadmap. If the assigned item is no longer eligible,
 explain why to the coordinator before changing scope.
 
+For a direct invocation, check the Git-path `orca-roadmap/system-owner.json`
+and live Orca ownership first; do not compete with an active or unverifiable
+combined coordinator. For a dispatched task, its exact assignment and ownership
+apply. Runtime tests need exclusive ownership of the named client/world.
+
 Inspect Git status and the current commit before editing. Preserve pre-existing
 changes, including previous milestones that have not been committed. An earlier
 worker's uncommitted implementation is real input, not disposable scratch work.

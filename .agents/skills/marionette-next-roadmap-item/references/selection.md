@@ -28,15 +28,13 @@ not independent jobs unless the user explicitly requests a smaller scope.
 6. Completion requires both implemented scope and the documented acceptance.
    Reconcile unchecked and unverified work before declaring the full run done.
 
-Examples against the October 2026 baseline:
+Examples of gate handling:
 
-- M4.1 is verified; M3.3 has manual animation/physical alt-tab debt; M3.4 is
-  implemented. The next implementation is M4.6, whose prerequisites are M4.1
-  and M2.3. Carry the M3.3 debt in the handoff.
-- After M4.6, select M4.2, not M5.1 or the next heading after M4.6.
-- M5.1 explicitly requires Phase 3 complete: reconcile remaining M3.3 acceptance
-  before treating that prerequisite as satisfied.
-- M9.2 cannot publish under an unconfirmed provisional license. Preserve D12's
-  decision gate even when the requested scope is the entire roadmap.
+- M2.5 and M5.1a execute before the remaining perception work; packaging may
+  proceed while publication awaits D12/D14. Carry M3.3 visual acceptance debt.
+- M3.5 executes immediately after M4.2, before the remaining perception sections.
+- M5.1 requires Phase 3 core acceptance; optional M3.8 is not a hidden prerequisite.
+- Publication cannot bypass an unconfirmed provisional license.
 
-Treat these as selection examples, not cached knowledge of today's completion.
+Read the live execution-order section each time; these examples are not cached
+completion status.

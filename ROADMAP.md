@@ -1,7 +1,7 @@
 # Marionette Roadmap
 
 Ordered, dependency-aware plan from empty scaffold to full intended behaviour.
-Phases and milestones are in strict implementation order; each milestone is
+The execution-order overrides below take precedence over numeric order; each milestone is
 independently buildable, testable, and demoable. Design decisions referenced as
 `D<n>` are recorded in [docs/decisions.md](docs/decisions.md).
 
@@ -23,6 +23,23 @@ depends on.
 5. `protocol/` docs are Markdown + JSON examples.
 
 ---
+
+## Cross-project execution order (2026-10-03)
+
+Keep milestone IDs and completed history. Next implementation order is **M2.5
+(client packaging) and M5.1a (bridge safety), then M4.6 → M4.2 → M3.5 → M4.3 →
+M4.4 → M4.5 → M3.6 → M3.7 → M5.1 → M5.2**. The first two can proceed
+independently. Package publication has D12/D14 decision gates; a blocked release
+does not prevent independent safety/perception work. M3.3's outstanding visual
+acceptance remains debt and must be reconciled for milestones requiring it.
+M3.8 and M4.7 are optional extensions after the core, selected by requested scope.
+
+Consumers develop alongside the mod. Every consumer requirement needs a provider
+capability, Python-client support and an end-to-end acceptance scenario. Product
+implementation completion does not establish consumer integration. A combined
+coordinator may assign single milestones; autonomous repo-only coordinators must
+check shared ownership before dispatching. No agent persona, planning, reflex
+policy, overlays or highlight selection belongs in this mod.
 
 ## Phase 0 — Foundations (Core)
 
@@ -279,6 +296,26 @@ Items:
 
 ---
 
+### M2.5 — Versioned Python client (Core, consumer prerequisite)
+
+- **Goal:** Let external consumers depend on one supported protocol implementation.
+- **Prerequisites:** M2.1; use the currently implemented protocol and capabilities.
+- **Delivers:** Installable package with typed messages, handshake/capability checks,
+  controller/observer support, observation/event routing, request correlation,
+  explicit disconnect/error behavior and documented cleanup. Migrate examples to
+  this package; keep show-specific reconnect and gameplay policy outside it.
+- **Decisions:** D14 package name/version/publication route; D12 before publication.
+- **Definition of done:** A clean environment installs a pinned published version,
+  connects to a rendered client, observes, moves and releases. Unsupported versions
+  and missing capabilities fail clearly. Publication is an explicit acceptance gate.
+
+- [ ] Package decisions recorded; current wire contract covered
+- [ ] Examples use the package; Java/Python compatibility fixtures agree
+- [ ] Recorded live packets exercise late results, errors and disconnects
+- [ ] Clean-environment published install and rendered smoke evidence
+
+---
+
 ## Phase 3 — Full Actuation (Core) — *the whole body, still zero intelligence*
 
 ### M3.1 — Complete movement set
@@ -384,10 +421,71 @@ server-confirmed chest contents and failure paths. See the
 
 ---
 
+### M3.5 — Modded storage compatibility (Core)
+
+- **Prerequisites:** M3.4, M4.2. Executes immediately after M4.2.
+- **Delivers:** Generic menu observation even for unsupported mutation types;
+  validated storage operations against actual slot pickup/place/stack rules.
+  Choose one storage mod compatible with MC 1.21.8/NeoForge 21.8; IronChests is
+  an intended example, not an assumed available dependency. No class-name-only
+  widening of mutation support; prove safe behavior and reject unsupported cases.
+- **Definition of done:** Vanilla and selected modded storage pass large-layout,
+  restricted-slot, full-destination, server-correction, animated-cursor and
+  disconnect/cancellation checks in a rendered client.
+
+- [ ] Capability/support descriptors and rejection reasons specified
+- [ ] Generic storage execution verified against slot restrictions
+- [ ] Vanilla and modded compatibility matrix with synchronized contents evidence
+
+### M3.6 — Crafting and processing menus (Core)
+
+- **Prerequisites:** M3.5, Phase 4 core perception.
+- **Delivers:** Recipe/menu information and mechanical operations for player/table
+  crafting and furnace-style input/fuel/output/progress. Agents choose recipes,
+  materials, quantities and destinations; the mod does not plan resource gathering.
+- **Definition of done:** A client crafts and smelts specified items, observes
+  synchronized results, and handles missing ingredients, invalid slots and
+  cancellation without leaked controls or silently lost cursor stacks.
+
+- [ ] Contract and client support; scope and count semantics explicit
+- [ ] Recipe/menu observation and validated execution
+- [ ] Rendered success/failure/cancellation evidence
+
+### M3.7 — Gameplay and social control coverage (Core)
+
+- **Prerequisites:** M3.6, M5.1a.
+- **Delivers:** Explicit respawn, game chat, offhand/swap-hand support and a
+  coverage matrix for swimming, boats/mounts, elytra, shields and charged items.
+  Verify existing primitives first; add commands only for demonstrated gaps.
+  Expose available player identity in relevant events; social decisions stay external.
+- **Definition of done:** Named scenarios for every declared supported control
+  pass in-game; each actuator releases on panic/watchdog/disconnect. Distinguish
+  ordinary chat from command execution and define limits before implementation.
+
+- [ ] Missing primitive contract and client support
+- [ ] Gameplay matrix, explicit exclusions, rendered acceptance
+- [ ] All new actuators included in safety checks
+
+### M3.8 — Optional mod action extensions and workstations
+
+- **Prerequisites:** M3.5, M3.7, M5.1.
+- **Delivers:** Opt-in allowlisted mod keybindings; adapters where standard menu
+  interfaces cannot represent a mechanic; selected trading/enchanting/brewing/anvil
+  support. Derive a small extension API from real integrations, not speculation.
+- **Definition of done:** Each selected integration advertises capability/support,
+  validates requests and demonstrates cancellation/release. Absent mods do not
+  classload optional adapters or break the core.
+
+- [ ] Choose concrete integrations and scope before implementation
+- [ ] Capability discovery, validation and optional loading verified
+- [ ] Per-integration runtime and safety evidence
+
+---
+
 ## Phase 4 — Perception (Core) — *what the puppet feels*
 
 > **Implementation order within this phase: M4.1 → M4.6 → M4.2 → M4.3 →
-> M4.4 → M4.5.** Milestone numbers are kept stable (they are referenced
+> M4.4 → M4.5, with M3.5 immediately after M4.2.** Milestone numbers are kept stable (they are referenced
 > throughout this file and in `protocol/`), but M4.6's one-shot events are
 > what a commentator/observer agent actually consumes — *things that
 > happened* — so events land straight after the base frame, ahead of
@@ -443,6 +541,8 @@ Items:
 - [ ] Item serialization schema (id, count, durability, enumerated extras)
 - [ ] Hotbar + main inventory + armor + offhand in the frame
 - [ ] Open-menu observation (menu-type id + slots, D8 addressing)
+- [ ] Unsupported mutation menus remain observable; carried stack and supported
+      operations/rejection reasons exposed with bounded component detail
 
 ### M4.3 — Crosshair target & world context
 
@@ -529,14 +629,54 @@ Items:
 - [ ] Event envelope + initial taxonomy in `protocol/`
 - [ ] Reliable (non-coalesced) event queue with its own bound
 - [ ] The event set above implemented and demoed
+- [ ] Sequence/world-session identity, ordering relative to state/results, and
+      per-connection overflow/disconnect semantics specified; no unsupported
+      exactly-once guarantee across reconnects
+- [ ] Recorded-wire fixtures verify unsolicited events cannot answer requests
+- [ ] Unknown, client-predicted and server-observed facts distinguished
+
+---
+
+### M4.7 — Sound/subtitle observations (Optional)
+
+- **Prerequisites:** M4.6.
+- **Delivers:** Bounded, filterable client-observed sound/subtitle events with
+  available identity/location and timing. No salience or commentary policy.
+- **Definition of done:** Selected sounds produce accurate events under burst load
+  without delaying controller state; unknown locations remain unknown.
+
+- [ ] Capability, filters and bounds specified
+- [ ] Client support and rendered/burst evidence
 
 ---
 
 ## Phase 5 — Safety & Robustness Hardening (Core)
 
-*(Baseline safety shipped in M1.3; this is the systematic pass.)*
+*(Baseline safety shipped in M1.3; M5.1a moves urgent hardening forward.)*
 
-### M5.1 — Safety net: watchdog, override, and locked-down binding
+### M5.1a — Bridge limits and emergency control (Core, execute early)
+
+- **Prerequisites:** M2.3/M2.4 and implemented current actuators. Does not wait
+  for future Phase 3 additions; those must extend its release coverage.
+- **Delivers:** Configurable pong watchdog, local panic, bounded inbound commands,
+  per-tick processing budget, bounded reliable replies, pending-handshake limits,
+  and explicit overflow behavior. Safety release must not wait behind queued work.
+  Resolve binding once to the actual loopback address. Decide authentication and
+  WebSocket Origin policy before release; remote access remains out of scope.
+- **Definition of done:** Flooded commands and stalled readers cannot cause
+  unbounded queues or tick starvation. SIGSTOP and panic release every current
+  actuator within the documented measured deadline; observer loss is isolated.
+
+- [ ] Watchdog/panic implemented and tested, including inventory animation
+- [ ] Queue, work and pending-connection limits with overload tests
+- [ ] Resolve-once binding and local trust policy recorded
+- [ ] Rendered crash/freeze/panic evidence; existing visual debt tracked
+
+### M5.1 — Human precedence and complete lifecycle safety
+
+M5.1a delivers the watchdog/panic/binding foundation first. Reuse its evidence
+where inputs are unchanged; this milestone completes human-priority,
+agent-exclusive and lifecycle coverage across the expanded actuator set.
 
 - **Goal:** Make it impossible for Marionette to hurt the player, the machine,
   or the user's control of their own game.
@@ -547,8 +687,8 @@ Items:
   enforced loopback-only binding with a config override that requires an
   explicit "I understand" flag, and safe behavior across
   death/respawn/dimension-change/GUI-open edge cases.
-- **Prerequisites:** M2.3; Phase 3 complete (must cover every actuator that
-  exists).
+- **Prerequisites:** M5.1a; Phase 3 core complete (M3.1–M3.7).
+  M3.8 is optional and must repeat safety acceptance when selected.
 - **Definition of done:** Freeze the agent process (SIGSTOP) mid-sprint →
   player idles within the watchdog window; press panic key mid-agent-control →
   instant human control, agent notified; die and respawn under agent control →
@@ -619,6 +759,10 @@ Items:
 
 ### M6.2 — Goal commands: goto / mine / follow / stop
 
+Ship with M6.3 as one integration gate. Requests require correlated outcomes,
+progress/cancellation reasons and explicit enforced time budgets. Commands being
+accepted is not proof of completion; consumers must never infer it from log silence.
+
 - **Goal:** Agents issue high-level navigation goals instead of steering.
 - **Delivers:** `goto(x,y,z | block-type)`, `mine(block-type[, count])`,
   `follow(entity)`, `stop` mapped to Baritone processes; a clear ownership
@@ -675,7 +819,7 @@ Items:
   decided up front: on dedicated servers the component is **per-player opt-in**
   (server-side whitelist config) — nobody gets puppeted or observed without
   the operator enabling it for that player.
-- **Prerequisites:** Phase 4 complete (extends, not forks, the observation
+- **Prerequisites:** Phase 4 core complete (extends, not forks, the observation
   schema); M2.1.
 - **Definition of done:** The same agent script gets strictly richer
   observations (documented fields flip from absent/approximate to exact) when
@@ -733,7 +877,7 @@ Items:
   safety model, protocol rationale); `examples/` cleaned up: minimal probe,
   dashboard, walk-square, and one "does something end-to-end" reference agent
   (scripted, no AI) in at least Python.
-- **Prerequisites:** Phases 0–5 complete (Core); examples updated for Phase 6
+- **Prerequisites:** Core milestones in Phases 0–5 complete; examples updated for Phase 6
   if shipped.
 - **Definition of done:** A fresh-machine walkthrough following only the
   README reaches "external script walks the player in a square" without
@@ -785,9 +929,9 @@ The minimum sequence to a first working, externally-driven, streamable client:
 Verified scaffold → tick hook → prove code can move the rendered player →
 minimal WebSocket bridge (both directions) → external script walks a square
 with disconnect-safety → camera smoothing so the footage is watchable.
-Everything else is breadth. M2.2 (config) and M5.2 (HUD) are the first two
-things worth adding immediately after, but they're not on the path to "it
-works on stream."
+This historical walking-skeleton path is complete. The current consumer-enablement
+path begins with M2.5 and M5.1a, followed by the execution order at the top of this
+file. HUD, perception and expanded actuation have their own acceptance gates.
 
 ## Decision index
 
@@ -807,5 +951,7 @@ All design decisions, their status, and rationale live in
 | D9 | Baritone surface | **Settled: adapter behind `NavigationBackend` interface** | M6.1 |
 | D10 | Server component scope | **Deferred by design** (Phase-4 gap list; opt-in rule settled) | M7.1 |
 | D11 | Framebuffer capture | Open | M8.1 |
-| D12 | License confirmation | Open — **blocking release** | M9.2 |
+| D12 | License confirmation | Open — **blocking release** | M2.5, M9.2 |
 | D13 | MCP positioning | **Settled: harness-side concern, never the transport** | M2.4 |
+| D14 | Published Python client specifics | Open — publication gate | M2.5 |
+| D15 | Cross-project coordination | **Settled** | M2.5 onward |

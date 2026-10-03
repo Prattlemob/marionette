@@ -521,3 +521,19 @@ mod.
   principle bind non-loopback — resolve once and pass the resulting
   `InetAddress` through when M5.1 hardens loopback enforcement.
 - Mod-version ↔ protocol-version relationship in the changelog policy — M9.2.
+
+## D14 — Published Python client — **Open, M2.5**
+
+Consumers require a pinned published package rather than copied examples or a
+local protocol shim. Decide distribution name, version scheme, supported protocol
+range, publication route (including prereleases) and release cadence. Packaging
+can proceed against the current contract; publication remains gated by D12 and
+explicit release authorization. Combined development does not settle the license.
+
+## D15 — Cross-project coordination — **Settled** (2026-10-03)
+
+The mod, its consumers and private system coordination remain separate repositories.
+A system coordinator may assign bounded upstream milestones and validate published
+client compatibility. It does not import consumer policy into this public project.
+Product roadmap acceptance and end-to-end consumer acceptance are separate gates.
+A published Python client is an early deliverable, not deferred release documentation.

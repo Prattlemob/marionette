@@ -50,6 +50,17 @@ worker. The receiving managed terminal must bind itself from runtime identity,
 not bootstrap recursively. Never guess handles or consume another inbox. If
 supported binding cannot be established, report the precise runtime blocker.
 
+## Combined-system ownership
+
+Before bootstrapping or dispatching, inspect the checkout's Git-path
+`orca-roadmap/system-owner.json` and reconcile its referenced coordinator with
+live Orca state. A live or unverifiable combined run must not acquire a second
+coordinator. Report its owner or use an explicitly authorized runtime adoption.
+When a combined coordinator assigns a milestone, it invokes the single-item
+skill directly; do not nest this autonomous coordinator. Keep private consumer
+plans out of this public repository. Clear stale pointers only with positive
+runtime settlement/recovery evidence.
+
 ## One writer and a durable checkpoint
 
 Use one shared, explicitly resolved checkout by default, with one milestone
