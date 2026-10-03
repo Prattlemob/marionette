@@ -44,4 +44,11 @@ class ErrorCodeTest {
         assertTrue(ErrorCode.OBSERVER_ATTACHED.fatal());
         assertEquals(1013, ErrorCode.OBSERVER_ATTACHED.closeCode());
     }
+
+    @Test
+    void panicLatchedIsFatal1008() {
+        assertEquals("panic_latched", ErrorCode.PANIC_LATCHED.wire());
+        assertTrue(ErrorCode.PANIC_LATCHED.fatal());
+        assertEquals(1008, ErrorCode.PANIC_LATCHED.closeCode());
+    }
 }

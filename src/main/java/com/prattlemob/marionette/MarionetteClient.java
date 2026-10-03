@@ -22,6 +22,8 @@ import com.prattlemob.marionette.observation.PlayerObservation;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.KeyMapping;
+import net.minecraft.client.gui.components.toasts.SystemToast;
+import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.client.event.InputEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import org.lwjgl.glfw.GLFW;
@@ -73,6 +75,11 @@ public class MarionetteClient {
     private static MarionetteClient instance;
     private final KeyMapping panicKey = new KeyMapping("key.marionette.panic", GLFW.GLFW_KEY_F8,
             "key.categories.marionette");
+    /** Separate re-arm key: only clears the panic latch (D16b). */
+    private final KeyMapping rearmKey = new KeyMapping("key.marionette.rearm", GLFW.GLFW_KEY_F9,
+            "key.categories.marionette");
+    /** One replaceable toast slot for agent-control notices. */
+    private static final SystemToast.SystemToastId CONTROL_TOAST = new SystemToast.SystemToastId();
 
     private final InventoryActionApplier inventoryApplier = new InventoryActionApplier();
     private final ControlState controlState = new ControlState();
@@ -97,12 +104,21 @@ public class MarionetteClient {
         modVersion = container.getModInfo().getVersion().toString();
         container.registerConfig(ModConfig.Type.CLIENT, MarionetteConfig.SPEC);
         modBus.addListener(this::onClientSetup);
-        modBus.addListener((RegisterKeyMappingsEvent event) -> event.register(panicKey));
+        modBus.addListener((RegisterKeyMappingsEvent event) -> {
+            event.register(panicKey);
+            event.register(rearmKey);
+        });
+        // Panic is checked first and wins if both mappings share a key. Re-arm
+        // is deliberate in-game input only: never from a screen or text field.
         NeoForge.EVENT_BUS.addListener((InputEvent.Key event) -> {
-            if (event.getAction() == GLFW.GLFW_PRESS && panicKey.matches(event.getKey(), event.getScanCode())) panic();
+            if (event.getAction() != GLFW.GLFW_PRESS) return;
+            if (panicKey.matches(event.getKey(), event.getScanCode())) panic();
+            else if (rearmKey.matches(event.getKey(), event.getScanCode())) rearm();
         });
         NeoForge.EVENT_BUS.addListener((InputEvent.MouseButton.Pre event) -> {
-            if (event.getAction() == GLFW.GLFW_PRESS && panicKey.matchesMouse(event.getButton())) panic();
+            if (event.getAction() != GLFW.GLFW_PRESS) return;
+            if (panicKey.matchesMouse(event.getButton())) panic();
+            else if (rearmKey.matchesMouse(event.getButton())) rearm();
         });
         NeoForge.EVENT_BUS.addListener(this::onClientTickPre);
         NeoForge.EVENT_BUS.addListener(this::onClientTickPost);
@@ -250,11 +266,33 @@ public class MarionetteClient {
         }
     }
 
+    /** Disengage only: release, sever and latch. Repeating it never re-enables anything. */
     private void panic() {
         demo = null;
-        if (bridge != null) bridge.disconnectController("local panic");
+        boolean engaged = bridge != null && bridge.panic("local panic");
         releaseControls();
-        logNormal("Local panic: controller severed");
+        if (bridge == null) {
+            logNormal("Local panic: controls released (bridge not running)");
+        } else if (engaged) {
+            logNormal("Local panic: controller severed; agent control latched off until re-armed");
+            notifyControl("marionette.control.disabled", "marionette.control.disabled.detail");
+        } else {
+            logNormal("Local panic: agent control already latched off");
+            notifyControl("marionette.control.still_disabled", "marionette.control.disabled.detail");
+        }
+    }
+
+    /** Clear the panic latch; grants, restores and replays nothing. */
+    private void rearm() {
+        if (Minecraft.getInstance().screen != null || bridge == null || !bridge.rearm()) return;
+        logNormal("Panic latch re-armed: a controller may connect again");
+        notifyControl("marionette.control.enabled", "marionette.control.enabled.detail");
+    }
+
+    private void notifyControl(String title, String detail) {
+        Minecraft minecraft = Minecraft.getInstance();
+        SystemToast.addOrUpdate(minecraft.getToastManager(), CONTROL_TOAST, Component.translatable(title),
+                Component.translatable(detail, rearmKey.getTranslatedKeyMessage()));
     }
 
     private void processSafety() {
@@ -470,6 +508,10 @@ public class MarionetteClient {
             logNormal("Demo armed (gui stunts: {})", Boolean.getBoolean("marionette.demo.gui"));
         }
         logNormal("Entered world");
+        if (bridge != null && bridge.panicLatched()) {
+            logNormal("Agent control remains latched off by panic");
+            notifyControl("marionette.control.still_disabled", "marionette.control.disabled.detail");
+        }
     }
 
     private void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {

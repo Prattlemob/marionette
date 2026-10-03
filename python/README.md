@@ -79,6 +79,13 @@ checks required fields/types and retains unknown additive fields. `ServerError`,
 (the latter in `messages`) distinguish failure causes. Opening failures preserve
 websockets/OS exceptions; handshake timeout is `TimeoutError`.
 
+Local panic in Minecraft is reported with existing types. Severing an attached
+controller ends the session with `Disconnect(1008, "local panic")`. While the
+player keeps panic latched, `connect(role="controller")` raises `ServerError`
+whose `.error["code"]` is `panic_latched` (`controller_attached` means another
+controller holds the slot). Neither is transport loss nor the `pong timeout`
+watchdog. Do not reconnect in a loop while latched; the player re-arms in game.
+
 Each inventory call uses a unique session ID. `RequestTimeout.request_id` lets a
 caller identify the later reply. Timeout or task cancellation **does not cancel
 server work**. Late results/errors go to `next_reply()`; do not blindly resend a

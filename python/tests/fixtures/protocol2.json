@@ -182,6 +182,7 @@
       "capabilities": {
         "configure": true,
         "bridgeSafety": true,
+        "panicLatch": true,
         "playerState": true,
         "tap": true,
         "camera": true,
