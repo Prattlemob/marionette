@@ -667,10 +667,13 @@ Items:
   unbounded queues or tick starvation. SIGSTOP and panic release every current
   actuator within the documented measured deadline; observer loss is isolated.
 
-- [ ] Watchdog/panic implemented and tested, including inventory animation
-- [ ] Queue, work and pending-connection limits with overload tests
-- [ ] Resolve-once binding and local trust policy recorded
-- [ ] Rendered crash/freeze/panic evidence; existing visual debt tracked
+- [x] Watchdog/panic implemented and tested, including inventory animation
+- [x] Queue, work and pending-connection limits with overload tests
+- [x] Resolve-once binding and local trust policy recorded
+- [x] Rendered crash/freeze/panic evidence; existing visual debt tracked
+
+Verification: [M5.1a safety record](docs/specs/2026-10-03-m5.1a-safety-verification.md).
+M3.3 visual/alt-tab debt remains separate and unchecked.
 
 ### M5.1 — Human precedence and complete lifecycle safety
 

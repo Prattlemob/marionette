@@ -62,3 +62,13 @@ slot using the same generic move command. A dropped item may be picked up
 again if the player stands on it. The script reports errors rather than blindly
 retrying mutations. Responses reflect client prediction; server synchronization
 can still correct them. Full wire rules: [protocol/v1.md](../protocol/v1.md#inventory--menu-addressed-inventory-actions).
+
+## Bridge safety
+
+Current protocol-2 servers advertise `bridgeSafety`. Keep the WebSocket read
+loop running so the library answers pings; a frozen reader is disconnected by
+the configurable pong watchdog. Do not set an Origin header on native clients.
+Browser clients are rejected under the development trust policy. Close 1013
+means overload: stop sending and treat pending request outcomes as unknown.
+Reconnect explicitly and inspect inventory before retrying mutations. F8 in the
+Minecraft client is the local panic control. See [the wire limits](../protocol/v1.md#transport).

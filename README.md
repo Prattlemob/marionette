@@ -55,7 +55,7 @@ config files); values marked *(restart required)* are read once at startup.
 	# Range: 1 ~ 65535
 	port = 24680
 	#Bind address. Non-loopback values are ignored and clamped to 127.0.0.1
-	#with a warning until the explicit opt-out gate ships (M5.1). (restart required)
+	#with a warning. Remote binding is unsupported. (restart required)
 	bindAddress = "127.0.0.1"
 	#Maximum simultaneous read-only observer connections (role "observer");
 	#0 disables the observer role entirely. (restart required)
@@ -109,8 +109,7 @@ config files); values marked *(restart required)* are read once at startup.
 Notes:
 
 - A non-loopback `bindAddress` is ignored and clamped to `127.0.0.1` with a
-  loud warning. An explicit opt-in for non-loopback binding is planned
-  (M5.1) but does not exist yet.
+  loud warning. Remote binding is unsupported (D16).
 - `suppressPauseOnLostFocus` only takes effect while an agent is connected;
   with no agent attached the game pauses on focus loss exactly as vanilla.
 - The `[observation]` radius/count caps are defined ahead of the features
@@ -132,3 +131,25 @@ Marionette is not an official Minecraft product and is not affiliated with, or e
 ---
 
 A [Prattlemob](https://github.com/Prattlemob) project — [prattlemob.com](https://prattlemob.com)
+
+### Emergency control and development trust
+
+The rebindable **F8** panic key (Controls → Marionette) releases the agent and
+severs its controller connection, including during inventory animation or a
+paused screen. Read-only observers remain attached. The pong watchdog uses
+`bridge.pongTimeoutSeconds` (default 5, range 1–60, restart required).
+WebSocket libraries must continue reading and answering pings even when the
+agent has no new command to send. A frozen controller is disconnected after
+the timeout plus at most one second, then released on the next client tick or
+rendered frame. A frozen Minecraft process cannot execute release until resumed.
+
+The `bridgeSafety` capability advertises bounded inbound/outbound queues,
+32-command/2 ms per-tick scheduling, priority release, and pending-connection
+limits. Overload disconnects the offending connection (1013); outstanding
+inventory outcomes may be unknown, so inspect state before retrying. See
+[the wire limits](protocol/v1.md#transport).
+
+Development access trusts native local processes. Browser Origin headers are
+rejected, including `null`; native clients must omit Origin. This is not local
+process authentication. Authentication remains a release gate; see
+[the security policy](SECURITY.md).

@@ -21,6 +21,10 @@ import com.prattlemob.marionette.control.SmoothingModel;
 import com.prattlemob.marionette.observation.PlayerObservation;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.KeyMapping;
+import net.neoforged.neoforge.client.event.InputEvent;
+import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
+import org.lwjgl.glfw.GLFW;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.player.LocalPlayer;
 import net.neoforged.api.distmarker.Dist;
@@ -67,6 +71,8 @@ public class MarionetteClient {
     }
 
     private static MarionetteClient instance;
+    private final KeyMapping panicKey = new KeyMapping("key.marionette.panic", GLFW.GLFW_KEY_F8,
+            "key.categories.marionette");
 
     private final InventoryActionApplier inventoryApplier = new InventoryActionApplier();
     private final ControlState controlState = new ControlState();
@@ -91,6 +97,13 @@ public class MarionetteClient {
         modVersion = container.getModInfo().getVersion().toString();
         container.registerConfig(ModConfig.Type.CLIENT, MarionetteConfig.SPEC);
         modBus.addListener(this::onClientSetup);
+        modBus.addListener((RegisterKeyMappingsEvent event) -> event.register(panicKey));
+        NeoForge.EVENT_BUS.addListener((InputEvent.Key event) -> {
+            if (event.getAction() == GLFW.GLFW_PRESS && panicKey.matches(event.getKey(), event.getScanCode())) panic();
+        });
+        NeoForge.EVENT_BUS.addListener((InputEvent.MouseButton.Pre event) -> {
+            if (event.getAction() == GLFW.GLFW_PRESS && panicKey.matchesMouse(event.getButton())) panic();
+        });
         NeoForge.EVENT_BUS.addListener(this::onClientTickPre);
         NeoForge.EVENT_BUS.addListener(this::onClientTickPost);
         NeoForge.EVENT_BUS.addListener(this::onRenderFramePre);
@@ -111,6 +124,10 @@ public class MarionetteClient {
     }
 
     private void onInventoryKeyPress(ScreenEvent.KeyPressed.Pre event) {
+        if (panicKey.matches(event.getKeyCode(), event.getScanCode())) {
+            panic();
+            event.setCanceled(true);
+        }
         inventoryApplier.cancel("human keyboard input");
     }
 
@@ -129,17 +146,12 @@ public class MarionetteClient {
             return;
         }
         String configured = MarionetteConfig.bindAddress;
-        String bind = MarionetteConfig.resolveBindAddress(configured);
-        if (!bind.equals(configured)) {
-            Marionette.LOGGER.warn(
-                    "Config bindAddress '{}' is not loopback; clamped to 127.0.0.1. "
-                    + "Non-loopback binding requires the explicit opt-out gate planned for M5.1.",
-                    configured);
-        }
+        java.net.InetAddress bind = MarionetteConfig.resolveBindAddress(configured);
         try {
             BridgeServer server = new BridgeServer(bind, MarionetteConfig.port, modVersion,
                     MarionetteConfig.maxObservers,
-                    TimeUnit.SECONDS.toMillis(MarionetteConfig.helloTimeoutSeconds));
+                    TimeUnit.SECONDS.toMillis(MarionetteConfig.helloTimeoutSeconds),
+                    TimeUnit.SECONDS.toMillis(MarionetteConfig.pongTimeoutSeconds));
             server.start();
             bridge = server;
             logNormal("Bridge listening on {}:{}", bind, server.port());
@@ -185,43 +197,14 @@ public class MarionetteClient {
     private void onClientTickPre(ClientTickEvent.Pre event) {
         Minecraft minecraft = Minecraft.getInstance();
         LocalPlayer player = minecraft.player;
-        boolean agentLost = bridge != null && bridge.pollDisconnected();
-        if (agentLost) inventoryApplier.cancel("controller disconnected");
-
+        processSafety();
         if (!inWorld || player == null) {
-            if (agentLost) {
-                logNormal("Agent disconnected");
-            }
-            if (bridge != null) {
-                for (BridgeServer.Received received : bridge.drainCommands()) {
-                    // Settings apply without a world; inventory requests get an explicit error.
-                    if (received.command() instanceof AgentCommand.Configure
-                            || received.command() instanceof AgentCommand.InventoryAction) {
-                        applyCommand(received, null);
-                    }
-                }
-            }
-            // Safety rule: no player entity to control -> nothing may stay held.
-            if (controlsEngaged) {
-                demo = null;
-                releaseControls();
-            }
+            processCommands(null);
+            if (controlsEngaged) { demo = null; releaseControls(); }
             return;
         }
-        if (agentLost) {
-            controlState.releaseAll(); // drop un-applied residue from the dead agent
-            if (controlsEngaged) {
-                logNormal("Agent disconnected — releasing all controls");
-                releaseControls();
-            } else {
-                logNormal("Agent disconnected");
-            }
-        }
-        if (bridge != null) {
-            for (BridgeServer.Received received : bridge.drainCommands()) {
-                applyCommand(received, player);
-            }
-        }
+        processCommands(player);
+        processSafety();
         inventoryApplier.tick();
         if (demo != null) {
             DemoScript.Stunt stunt = demo.tick(player.getYRot(), controlState);
@@ -264,6 +247,36 @@ public class MarionetteClient {
             if (controlsEngaged) {
                 releaseControls();
             }
+        }
+    }
+
+    private void panic() {
+        demo = null;
+        if (bridge != null) bridge.disconnectController("local panic");
+        releaseControls();
+        logNormal("Local panic: controller severed");
+    }
+
+    private void processSafety() {
+        if (bridge != null && bridge.pollRelease() != null) releaseControls();
+        if (bridge != null && bridge.pollDisconnected()) {
+            demo = null;
+            releaseControls();
+        }
+    }
+
+    private void processCommands(LocalPlayer player) {
+        if (bridge == null) return;
+        long deadline = System.nanoTime() + BridgeServer.WORK_BUDGET_NANOS;
+        for (int i = 0; i < BridgeServer.COMMANDS_PER_TICK; i++) {
+            processSafety();
+            if (System.nanoTime() >= deadline) break;
+            BridgeServer.Received received = bridge.pollCommand();
+            if (received == null) break;
+            if (!received.valid()) continue;
+            if (player != null || received.command() instanceof AgentCommand.Configure
+                    || received.command() instanceof AgentCommand.InventoryAction
+                    || received.command() instanceof AgentCommand.Release) applyCommand(received, player);
         }
     }
 
@@ -317,9 +330,7 @@ public class MarionetteClient {
                 }
             }
             case AgentCommand.Release release -> {
-                inventoryApplier.cancel("controller released inputs");
-                controlState.releaseAll();
-                cameraSmoother.cancel();
+                releaseControls();
             }
             case AgentCommand.Configure configure -> {
                 if (configure.sections() != null) received.from().setSections(configure.sections());
@@ -419,6 +430,7 @@ public class MarionetteClient {
      * tick-side only; tick and render share the client thread.
      */
     private void onRenderFramePre(RenderFrameEvent.Pre event) {
+        processSafety();
         long now = System.nanoTime();
         float dt = lastFrameNanos == 0 ? 0.0f
                 : Math.min((now - lastFrameNanos) / 1_000_000_000.0f, MAX_FRAME_DT);
@@ -467,6 +479,7 @@ public class MarionetteClient {
         if (event.getPlayer() == null) {
             return;
         }
+        if (bridge != null) bridge.disconnectController("left world");
         inventoryApplier.cancel("left world", false);
         inWorld = false;
         demo = null;

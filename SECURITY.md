@@ -14,21 +14,23 @@ That makes the security of the mod↔agent boundary a first-class design
 requirement, not an afterthought. The current posture, as specified in
 [protocol/v1.md](protocol/v1.md):
 
-- **Loopback only.** The WebSocket bridge binds `127.0.0.1` exclusively; it
-  never accepts connections from beyond the local machine. (A config file
-  arrives in M2.2 with the same enforced-safe default; any explicit opt-out
-  gate is an M5.1 decision.)
-- **Single controller.** Exactly one controlling connection at a time; a
-  second connection is rejected with a documented error and closed.
-- **No authentication yet.** Loopback-only binding is the current trust
-  boundary. Authentication must be revisited before any non-loopback binding
-  is ever allowed — that question blocks release of such a feature, per
-  [docs/decisions.md](docs/decisions.md).
-- **Bounded agent power.** A connected agent can only issue the documented
-  protocol commands (in v1: movement, camera, release). Malformed input
-  never crashes the client and never alters held controls; on disconnect,
-  socket error, or the client leaving the world, all controls release
-  within one client tick and the player idles.
+- **Loopback only.** The configured address is resolved once, checked and
+  clamped to loopback, then that same address is bound. Remote binding is not
+  supported.
+- **Native clients only during development.** HTTP requests with any Origin
+  header (including `null`) are rejected before WebSocket upgrade. Browser
+  dashboards are not currently supported. Native Python clients omit Origin.
+- **Local processes are trusted, not authenticated.** There are no tokens yet.
+  Loopback does not isolate other users or programs on this computer. Origin
+  rejection blocks browser drive-by access, not malicious native programs.
+  Authentication and provisioning must be decided before any release (D16).
+- **One controller and bounded observers.** Observer loss cannot release a
+  controller's inputs. Each connection has independent bounded queues.
+- **Bounded work and emergency release.** See the protocol's `bridgeSafety`
+  limits, overload/close behavior, pong watchdog and local F8 panic binding.
+  Safety release bypasses queued commands and cancels inventory animation.
+  A responsive client releases at its next tick or rendered frame; a stalled
+  Minecraft client thread cannot execute a wall-clock safety guarantee.
 
 ## Supported versions
 

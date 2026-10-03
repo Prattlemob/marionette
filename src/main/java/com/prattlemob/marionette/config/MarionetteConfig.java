@@ -27,6 +27,7 @@ public final class MarionetteConfig {
     private static final ModConfigSpec.ConfigValue<String> BIND_ADDRESS;
     private static final ModConfigSpec.IntValue MAX_OBSERVERS;
     private static final ModConfigSpec.IntValue HELLO_TIMEOUT;
+    private static final ModConfigSpec.IntValue PONG_TIMEOUT;
     private static final ModConfigSpec.IntValue RATE_DIVISOR;
     private static final ModConfigSpec.IntValue ENTITY_RADIUS;
     private static final ModConfigSpec.IntValue ENTITY_MAX_COUNT;
@@ -47,7 +48,7 @@ public final class MarionetteConfig {
                 .defineInRange("port", 24680, 1, 65535);
         BIND_ADDRESS = builder
                 .comment("Bind address. Non-loopback values are ignored and clamped to 127.0.0.1",
-                        "with a warning until the explicit opt-out gate ships (M5.1). (restart required)")
+                        "with a warning. Remote binding is unsupported. (restart required)")
                 .define("bindAddress", "127.0.0.1");
         MAX_OBSERVERS = builder
                 .comment("Maximum simultaneous read-only observer connections (role \"observer\");",
@@ -57,6 +58,8 @@ public final class MarionetteConfig {
                 .comment("Seconds a new connection may take to complete the hello handshake",
                         "before it is closed. (restart required)")
                 .defineInRange("helloTimeoutSeconds", 10, 1, 60);
+        PONG_TIMEOUT = builder.comment("Maximum seconds without a pong before disconnect and release. (restart required)")
+                .defineInRange("pongTimeoutSeconds", 5, 1, 60);
         builder.pop();
         builder.push("observation");
         RATE_DIVISOR = builder
@@ -98,6 +101,7 @@ public final class MarionetteConfig {
     public static volatile String bindAddress = "127.0.0.1";
     public static volatile int maxObservers = 2;
     public static volatile int helloTimeoutSeconds = 10;
+    public static volatile int pongTimeoutSeconds = 5;
     public static volatile int observationRateDivisor = 1;
     public static volatile int entityRadius = 32;
     public static volatile int entityMaxCount = 64;
@@ -126,18 +130,18 @@ public final class MarionetteConfig {
 
     /**
      * Clamp non-loopback (or unresolvable) bind addresses to 127.0.0.1.
-     * The explicit "I understand" opt-out for real non-loopback binding is
-     * M5.1's loopback-enforcement item (see docs/decisions.md).
+     * Resolve once and pass this exact address object to the bridge (D16).
      */
-    public static String resolveBindAddress(String configured) {
+    public static InetAddress resolveBindAddress(String configured) {
         try {
-            if (InetAddress.getByName(configured).isLoopbackAddress()) {
-                return configured;
-            }
+            InetAddress resolved = InetAddress.getByName(configured);
+            if (resolved.isLoopbackAddress()) return resolved;
         } catch (UnknownHostException e) {
             // unresolvable — fall through to clamp
         }
-        return "127.0.0.1";
+        Marionette.LOGGER.warn("Config bindAddress '{}' is not loopback or cannot be resolved; clamped to 127.0.0.1. Remote binding is unsupported.", configured);
+        try { return InetAddress.getByAddress(new byte[] {127, 0, 0, 1}); }
+        catch (UnknownHostException impossible) { throw new AssertionError(impossible); }
     }
 
     @SubscribeEvent
@@ -159,6 +163,7 @@ public final class MarionetteConfig {
         bindAddress = BIND_ADDRESS.get();
         maxObservers = MAX_OBSERVERS.get();
         helloTimeoutSeconds = HELLO_TIMEOUT.get();
+        pongTimeoutSeconds = PONG_TIMEOUT.get();
         observationRateDivisor = RATE_DIVISOR.get();
         entityRadius = ENTITY_RADIUS.get();
         entityMaxCount = ENTITY_MAX_COUNT.get();

@@ -407,11 +407,10 @@ To decide: GL readback point, encoding (e.g. JPEG), resolution/rate defaults,
 and same-socket binary frames vs. a secondary connection (secondary
 recommended so vision can never degrade the core tick-synced stream).
 
-## D12 — License — **Open, blocks release** (M9.2)
+## D12 — License — **Settled** (2026-10-03)
 
-MIT is provisional. Must be confirmed with the project owner before anything
-release-facing (Modrinth/CurseForge listings, tagged releases). Worth settling
-earlier if outside contributions arrive.
+The project owner confirmed MIT on 2026-10-03. This settles the license only;
+publication, tagged releases and package uploads still require explicit approval.
 
 ---
 
@@ -522,13 +521,13 @@ mod.
   `InetAddress` through when M5.1 hardens loopback enforcement.
 - Mod-version ↔ protocol-version relationship in the changelog policy — M9.2.
 
-## D14 — Published Python client — **Open, M2.5**
+## D14 — Published Python client — **Settled scope, publication gated** (2026-10-03)
 
+The owner selected the PyPI distribution `marionette-mc`, independent semantic
+versioning, protocol 2 support, and explicitly pinned development prereleases.
 Consumers require a pinned published package rather than copied examples or a
-local protocol shim. Decide distribution name, version scheme, supported protocol
-range, publication route (including prereleases) and release cadence. Packaging
-can proceed against the current contract; publication remains gated by D12 and
-explicit release authorization. Combined development does not settle the license.
+local shim. M2.5 implements packaging separately. Publication remains subject to
+explicit approval after build and review; confirming MIT does not authorize it.
 
 ## D15 — Cross-project coordination — **Settled** (2026-10-03)
 
@@ -537,3 +536,28 @@ A system coordinator may assign bounded upstream milestones and validate publish
 client compatibility. It does not import consumer policy into this public project.
 Product roadmap acceptance and end-to-end consumer acceptance are separate gates.
 A published Python client is an early deliverable, not deferred release documentation.
+
+## D16 — Development local trust and bridge safety — **Interim policy approved** (2026-10-03)
+
+The owner approved native no-Origin loopback clients for development. Reject all
+HTTP requests carrying an Origin header, including `null`, with HTTP 403 before
+WebSocket upgrade. This temporarily narrows D1's browser-dashboard rationale;
+shipped native Python observers/dashboard remain supported. No browser allowlist
+or remote access is introduced. Local processes are trusted without tokens;
+loopback and Origin filtering do not authenticate local users or processes.
+Authentication/provisioning remains unresolved and blocks release, including
+loopback-only release. Revisit browser support with that decision.
+
+M5.1a resolves the configured address once to an InetAddress, clamps non-loopback
+or unresolvable values to 127.0.0.1, and passes the same address object to Netty.
+No non-loopback opt-out exists. Bridge limits and overload behavior are normative
+in protocol/v1.md under `bridgeSafety`. Pong timeout defaults to five seconds;
+local panic defaults to rebindable F8. These emergency controls do not settle
+M5.1 human-precedence modes or per-mode focus-loss policy.
+
+The earlier M2.3 watermark described as a hard bound was insufficient for
+reliable replies and tasks waiting for the event loop. M5.1a reserves output
+bytes before scheduling writes, caps inbound work per connection, prioritizes
+release, and caps pending connections from TCP accept rather than only upgrade.
+The client checks safety at both tick and render boundaries, including paused
+screens; world exit severs the controller to invalidate stale commands.

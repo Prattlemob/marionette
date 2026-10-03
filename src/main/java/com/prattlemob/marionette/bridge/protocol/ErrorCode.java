@@ -7,6 +7,7 @@ package com.prattlemob.marionette.bridge.protocol;
  * decides that, not the code).
  */
 public enum ErrorCode {
+    OVERLOADED("overloaded", 1013),
     INVALID_JSON("invalid_json"),
     UNKNOWN_TYPE("unknown_type"),
     INVALID_FIELD("invalid_field"),

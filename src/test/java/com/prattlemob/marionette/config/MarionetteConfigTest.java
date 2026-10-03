@@ -9,22 +9,22 @@ import org.junit.jupiter.api.Test;
 class MarionetteConfigTest {
     @Test
     void loopbackAddressesPassThrough() {
-        assertEquals("127.0.0.1", MarionetteConfig.resolveBindAddress("127.0.0.1"));
-        assertEquals("localhost", MarionetteConfig.resolveBindAddress("localhost"));
-        assertEquals("::1", MarionetteConfig.resolveBindAddress("::1"));
-        assertEquals("127.0.0.53", MarionetteConfig.resolveBindAddress("127.0.0.53"));
+        assertEquals("127.0.0.1", MarionetteConfig.resolveBindAddress("127.0.0.1").getHostAddress());
+        assertTrue(MarionetteConfig.resolveBindAddress("localhost").isLoopbackAddress());
+        assertEquals("0:0:0:0:0:0:0:1", MarionetteConfig.resolveBindAddress("::1").getHostAddress());
+        assertEquals("127.0.0.53", MarionetteConfig.resolveBindAddress("127.0.0.53").getHostAddress());
     }
 
     @Test
     void nonLoopbackClampsToLoopback() {
-        assertEquals("127.0.0.1", MarionetteConfig.resolveBindAddress("0.0.0.0"));
-        assertEquals("127.0.0.1", MarionetteConfig.resolveBindAddress("192.168.1.10"));
-        assertEquals("127.0.0.1", MarionetteConfig.resolveBindAddress("8.8.8.8"));
+        assertEquals("127.0.0.1", MarionetteConfig.resolveBindAddress("0.0.0.0").getHostAddress());
+        assertEquals("127.0.0.1", MarionetteConfig.resolveBindAddress("192.168.1.10").getHostAddress());
+        assertEquals("127.0.0.1", MarionetteConfig.resolveBindAddress("8.8.8.8").getHostAddress());
     }
 
     @Test
     void unresolvableClampsToLoopback() {
-        assertEquals("127.0.0.1", MarionetteConfig.resolveBindAddress("not a hostname!"));
+        assertEquals("127.0.0.1", MarionetteConfig.resolveBindAddress("not a hostname!").getHostAddress());
     }
 
     @Test
