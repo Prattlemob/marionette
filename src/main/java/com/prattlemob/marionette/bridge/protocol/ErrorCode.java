@@ -1,7 +1,7 @@
 package com.prattlemob.marionette.bridge.protocol;
 
 /**
- * Protocol v1 error codes (see protocol/v1.md). Inherently fatal codes
+ * Protocol v2 error codes (see protocol/v1.md). Inherently fatal codes
  * carry the WebSocket close code sent after the error frame; the others
  * are fatal only when they occur during the handshake (the session
  * decides that, not the code).

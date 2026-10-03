@@ -78,6 +78,48 @@ message and you have the world. Bandwidth is a non-issue at these sizes (a few
 KB of JSON at 20 Hz on loopback). Full pub/sub channels would add protocol
 surface with no payoff for the payloads that live in the frame.
 
+### M4.1 implementation and verification (2026-10-03)
+
+Protocol **2** replaces flat observations with `player` at the frame root;
+`protocol/v1.md` remains the canonical contract path. Protocol 1 is rejected
+cleanly rather than maintaining two observation shapes. All reference clients
+now offer version 2. This follows D6's existing breaking-change rule.
+
+Each session defaults to `["player"]`; hello or configure may replace its
+`sections` mask, including `[]` for cadence-only frames. Unimplemented section
+names are rejected until their capabilities ship. The client samples player
+state once per due tick and serializes once per distinct due mask. Network
+code receives only JSON snapshots; it never accesses Minecraft state.
+
+The player schema reports client-visible data. Food saturation and total XP
+can differ from server bookkeeping; neither is inferred from other fields.
+Effects use registry ids, tick durations (-1 for infinite), and zero-based
+amplifiers, sorted by id for stable output.
+
+Verification used a rendered `runClientDemo` in an isolated copy of the test
+world, with temporary server setup instrumentation outside the repository.
+Control commands and observations used the normal WebSocket bridge:
+
+- Sprinting became true with nonzero velocity; sneak was observed separately.
+- A nine-block fall reduced observed health from 20 to 14, matching an
+  independent client-state read after landing.
+- Submersion set `inWater` and reduced air below 295 ticks.
+- Speed II reported amplifier 1 and decreasing duration; infinite night vision
+  reported duration -1. XP level changed from 0 to 3.
+- Smoothed rotation reported an intermediate yaw near 8 degrees before reaching
+  90 degrees, rather than reporting the target immediately.
+- An observer switched from empty frames to player frames at divisor 5 and
+  back, independently of the controller. Invalid combined cadence/mask changes
+  left both settings unchanged. A protocol-1 hello returned `supported: [2]`.
+- The committed dashboard rendered live values from that client.
+
+Headless tests cover strict mask parsing, omitted versus empty selection,
+handshake defaults, v1 rejection before admission, per-session mask/cadence
+isolation, and lazy shared sampling. Build, Python syntax and diff checks pass.
+Sleeping/on-fire transitions, multiplayer synchronization, and a fresh long
+backpressure soak were not separately tested. M3.3's physical alt-tab and human
+animation acceptance remain pending. No temporary harness or world is packaged.
+
 ## D3 — Block scan: on-demand, JSON palette + indices — **Settled**
 
 - **On-demand request/response**, not a periodic stream — terrain doesn't

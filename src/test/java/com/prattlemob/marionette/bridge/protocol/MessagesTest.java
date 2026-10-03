@@ -68,15 +68,15 @@ class MessagesTest {
     }
 
     @Test
-    void observationMatchesTheV1Shape() {
-        JsonObject frame = parse(Messages.observation(1234, 12.5, 64.0, -8.25, 90.0F, 0.0F));
+    void observationUsesSelectedCompositeSections() {
+        JsonObject player = new JsonObject();
+        player.addProperty("x", 12.5);
+        JsonObject frame = parse(Messages.observation(1234, player));
         assertEquals("observation", frame.get("type").getAsString());
         assertEquals(1234, frame.get("tick").getAsLong());
-        assertEquals(12.5, frame.get("x").getAsDouble());
-        assertEquals(64.0, frame.get("y").getAsDouble());
-        assertEquals(-8.25, frame.get("z").getAsDouble());
-        assertEquals(90.0F, frame.get("yaw").getAsFloat());
-        assertEquals(0.0F, frame.get("pitch").getAsFloat());
+        assertEquals(player, frame.getAsJsonObject("player"));
+        assertFalse(frame.has("x"));
+        assertEquals(2, parse(Messages.observation(1234, null)).size());
     }
 
     @Test

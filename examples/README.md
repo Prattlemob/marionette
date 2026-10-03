@@ -1,10 +1,12 @@
 # Marionette examples
 
-Reference agents speaking the current protocol
+Reference agents speaking protocol 2
 ([`protocol/v1.md`](../protocol/v1.md)). All need Python 3.11+
 and `pip install websockets`, plus a running Marionette client that has
 joined a world.
 
+- `dashboard.py` — M4.1: read-only live player state, effects, and movement flags.
+  Run `python examples/dashboard.py [port]`; Ctrl-C exits without changing controls.
 - `probe.py` — connect, print observations, hold forward for 3 s, release.
 - `walk_square.py` — walk a ~5-block square and report the return error.
   Also the target for the disconnect-safety test: `kill -9` it mid-walk and

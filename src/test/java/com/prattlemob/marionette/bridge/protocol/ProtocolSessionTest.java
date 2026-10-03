@@ -13,7 +13,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 class ProtocolSessionTest {
-    private static final String HELLO = "{\"type\": \"hello\", \"versions\": [1]}";
+    private static final String HELLO = "{\"type\": \"hello\", \"versions\": [2]}";
 
     private final ProtocolSession session = new ProtocolSession("test-version");
 
@@ -34,7 +34,7 @@ class ProtocolSessionTest {
         assertEquals(1, actions.size());
         JsonObject reply = json(actions.get(0));
         assertEquals("hello", reply.get("type").getAsString());
-        assertEquals(1, reply.get("version").getAsInt());
+        assertEquals(2, reply.get("version").getAsInt());
         assertEquals("test-version", reply.get("mod").getAsString());
         assertTrue(reply.get("capabilities").getAsJsonObject().get("configure").getAsBoolean());
         assertTrue(session.isActive());
@@ -43,15 +43,15 @@ class ProtocolSessionTest {
     @Test
     void helloSelectsTheSharedVersionFromMany() {
         List<ProtocolSession.Action> actions =
-                session.onFrame("{\"type\": \"hello\", \"versions\": [0, 1, 99]}");
-        assertEquals(1, json(actions.get(0)).get("version").getAsInt());
+                session.onFrame("{\"type\": \"hello\", \"versions\": [0, 2, 99]}");
+        assertEquals(2, json(actions.get(0)).get("version").getAsInt());
         assertTrue(session.isActive());
     }
 
     @Test
     void helloEchoesId() {
         List<ProtocolSession.Action> actions =
-                session.onFrame("{\"type\": \"hello\", \"versions\": [1], \"id\": 7}");
+                session.onFrame("{\"type\": \"hello\", \"versions\": [2], \"id\": 7}");
         assertEquals(7, json(actions.get(0)).get("id").getAsInt());
     }
 
@@ -62,7 +62,7 @@ class ProtocolSessionTest {
         assertEquals(2, actions.size());
         JsonObject error = json(actions.get(0));
         assertEquals("unsupported_version", error.get("code").getAsString());
-        assertEquals(1, error.get("supported").getAsJsonArray().get(0).getAsInt());
+        assertEquals(2, error.get("supported").getAsJsonArray().get(0).getAsInt());
         ProtocolSession.Action.Close close =
                 assertInstanceOf(ProtocolSession.Action.Close.class, actions.get(1));
         assertEquals(1002, close.code());
@@ -72,7 +72,7 @@ class ProtocolSessionTest {
     @Test
     void observerHelloActivatesWithObserverRole() {
         List<ProtocolSession.Action> actions = session.onFrame(
-                "{\"type\": \"hello\", \"versions\": [1], \"role\": \"observer\"}");
+                "{\"type\": \"hello\", \"versions\": [2], \"role\": \"observer\"}");
         assertEquals("hello", json(actions.get(0)).get("type").getAsString());
         assertTrue(session.isActive());
         assertEquals(Role.OBSERVER, session.role());
@@ -87,7 +87,7 @@ class ProtocolSessionTest {
     @Test
     void reservedDirectorRoleSendsErrorThenCloses1002() {
         List<ProtocolSession.Action> actions = session.onFrame(
-                "{\"type\": \"hello\", \"versions\": [1], \"role\": \"director\"}");
+                "{\"type\": \"hello\", \"versions\": [2], \"role\": \"director\"}");
         assertEquals(2, actions.size());
         assertEquals("unsupported_role", json(actions.get(0)).get("code").getAsString());
         assertEquals(1002, assertInstanceOf(ProtocolSession.Action.Close.class, actions.get(1)).code());
@@ -98,7 +98,7 @@ class ProtocolSessionTest {
     void refusedAdmissionSendsTheRefusalCodeThenCloses1013() {
         ProtocolSession refused = new ProtocolSession("test-version",
                 role -> ErrorCode.CONTROLLER_ATTACHED);
-        String frame = "{\"type\": \"hello\", \"versions\": [1], \"id\": 3}";
+        String frame = "{\"type\": \"hello\", \"versions\": [2], \"id\": 3}";
         List<ProtocolSession.Action> actions = refused.onFrame(frame);
         assertEquals(2, actions.size());
         JsonObject error = json(actions.get(0));
@@ -112,7 +112,7 @@ class ProtocolSessionTest {
 
     @Test
     void observerActuationCommandsAreRefusedNonFatally() {
-        session.onFrame("{\"type\": \"hello\", \"versions\": [1], \"role\": \"observer\"}");
+        session.onFrame("{\"type\": \"hello\", \"versions\": [2], \"role\": \"observer\"}");
         for (String frame : List.of(
                 "{\"type\": \"input\", \"forward\": true, \"id\": 9}",
                 "{\"type\": \"look\", \"yaw\": 0, \"pitch\": 0}",
@@ -128,7 +128,7 @@ class ProtocolSessionTest {
 
     @Test
     void observerRoleForbiddenEchoesTheEnvelopeId() {
-        session.onFrame("{\"type\": \"hello\", \"versions\": [1], \"role\": \"observer\"}");
+        session.onFrame("{\"type\": \"hello\", \"versions\": [2], \"role\": \"observer\"}");
         List<ProtocolSession.Action> actions =
                 session.onFrame("{\"type\": \"input\", \"forward\": true, \"id\": 9}");
         assertEquals(9, json(actions.get(0)).get("id").getAsInt());
@@ -136,7 +136,7 @@ class ProtocolSessionTest {
 
     @Test
     void observerConfigureStillEnqueues() {
-        session.onFrame("{\"type\": \"hello\", \"versions\": [1], \"role\": \"observer\"}");
+        session.onFrame("{\"type\": \"hello\", \"versions\": [2], \"role\": \"observer\"}");
         List<ProtocolSession.Action> actions =
                 session.onFrame("{\"type\": \"configure\", \"rateDivisor\": 40}");
         assertInstanceOf(AgentCommand.Configure.class,
@@ -227,7 +227,7 @@ class ProtocolSessionTest {
     @Test
     void closedSessionIgnoresFramesButRemembersHello() {
         ProtocolSession session = new ProtocolSession("1.0");
-        session.onFrame("{\"type\": \"hello\", \"versions\": [1]}");
+        session.onFrame("{\"type\": \"hello\", \"versions\": [2]}");
         assertTrue(session.isActive());
         session.close();
         assertFalse(session.isActive());

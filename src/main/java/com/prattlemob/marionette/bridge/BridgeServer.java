@@ -2,8 +2,11 @@ package com.prattlemob.marionette.bridge;
 
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ScheduledFuture;
@@ -13,7 +16,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
+import com.google.gson.JsonObject;
 import com.prattlemob.marionette.bridge.protocol.AgentCommand;
+import com.prattlemob.marionette.bridge.protocol.Messages;
 import com.prattlemob.marionette.bridge.protocol.ErrorCode;
 import com.prattlemob.marionette.bridge.protocol.ProtocolSession;
 import com.prattlemob.marionette.bridge.protocol.Role;
@@ -46,7 +51,7 @@ import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
 import io.netty.util.concurrent.DefaultThreadFactory;
 
 /**
- * Localhost-only WebSocket transport for protocol v1. All protocol logic
+ * Localhost-only WebSocket transport for protocol v2. All protocol logic
  * lives in {@link ProtocolSession}; this class only moves frames and
  * executes the session's instructions. One controller connection, plus up
  * to {@code maxObservers} observers, at a time. Admission happens at
@@ -186,9 +191,8 @@ public final class BridgeServer {
     /**
      * Tick-cadence observation send: each ready connection receives the
      * frame only on ticks its effective divisor divides. The frame is
-     * serialized at most once, and not at all when nobody is due. (When
-     * D2 section masks arrive in M4.1, recipients with different masks
-     * will need per-mask serialization — group by mask then.)
+     * serialized at most once, and not at all when nobody is due.
+     * For composite player frames use sendPlayerObservation instead.
      */
     public void sendObservation(long tick, int defaultDivisor, Supplier<String> frame) {
         String json = null;
@@ -198,6 +202,25 @@ public final class BridgeServer {
             }
             if (json == null) {
                 json = frame.get();
+            }
+            connection.sendObservation(json);
+        }
+    }
+
+    /** Serialize once per due mask; sample player data at most once per tick. */
+    public void sendPlayerObservation(long tick, int defaultDivisor,
+                                     Supplier<JsonObject> player) {
+        Map<Set<String>, String> frames = new HashMap<>();
+        JsonObject snapshot = null;
+        for (AgentConnection connection : (Iterable<AgentConnection>) connections()::iterator) {
+            if (!connection.ready() || tick % connection.effectiveDivisor(defaultDivisor) != 0) continue;
+            var mask = connection.sections();
+            String json = frames.get(mask);
+            if (json == null) {
+                if (mask.contains("player") && snapshot == null) snapshot = player.get();
+                json = Messages.observation(
+                        tick, mask.contains("player") ? snapshot : null);
+                frames.put(mask, json);
             }
             connection.sendObservation(json);
         }
@@ -327,6 +350,9 @@ public final class BridgeServer {
                             ctx.writeAndFlush(new CloseWebSocketFrame(close.code(), close.reason()))
                                     .addListener(ChannelFutureListener.CLOSE);
                 }
+            }
+            if (!connection.ready() && connection.session().isActive()) {
+                connection.setSections(connection.session().sections());
             }
             connection.setReady(connection.session().isActive());
         }

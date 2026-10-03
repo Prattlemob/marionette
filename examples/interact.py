@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Marionette M3.3 demo (protocol v1): attack, use, and hotbar.
+"""Marionette M3.3 demo (protocol v2): attack, use, and hotbar.
 
 The DoD sequence, visible in the rendered client: select the pickaxe
 slot, look down at the block in front, hold attack until it breaks,
@@ -42,7 +42,7 @@ async def wait_ticks(ws, ticks):
 
 async def main():
     async with websockets.connect(f"ws://127.0.0.1:{PORT}/") as ws:
-        await send(ws, type="hello", versions=[1], role="controller")
+        await send(ws, type="hello", versions=[2], role="controller")
         reply = json.loads(await ws.recv())
         assert reply.get("type") == "hello", reply
         if not reply.get("capabilities", {}).get("interact"):
@@ -51,7 +51,7 @@ async def main():
 
         print("aiming at the block in front of the player's feet")
         obs = await next_observation(ws)
-        await send(ws, type="look", mode="smooth", yaw=obs["yaw"], pitch=55.0)
+        await send(ws, type="look", mode="smooth", yaw=obs["player"]["yaw"], pitch=55.0)
         await wait_ticks(ws, 30)
 
         print("slot 0 (pickaxe); holding attack to mine to completion")

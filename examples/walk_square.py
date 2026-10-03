@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Marionette walking-skeleton demo (protocol v1): walk a square.
+"""Marionette walking-skeleton demo (protocol v2): walk a square.
 
 Walks four ~5-block sides with 90° turns and reports how far from the
 start the player ended up. Doubles as the disconnect-safety test target:
@@ -29,13 +29,13 @@ async def next_observation(ws):
 
 async def main():
     async with websockets.connect(f"ws://127.0.0.1:{PORT}/") as ws:
-        await ws.send(json.dumps({"type": "hello", "versions": [1], "role": "controller"}))
+        await ws.send(json.dumps({"type": "hello", "versions": [2], "role": "controller"}))
         hello = json.loads(await ws.recv())
         assert hello.get("type") == "hello", f"handshake rejected: {hello}"
 
         start = await next_observation(ws)
-        yaw = start["yaw"]
-        print(f"start ({start['x']:.1f}, {start['z']:.1f}) yaw {yaw:.0f}")
+        yaw = start["player"]["yaw"]
+        print(f"start ({start['player']['x']:.1f}, {start['player']['z']:.1f}) yaw {yaw:.0f}")
 
         for side in range(4):
             await ws.send(json.dumps({"type": "look", "yaw": yaw, "pitch": 0.0}))
@@ -43,7 +43,7 @@ async def main():
             await ws.send(json.dumps({"type": "input", "forward": True}))
             while True:
                 obs = await next_observation(ws)
-                walked = math.dist((obs["x"], obs["z"]), (origin["x"], origin["z"]))
+                walked = math.dist((obs["player"]["x"], obs["player"]["z"]), (origin["player"]["x"], origin["player"]["z"]))
                 if walked >= SIDE_BLOCKS:
                     break
             await ws.send(json.dumps({"type": "input", "forward": False}))
@@ -52,7 +52,7 @@ async def main():
 
         await asyncio.sleep(0.5)  # let momentum settle
         end = await next_observation(ws)
-        error = math.dist((end["x"], end["z"]), (start["x"], start["z"]))
+        error = math.dist((end["player"]["x"], end["player"]["z"]), (start["player"]["x"], start["player"]["z"]))
         print(f"finished {error:.1f} blocks from start")
         await ws.send(json.dumps({"type": "release"}))
 

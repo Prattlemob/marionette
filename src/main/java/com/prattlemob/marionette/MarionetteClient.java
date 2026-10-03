@@ -18,6 +18,8 @@ import com.prattlemob.marionette.control.MixinInputApplier;
 import com.prattlemob.marionette.control.Rotation;
 import com.prattlemob.marionette.control.SmoothingModel;
 
+import com.prattlemob.marionette.observation.PlayerObservation;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.player.LocalPlayer;
@@ -320,6 +322,7 @@ public class MarionetteClient {
                 cameraSmoother.cancel();
             }
             case AgentCommand.Configure configure -> {
+                if (configure.sections() != null) received.from().setSections(configure.sections());
                 if (configure.rateDivisor() != null) {
                     received.from().setRateDivisor(configure.rateDivisor());
                     logNormal("Observation rate divisor set to {} for a {} session",
@@ -404,10 +407,8 @@ public class MarionetteClient {
                     player.getX(), player.getY(), player.getZ(), player.getYRot()));
         }
         if (bridge != null && inWorld && player != null) {
-            bridge.sendObservation(ticksInWorld, MarionetteConfig.observationRateDivisor,
-                    () -> Messages.observation(ticksInWorld,
-                            player.getX(), player.getY(), player.getZ(),
-                            player.getYRot(), player.getXRot()));
+            bridge.sendPlayerObservation(ticksInWorld, MarionetteConfig.observationRateDivisor,
+                    () -> PlayerObservation.capture(player));
         }
     }
 

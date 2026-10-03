@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Marionette M3.1 demo (protocol v1): the complete movement set.
+"""Marionette M3.1 demo (protocol v2): the complete movement set.
 
 Runs every held control and the marquee combinations, measuring
 horizontal speed from observations so each mode is self-evident:
@@ -70,19 +70,19 @@ async def measure_speed(ws, seconds):
         end = await next_observation(ws)
         if end["tick"] - start["tick"] >= seconds * 20:
             break
-    dist = math.dist((end["x"], end["z"]), (start["x"], start["z"]))
+    dist = math.dist((end["player"]["x"], end["player"]["z"]), (start["player"]["x"], start["player"]["z"]))
     return dist / ((end["tick"] - start["tick"]) / 20.0)
 
 
 async def count_hops(ws, seconds):
     """Rising y edges (jump take-offs) over roughly the next `seconds`."""
     first = await sync(ws)
-    base, hops, airborne = first["y"], 0, False
+    base, hops, airborne = first["player"]["y"], 0, False
     while True:
         obs = await next_observation(ws)
         if obs["tick"] - first["tick"] >= seconds * 20:
             return hops
-        up = obs["y"] > base + 0.01
+        up = obs["player"]["y"] > base + 0.01
         if up and not airborne:
             hops += 1
         airborne = up
@@ -90,14 +90,14 @@ async def count_hops(ws, seconds):
 
 async def main():
     async with websockets.connect(f"ws://127.0.0.1:{PORT}/") as ws:
-        await send(ws, type="hello", versions=[1], role="controller")
+        await send(ws, type="hello", versions=[2], role="controller")
         hello = json.loads(await ws.recv())
         assert hello.get("type") == "hello", f"handshake rejected: {hello}"
         assert hello.get("capabilities", {}).get("tap"), "mod lacks tap capability"
 
         # Pin the heading so every leg is comparable.
         start = await next_observation(ws)
-        await send(ws, type="look", yaw=start["yaw"], pitch=0.0)
+        await send(ws, type="look", yaw=start["player"]["yaw"], pitch=0.0)
 
         if SNEAK_EDGE:
             print("sneak-edge: sneaking forward for 4 s — player must stop at the lip")
@@ -106,7 +106,7 @@ async def main():
             await asyncio.sleep(4.0)
             after = await sync(ws)
             await send(ws, type="release")
-            dropped = before["y"] - after["y"]
+            dropped = before["player"]["y"] - after["player"]["y"]
             print(f"y change: {dropped:.2f} over {after['tick'] - before['tick']} ticks (expect ~0: did not fall)")
             return
 

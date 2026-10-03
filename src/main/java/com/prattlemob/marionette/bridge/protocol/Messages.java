@@ -22,6 +22,7 @@ public final class Messages {
         reply.addProperty("version", version);
         JsonObject capabilities = new JsonObject();
         capabilities.addProperty("configure", true);
+        capabilities.addProperty("playerState", true);
         capabilities.addProperty("tap", true);
         capabilities.addProperty("camera", true);
         capabilities.addProperty("observer", true);
@@ -55,15 +56,11 @@ public final class Messages {
         return error.toString();
     }
 
-    public static String observation(long tick, double x, double y, double z, float yaw, float pitch) {
+    public static String observation(long tick, JsonObject player) {
         JsonObject frame = new JsonObject();
         frame.addProperty("type", "observation");
         frame.addProperty("tick", tick);
-        frame.addProperty("x", x);
-        frame.addProperty("y", y);
-        frame.addProperty("z", z);
-        frame.addProperty("yaw", yaw);
-        frame.addProperty("pitch", pitch);
+        if (player != null) frame.add("player", player);
         return frame.toString();
     }
 

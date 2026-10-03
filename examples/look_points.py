@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Marionette M3.2 demo (protocol v1): camera modes and smoothing.
+"""Marionette M3.2 demo (protocol v2): camera modes and smoothing.
 
 Looks at five world points around the player with mode "smooth" —
 producing the D5 experiment's pan footage — then shows the contrast
@@ -73,8 +73,8 @@ async def wait_converged(ws):
         if time.monotonic() - start > PAN_TIMEOUT:
             raise RuntimeError("pan did not converge within %.0f s" % PAN_TIMEOUT)
         obs = await next_observation(ws)
-        if (abs(obs["yaw"] - last["yaw"]) <= SETTLE_EPSILON
-                and abs(obs["pitch"] - last["pitch"]) <= SETTLE_EPSILON):
+        if (abs(obs["player"]["yaw"] - last["player"]["yaw"]) <= SETTLE_EPSILON
+                and abs(obs["player"]["pitch"] - last["player"]["pitch"]) <= SETTLE_EPSILON):
             stable += 1
         else:
             stable = 0
@@ -84,14 +84,14 @@ async def wait_converged(ws):
 
 async def main():
     async with websockets.connect(f"ws://127.0.0.1:{PORT}/") as ws:
-        await send(ws, type="hello", versions=[1])
+        await send(ws, type="hello", versions=[2])
         reply = json.loads(await ws.recv())
         assert reply["type"] == "hello", reply
         if not reply["capabilities"].get("camera"):
             sys.exit("mod does not advertise the camera capability")
 
         obs = await sync(ws)
-        x, y, z = obs["x"], obs["y"], obs["z"]
+        x, y, z = obs["player"]["x"], obs["player"]["y"], obs["player"]["z"]
         eye = y + EYE_HEIGHT
         # Five points around the player: E, NE-high, N, W-low, S.
         points = [
@@ -105,29 +105,29 @@ async def main():
         for i, (px, py, pz) in enumerate(points):
             await send(ws, type="look", mode="smooth", x=px, y=py, z=pz)
             obs, took = await wait_converged(ws)
-            print(f"  point {i + 1}: converged at yaw={obs['yaw']:.1f} "
-                  f"pitch={obs['pitch']:.1f} in {took:.2f}s")
+            print(f"  point {i + 1}: converged at yaw={obs['player']['yaw']:.1f} "
+                  f"pitch={obs['player']['pitch']:.1f} in {took:.2f}s")
 
         print("speed multiplier:")
-        await send(ws, type="look", mode="smooth", yaw=obs["yaw"] + 90.0, pitch=0.0)
+        await send(ws, type="look", mode="smooth", yaw=obs["player"]["yaw"] + 90.0, pitch=0.0)
         _, slow = await wait_converged(ws)
-        await send(ws, type="look", mode="smooth", yaw=obs["yaw"], pitch=0.0, speed=2.0)
+        await send(ws, type="look", mode="smooth", yaw=obs["player"]["yaw"], pitch=0.0, speed=2.0)
         _, fast = await wait_converged(ws)
         print(f"  90-degree pan: speed 1.0 -> {slow:.2f}s, speed 2.0 -> {fast:.2f}s")
         assert fast < slow, "speed 2.0 was not faster"
 
         print("instant mode still snaps:")
         before = await sync(ws)
-        await send(ws, type="look", yaw=before["yaw"] + 120.0, pitch=0.0)
+        await send(ws, type="look", yaw=before["player"]["yaw"] + 120.0, pitch=0.0)
         after, took = await wait_converged(ws)
-        print(f"  snapped {after['yaw'] - before['yaw']:+.1f} degrees in {took:.2f}s")
+        print(f"  snapped {after['player']['yaw'] - before['player']['yaw']:+.1f} degrees in {took:.2f}s")
 
         print("delta mode:")
         before = await sync(ws)
         for _ in range(4):
             await send(ws, type="look", mode="delta", yaw=15.0, pitch=0.0)
         after, _ = await wait_converged(ws)
-        print(f"  four +15 deltas moved yaw {after['yaw'] - before['yaw']:+.1f} degrees")
+        print(f"  four +15 deltas moved yaw {after['player']['yaw'] - before['player']['yaw']:+.1f} degrees")
 
         await send(ws, type="release")
         print("done")

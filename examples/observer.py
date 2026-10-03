@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Marionette read-only observer example (protocol v1, M2.4).
+"""Marionette read-only observer example (protocol v2, M2.4).
 
 Connects with role "observer", slows its own stream to every 40th tick
 (the controller's cadence is unaffected — divisors are per connection),
@@ -34,7 +34,7 @@ async def watch(ws, seconds):
 
 async def main():
     async with websockets.connect(f"ws://127.0.0.1:{PORT}/") as ws:
-        await ws.send(json.dumps({"type": "hello", "versions": [1], "role": "observer"}))
+        await ws.send(json.dumps({"type": "hello", "versions": [2], "role": "observer"}))
         hello = json.loads(await ws.recv())
         assert hello.get("type") == "hello", f"handshake rejected: {hello}"
         print(f"observing: protocol {hello['version']}, mod {hello['mod']}")

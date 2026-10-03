@@ -41,7 +41,7 @@ class InventoryClient:
 
 async def run(port, chest, animated=True):
     async with websockets.connect(f"ws://127.0.0.1:{port}/") as ws:
-        await ws.send(json.dumps(dict(type="hello", versions=[1], role="controller")))
+        await ws.send(json.dumps(dict(type="hello", versions=[2], role="controller")))
         hello = json.loads(await ws.recv())
         if not hello.get("capabilities", {}).get("inventory"):
             raise RuntimeError(f"Inventory capability unavailable: {hello}")

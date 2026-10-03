@@ -21,7 +21,7 @@ Marionette aims to provide:
 
 ## Project status
 
-**Protocol v1, bridge hardening, movement, camera smoothing, attack/use/hotbar control, and inventory/container actions are implemented.** An external script can drive the rendered player over a localhost WebSocket, with read-only observers alongside the controller — see [examples/](examples/) for working clients. See [ROADMAP.md](ROADMAP.md) for verification status and upcoming player observation work (M4.1).
+**Protocol 2, bridge hardening, movement, camera smoothing, attack/use/hotbar control, inventory/container actions, and player observations are implemented.** An external script can drive the rendered player over a localhost WebSocket, with read-only observers alongside the controller — see [examples/](examples/) for working clients. See [ROADMAP.md](ROADMAP.md) for verification status and upcoming event work (M4.6).
 
 - The implementation plan lives in [ROADMAP.md](ROADMAP.md) — phases, milestones, and definitions of done.
 - Design decisions (settled, experiment-gated, and still open) are recorded in [docs/decisions.md](docs/decisions.md). Highlights: the transport is a localhost WebSocket carrying JSON; the core is client-only with an optional server component later; [Baritone](https://github.com/cabaletta/baritone) is planned as an optional (never bundled) integration for high-level navigation.
@@ -119,7 +119,7 @@ Notes:
 
 ## Protocol
 
-The current wire contract is the throwaway [v0 draft](protocol/v0-draft.md); it will be replaced by protocol v1 in Phase 2. The stable, documented contract will be specified in [protocol/](protocol/), so that agents in any language can target it.
+The current wire contract is [protocol 2](protocol/v1.md) (canonical document path retained). Protocol 1 clients must offer version 2 and read position/rotation from `observation.player`. See [examples/dashboard.py](examples/dashboard.py) for a live read-only player dashboard.
 
 ## License
 

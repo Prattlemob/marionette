@@ -1,17 +1,18 @@
 package com.prattlemob.marionette.bridge.protocol;
 
 import java.util.List;
+import java.util.Set;
 
 import com.google.gson.JsonPrimitive;
 
 /**
- * Per-connection protocol v1 state machine: AWAITING_HELLO → ACTIVE →
+ * Per-connection protocol v2 state machine: AWAITING_HELLO → ACTIVE →
  * CLOSED. Transport-neutral: consumes raw text frames, returns
  * instructions for the transport to execute in order. Confined to the
  * single network thread; never touches game state.
  */
 public final class ProtocolSession {
-    public static final int PROTOCOL_VERSION = 1;
+    public static final int PROTOCOL_VERSION = 2;
 
     /** One transport instruction; execute in returned order. */
     public sealed interface Action {
@@ -38,6 +39,9 @@ public final class ProtocolSession {
     private State state = State.AWAITING_HELLO;
     private boolean helloCompleted;
     private Role role;
+    private Set<String> sections = Set.of("player");
+
+    public Set<String> sections() { return sections; }
 
     public ProtocolSession(String modVersion) {
         this(modVersion, r -> null);
@@ -106,6 +110,7 @@ public final class ProtocolSession {
                             hello.id(), text)),
                     new Action.Close(refusal.closeCode(), refusal.wire()));
         }
+        if (hello.sections() != null) sections = hello.sections();
         role = requested;
         state = State.ACTIVE;
         helloCompleted = true;

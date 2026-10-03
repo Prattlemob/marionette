@@ -28,7 +28,7 @@ import com.google.gson.JsonParser;
 import com.prattlemob.marionette.bridge.protocol.AgentCommand;
 
 class BridgeServerTest {
-    private static final String HELLO = "{\"type\": \"hello\", \"versions\": [1]}";
+    private static final String HELLO = "{\"type\": \"hello\", \"versions\": [2]}";
 
     private BridgeServer server;
 
@@ -133,8 +133,53 @@ class BridgeServerTest {
         return client;
     }
 
+    @Test
+    void masksAreIndependentAndSnapshotIsLazyAndShared() throws Exception {
+        var samples = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.function.Supplier<JsonObject> snapshot = () -> {
+            samples.incrementAndGet();
+            JsonObject player = new JsonObject();
+            player.addProperty("health", 17);
+            return player;
+        };
+        server.sendPlayerObservation(1, 1, snapshot);
+        assertEquals(0, samples.get());
+        TestClient controller = connectAndHello();
+        TestClient observer = TestClient.connect(server.port());
+        observer.send("""
+                {"type":"hello","versions":[2],"role":"observer","sections":[]}
+                """);
+        observer.awaitMessage();
+        // Drain a command to establish readiness after hello and obtain its connection.
+        observer.send("""
+                {"type":"configure","sections":["player"],"rateDivisor":2}
+                """);
+        List<BridgeServer.Received> commands = new java.util.ArrayList<>();
+        await(() -> { commands.addAll(server.drainCommands()); return !commands.isEmpty(); });
+        var connection = commands.getFirst().from();
+        server.sendPlayerObservation(1, 1, snapshot);
+        assertTrue(JsonParser.parseString(controller.awaitMessage()).getAsJsonObject().has("player"));
+        assertFalse(JsonParser.parseString(observer.awaitMessage()).getAsJsonObject().has("player"));
+        assertEquals(1, samples.get());
+        var settings = (AgentCommand.Configure) commands.getFirst().command();
+        connection.setSections(settings.sections());
+        connection.setRateDivisor(settings.rateDivisor());
+        server.sendPlayerObservation(2, 1, snapshot);
+        assertEquals(controller.awaitMessage(), observer.awaitMessage());
+        assertEquals(2, samples.get(), "both connections must share one snapshot");
+        server.sendPlayerObservation(3, 1, snapshot);
+        controller.awaitMessage();
+        assertTrue(observer.messages.isEmpty(), "observer cadence must stay independent");
+        connection.setSections(java.util.Set.of());
+        controller.ws.abort();
+        await(server::pollDisconnected);
+        server.sendPlayerObservation(4, 1, snapshot);
+        assertEquals(2, JsonParser.parseString(observer.awaitMessage()).getAsJsonObject().size());
+        assertEquals(3, samples.get(), "empty-only recipients must not sample game state");
+    }
+
     private static final String OBSERVER_HELLO =
-            "{\"type\": \"hello\", \"versions\": [1], \"role\": \"observer\"}";
+            "{\"type\": \"hello\", \"versions\": [2], \"role\": \"observer\"}";
 
     private TestClient connectObserver() throws Exception {
         TestClient client = TestClient.connect(server.port());
@@ -151,7 +196,7 @@ class BridgeServerTest {
         client.send(HELLO);
         JsonObject reply = JsonParser.parseString(client.awaitMessage()).getAsJsonObject();
         assertEquals("hello", reply.get("type").getAsString());
-        assertEquals(1, reply.get("version").getAsInt());
+        assertEquals(2, reply.get("version").getAsInt());
         assertTrue(reply.get("capabilities").getAsJsonObject().get("configure").getAsBoolean());
         assertEquals("test-version", reply.get("mod").getAsString());
         await(server::hasController);
@@ -173,7 +218,7 @@ class BridgeServerTest {
         client.send("{\"type\": \"hello\", \"versions\": [99]}");
         JsonObject error = JsonParser.parseString(client.awaitMessage()).getAsJsonObject();
         assertEquals("unsupported_version", error.get("code").getAsString());
-        assertEquals(1, error.get("supported").getAsJsonArray().get(0).getAsInt());
+        assertEquals(2, error.get("supported").getAsJsonArray().get(0).getAsInt());
         assertEquals(1002, (int) client.closeCode.get(5, TimeUnit.SECONDS));
     }
 
@@ -267,7 +312,7 @@ class BridgeServerTest {
         // Deterministic ordering: the controller slot frees only in
         // channelInactive, so once a new connection completes hello, the
         // probe's close has been fully processed.
-        TestClient[] next = new TestClient[1];
+        TestClient[] next = new TestClient[2];
         await(() -> {
             try {
                 next[0] = connectAndHello();

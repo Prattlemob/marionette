@@ -6,7 +6,7 @@ language target that document, not the mod's source.
 
 ## Versioning
 
-- The protocol version is a **single integer** (currently 1). It bumps
+- The protocol version is a **single integer** (currently 2). It bumps
   **only on breaking changes**: removing or renaming a field or message,
   changing a type or semantic, tightening validation (D6).
 - Everything additive ships as **capability flags** in the `hello` reply
@@ -31,7 +31,9 @@ language target that document, not the mod's source.
 
 ## History
 
-- **v1** ([v1.md](v1.md)) — current. Envelope with reserved `type`/`id`,
+- **v2** ([v1.md](v1.md), canonical path retained) — current. Composite
+  observations and per-session section selection; flat v1 frames retired.
+- **v1** — superseded. Envelope with reserved `type`/`id`,
   versioned handshake with capability flags and `role`, error taxonomy.
 - **v0** ([v0-draft.md](v0-draft.md)) — superseded throwaway draft that
   the Phase 1 walking skeleton spoke.

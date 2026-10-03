@@ -1,5 +1,6 @@
 package com.prattlemob.marionette.bridge;
 
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -25,6 +26,13 @@ public final class AgentConnection {
     private final AtomicLong coalesced = new AtomicLong();
     private volatile Role role;
     private volatile boolean ready;
+    private volatile Set<String> sections = Set.of("player");
+
+    public Set<String> sections() { return sections; }
+
+    public void setSections(Set<String> sections) {
+        this.sections = Set.copyOf(sections);
+    }
     private volatile long lastPongNanos;
     private volatile Integer rateDivisorOverride;
 

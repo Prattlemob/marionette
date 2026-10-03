@@ -412,11 +412,15 @@ server-confirmed chest contents and failure paths. See the
 
 Items:
 
-- [ ] Composite frame + section mask specced in `protocol/` (D2)
-- [ ] Full player-state schema in `protocol/`
-- [ ] Frame emitted at the configured rate
-- [ ] Status effects list with durations/amplifiers
-- [ ] Dashboard example agent
+- [x] Composite frame + section mask specced in `protocol/` (D2)
+- [x] Full player-state schema in `protocol/`
+- [x] Frame emitted at the configured rate
+- [x] Status effects list with durations/amplifiers
+- [x] Dashboard example agent
+
+Implemented as protocol 2, with the canonical contract at `protocol/v1.md`.
+Build and rendered-client checks passed; see the
+[M4.1 verification record](docs/decisions.md#m41-implementation-and-verification-2026-10-03).
 
 ### M4.2 — Held item, hotbar, inventory & open-menu observation
 

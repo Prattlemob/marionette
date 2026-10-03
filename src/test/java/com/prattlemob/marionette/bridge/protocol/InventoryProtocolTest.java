@@ -68,7 +68,7 @@ class InventoryProtocolTest {
 
     @Test void observerCannotInspectOrMutateAndControllerEnqueues() {
         ProtocolSession observer = new ProtocolSession("test");
-        observer.onFrame("{\"type\":\"hello\",\"versions\":[1],\"role\":\"observer\"}");
+        observer.onFrame("{\"type\":\"hello\",\"versions\":[2],\"role\":\"observer\"}");
         for (String op : new String[]{"inspect", "open"}) {
             var actions = observer.onFrame("{\"type\":\"inventory\",\"id\":5,\"op\":\"" + op + "\"}");
             assertEquals(1, actions.size());
@@ -78,7 +78,7 @@ class InventoryProtocolTest {
             assertTrue(observer.isActive());
         }
         ProtocolSession controller = new ProtocolSession("test");
-        controller.onFrame("{\"type\":\"hello\",\"versions\":[1]}");
+        controller.onFrame("{\"type\":\"hello\",\"versions\":[2]}");
         assertInstanceOf(ProtocolSession.Action.Enqueue.class,
                 controller.onFrame("{\"type\":\"inventory\",\"op\":\"open\"}").getFirst());
     }
@@ -92,7 +92,7 @@ class InventoryProtocolTest {
             assertThrows(ProtocolError.class, () -> MessageParser.parse("{\"type\":\"inventory\",\"op\":\"open\",\"animated\":" + bad + "}"));
         }
         ProtocolSession observer = new ProtocolSession("test");
-        observer.onFrame("{\"type\":\"hello\",\"versions\":[1],\"role\":\"observer\"}");
+        observer.onFrame("{\"type\":\"hello\",\"versions\":[2],\"role\":\"observer\"}");
         var actions = observer.onFrame("{\"type\":\"inventory\",\"op\":\"drop\",\"animated\":true," + MENU + ",\"from\":0}");
         assertEquals(1, actions.size());
         assertTrue(((ProtocolSession.Action.Send) actions.getFirst()).json().contains("role_forbidden"));

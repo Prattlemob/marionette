@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -18,7 +19,7 @@ import com.google.gson.Strictness;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
 
-/** Parses protocol v1 text frames into {@link ParsedMessage}s. Network-thread code. */
+/** Parses protocol v2 text frames into {@link ParsedMessage}s. Network-thread code. */
 public final class MessageParser {
     private MessageParser() {}
 
@@ -88,7 +89,7 @@ public final class MessageParser {
             throw new ProtocolError(ErrorCode.INVALID_FIELD, "missing \"type\"");
         }
         return switch (type) {
-            case "hello" -> new ParsedMessage.Hello(versions(json), role(json), id);
+            case "hello" -> new ParsedMessage.Hello(versions(json), role(json), id, sections(json));
             case "input" -> new AgentCommand.InputUpdate(
                     optionalBoolean(json, "forward"),
                     optionalBoolean(json, "back"),
@@ -105,9 +106,25 @@ public final class MessageParser {
             case "look" -> parseLook(json, id, raw);
             case "release" -> new AgentCommand.Release();
             case "configure" -> new AgentCommand.Configure(
-                    optionalRangedInt(json, "rateDivisor", 1, 100));
+                    optionalRangedInt(json, "rateDivisor", 1, 100), sections(json));
             default -> throw new ProtocolError(ErrorCode.UNKNOWN_TYPE, "unknown type: " + type);
         };
+    }
+
+    private static Set<String> sections(JsonObject json) {
+        if (!json.has("sections")) return null;
+        if (!(json.get("sections") instanceof JsonArray array)) {
+            throw new ProtocolError(ErrorCode.INVALID_FIELD, "sections must be an array");
+        }
+        Set<String> result = new HashSet<>();
+        for (JsonElement entry : array) {
+            if (!(entry instanceof JsonPrimitive value) || !value.isString()
+                    || !value.getAsString().equals("player")) {
+                throw new ProtocolError(ErrorCode.INVALID_FIELD, "unsupported observation section");
+            }
+            result.add(value.getAsString());
+        }
+        return Set.copyOf(result);
     }
 
     private static AgentCommand.InventoryAction parseInventory(JsonObject json, JsonPrimitive id, String raw) {
