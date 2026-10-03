@@ -302,7 +302,8 @@ observer can never actuate and so has nothing stuck. Controller loss is
 unchanged. M5.1 inherits this: a missed pong from an observer drops that
 observer; a missed pong from the controller releases all controls. Whether
 the panic key also disconnects observers is left to M5.1 (recommendation:
-no — panic should stop the puppet, not blind the stream).
+no — panic should stop the puppet, not blind the stream). Resolved: panic and
+its latch leave observers attached and admissible (M5.1a, D16b).
 
 **Admission ordering:** the mod cannot know whether a new connection wants
 `controller` or `observer` until `hello` arrives, so admission necessarily
@@ -575,7 +576,9 @@ M5.1a resolves the configured address once to an InetAddress, clamps non-loopbac
 or unresolvable values to 127.0.0.1, and passes the same address object to Netty.
 No non-loopback opt-out exists. Bridge limits and overload behavior are normative
 in protocol/v1.md under `bridgeSafety`. Pong timeout defaults to two seconds
-(D16a; originally five); local panic defaults to rebindable F8. These emergency controls do not settle
+(D16a; originally five); local panic defaults to rebindable F8 and latches
+controller admission off until a separate re-arm key (default F9) clears it
+(D16b). These emergency controls do not settle
 M5.1 human-precedence modes or per-mode focus-loss policy.
 
 The earlier M2.3 watermark described as a hard bound was insufficient for
@@ -616,3 +619,53 @@ make agents unusable. Operators may still set 1 second.
 Rejected for now: expiring held inputs after a lease, protocol changes (for
 example, a liveness or lease field), and a client keepalive in the published
 Python client. Revisit them only with a new owner decision.
+
+### D16b — Panic latch and separate re-arm key — **Settled** (2026-10-04, owner decision)
+
+An end-to-end consumer integration check found that local panic released every
+control and severed the controller within a millisecond (close 1008
+`local panic`), but nothing stopped the agent from reconnecting: a reconnecting
+agent drove the player again 0.4–2.6 s after each of 25 physical panic presses.
+Panic therefore did not restore human control. The owner decided:
+
+- Panic **latches**. While latched the mod refuses every new controller hello.
+  Observer admission and attached observers are unaffected.
+- The panic key only ever disengages. Pressing it again, or repeatedly, never
+  re-enables agent control.
+- A **separate**, rebindable "Allow agent control" key, registered in the
+  Controls menu (default F9; vanilla 1.21.8 does not bind F9), clears the latch.
+  Re-arming only clears the latch: it admits, grants, restores and replays
+  nothing. It is handled only during gameplay with no screen open, so typing
+  in a text field or rebinding a key cannot re-arm. If both mappings share a
+  key, panic wins.
+- The latch persists across world exit and rejoin until re-armed. It does
+  **not** persist across a client restart: it is in-memory state and each
+  launch starts unlatched. Restarting Minecraft is itself a deliberate human
+  action that requires no running agent connection, and persisting a latch
+  to disk would add a stale-state failure mode without improving safety
+  during a session.
+
+Signal (protocol/v1.md, Emergency release): a latched refusal is an `error`
+with the new fatal code `panic_latched` followed by close 1008 with reason
+`panic_latched`; the sever itself is unchanged (close 1008 `local panic`, no
+error frame). This reuses the handshake-rejection mechanism, so the published
+`marionette-mc==0.1.0a1` already raises `ServerError` with code `panic_latched`,
+distinct from `Disconnected(1008, "local panic")`, `controller_attached`, the
+`pong timeout` watchdog and transport loss. No wire field was added; the
+additive `panicLatch` capability lets observers feature-detect the latch.
+Latch and controller-slot admission share one lock, so a hello racing the
+panic is either severed or refused, never left attached; the client tick path
+additionally treats any controller as absent while latched. A toast reports
+"disabled", "still disabled" (repeat press and rejoin while latched) and
+"re-enabled".
+
+Rejected:
+
+- **Toggle on the panic key** (press again to re-enable): a panic key must be
+  safe to mash. Toggling makes the outcome depend on press parity, so a
+  frightened double press would hand control straight back.
+- **Hold panic to re-arm**: overloads the emergency control with a gesture
+  that a held or stuck key can perform unintentionally, and is still not
+  discoverable or rebindable separately in the Controls menu.
+- A reconnect cool-down or timed latch: control would return without a human
+  decision.

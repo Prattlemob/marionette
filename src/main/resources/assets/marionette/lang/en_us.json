@@ -1,4 +1,10 @@
 {
-  "key.marionette.panic": "Panic: release agent control",
-  "key.categories.marionette": "Marionette"
+  "key.marionette.panic": "Panic: disable agent control",
+  "key.marionette.rearm": "Allow agent control (after panic)",
+  "key.categories.marionette": "Marionette",
+  "marionette.control.disabled": "Agent control disabled (panic)",
+  "marionette.control.still_disabled": "Agent control still disabled (panic)",
+  "marionette.control.disabled.detail": "Press %s to allow agent control again",
+  "marionette.control.enabled": "Agent control re-enabled",
+  "marionette.control.enabled.detail": "An agent may connect again; nothing was resumed"
 }

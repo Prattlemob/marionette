@@ -24,8 +24,8 @@ public final class ProtocolSession {
     /**
      * Transport admission check, consulted during hello processing before
      * the session activates. Returns null to admit, or the refusal code
-     * (controller_attached / observer_attached) to reject with its close
-     * code. Runs on the single network thread.
+     * (controller_attached / observer_attached / panic_latched) to reject
+     * with its close code. Runs on the single network thread.
      */
     @FunctionalInterface
     public interface RoleAdmission {
@@ -103,11 +103,12 @@ public final class ProtocolSession {
         if (refusal != null) {
             state = State.CLOSED;
             return List.of(
-                    new Action.Send(Messages.error(refusal,
-                            refusal == ErrorCode.CONTROLLER_ATTACHED
-                                    ? "controller already connected"
-                                    : "observer limit reached",
-                            hello.id(), text)),
+                    new Action.Send(Messages.error(refusal, switch (refusal) {
+                                case CONTROLLER_ATTACHED -> "controller already connected";
+                                case PANIC_LATCHED -> "agent control disabled by local panic; "
+                                        + "the player must re-arm it in game";
+                                default -> "observer limit reached";
+                            }, hello.id(), text)),
                     new Action.Close(refusal.closeCode(), refusal.wire()));
         }
         if (hello.sections() != null) sections = hello.sections();

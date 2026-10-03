@@ -136,7 +136,13 @@ A [Prattlemob](https://github.com/Prattlemob) project — [prattlemob.com](https
 
 The rebindable **F8** panic key (Controls → Marionette) releases the agent and
 severs its controller connection, including during inventory animation or a
-paused screen. Read-only observers remain attached. The pong watchdog uses
+paused screen. Panic then **latches**: every reconnecting controller is refused
+(`panic_latched`, close 1008) until you press the separate, rebindable
+**F9** "Allow agent control" key in game. Pressing F8 again never re-enables
+anything, and re-arming resumes nothing; an agent must connect afresh. The
+latch survives leaving and rejoining worlds and resets when Minecraft
+restarts. A small toast shows when agent control is disabled or re-enabled.
+Read-only observers remain attached and may still connect. The pong watchdog uses
 `bridge.pongTimeoutSeconds` (default 2, range 1–60, restart required).
 WebSocket libraries must continue reading and answering pings even when the
 agent has no new command to send; an agent event loop that blocks for more

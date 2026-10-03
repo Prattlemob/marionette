@@ -59,8 +59,10 @@ import io.netty.util.concurrent.DefaultThreadFactory;
  * hello-processing time, not at socket-accept time: two sockets may coexist
  * pre-hello, and the first to complete a controller hello wins the slot; a
  * later one is refused with a controller_attached or observer_attached
- * error and close code 1013. A connection that never sends hello within
- * {@code helloTimeoutMillis} is closed 1002. The single Netty event-loop
+ * error and close code 1013; while the local panic latch is engaged every
+ * controller hello is refused with panic_latched (1008) instead. A
+ * connection that never sends hello within {@code helloTimeoutMillis} is
+ * closed 1002. The single Netty event-loop
  * thread parses and enqueues commands but never touches game state; the
  * tick thread drains them. Deliberately free of Minecraft imports so it is
  * testable headless.
@@ -95,6 +97,10 @@ public final class BridgeServer {
     private final AtomicReference<AgentConnection> controller = new AtomicReference<>();
     private final List<AgentConnection> observers = new CopyOnWriteArrayList<>();
     private final AtomicBoolean disconnected = new AtomicBoolean();
+    /** Serializes controller admission against the panic latch (no hello can race a panic). */
+    private final Object admissionLock = new Object();
+    private boolean panicLatched; // guarded by admissionLock
+    private long latchedRefusals; // guarded by admissionLock
 
     private NioEventLoopGroup group;
     private Channel listener;
@@ -148,6 +154,52 @@ public final class BridgeServer {
     public void disconnectController(String reason) {
         AgentConnection current = controller.get();
         if (current != null) current.close(1008, reason);
+    }
+
+    /**
+     * Local panic: latch controller admission off, then sever the attached
+     * controller (close 1008 {@code reason}). Latch and slot are read under
+     * the admission lock, so a concurrent hello is either severed here or
+     * refused with panic_latched. Repeated panics only keep the latch.
+     * Observers are untouched. Safe from any thread.
+     *
+     * @return true if this call engaged the latch, false if already latched
+     */
+    public boolean panic(String reason) {
+        boolean engaged;
+        AgentConnection current;
+        synchronized (admissionLock) {
+            engaged = !panicLatched;
+            if (engaged) latchedRefusals = 0;
+            panicLatched = true;
+            current = controller.get();
+        }
+        if (current != null) current.close(1008, reason);
+        return engaged;
+    }
+
+    /**
+     * Clear the panic latch so a future controller hello may be admitted.
+     * Grants, restores and replays nothing.
+     *
+     * @return true if the latch was engaged
+     */
+    public boolean rearm() {
+        long refused;
+        synchronized (admissionLock) {
+            if (!panicLatched) return false;
+            panicLatched = false;
+            refused = latchedRefusals;
+        }
+        LOG.info("Panic latch cleared; {} controller hello(s) were refused while latched", refused);
+        return true;
+    }
+
+    /** True while local panic latches controller admission off. */
+    public boolean panicLatched() {
+        synchronized (admissionLock) {
+            return panicLatched;
+        }
     }
 
     /** nanoTime of the newest pong from the controller; 0 before the first. Used for liveness diagnostics. */
@@ -226,10 +278,10 @@ public final class BridgeServer {
         return ((InetSocketAddress) listener.localAddress()).getPort();
     }
 
-    /** True while a controller that completed the hello handshake is attached. */
+    /** True while a controller that completed the hello handshake is attached and panic is not latched. */
     public boolean hasController() {
         AgentConnection current = controller.get();
-        return current != null && current.ready();
+        return current != null && current.ready() && !panicLatched();
     }
 
     /**
@@ -334,7 +386,14 @@ public final class BridgeServer {
     /** Claim a slot for a hello-processing connection; null admits. Event-loop only. */
     private ErrorCode tryAdmit(AgentConnection connection, Role role) {
         if (role == Role.CONTROLLER) {
-            return controller.compareAndSet(null, connection) ? null : ErrorCode.CONTROLLER_ATTACHED;
+            synchronized (admissionLock) {
+                if (panicLatched) {
+                    if (++latchedRefusals == 1) LOG.info("Controller hello refused: panic latched");
+                    else LOG.debug("Controller hello refused: panic latched ({} since panic)", latchedRefusals);
+                    return ErrorCode.PANIC_LATCHED;
+                }
+                return controller.compareAndSet(null, connection) ? null : ErrorCode.CONTROLLER_ATTACHED;
+            }
         }
         if (observers.size() >= maxObservers) {
             return ErrorCode.OBSERVER_ATTACHED;

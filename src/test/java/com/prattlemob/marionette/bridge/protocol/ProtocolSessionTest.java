@@ -111,6 +111,24 @@ class ProtocolSessionTest {
     }
 
     @Test
+    void panicLatchedRefusalIsFatal1008WithDistinctCode() {
+        ProtocolSession refused = new ProtocolSession("test-version",
+                role -> role == Role.CONTROLLER ? ErrorCode.PANIC_LATCHED : null);
+        String frame = "{\"type\": \"hello\", \"versions\": [2], \"id\": \"h\"}";
+        List<ProtocolSession.Action> actions = refused.onFrame(frame);
+        assertEquals(2, actions.size());
+        JsonObject error = json(actions.get(0));
+        assertEquals("panic_latched", error.get("code").getAsString());
+        assertEquals("h", error.get("id").getAsString());
+        var close = assertInstanceOf(ProtocolSession.Action.Close.class, actions.get(1));
+        assertEquals(1008, close.code());
+        assertEquals("panic_latched", close.reason());
+        assertFalse(refused.isActive());
+        assertFalse(refused.helloCompleted(), "a latched refusal never counts as an agent");
+        assertTrue(refused.onFrame("{\"type\": \"input\", \"forward\": true}").isEmpty());
+    }
+
+    @Test
     void observerActuationCommandsAreRefusedNonFatally() {
         session.onFrame("{\"type\": \"hello\", \"versions\": [2], \"role\": \"observer\"}");
         for (String frame : List.of(

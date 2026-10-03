@@ -700,6 +700,15 @@ walking while a frozen agent held movement. Rendered re-measurement found
 8.9–10.4 blocks, with no spurious disconnects for a healthy agent with pauses
 of up to 1 s. No protocol or published-client change was made.
 
+Follow-up (2026-10-04, owner-approved, D16b): local panic now latches. A consumer
+check found a reconnecting agent re-drove the player 0.4–2.6 s after each panic.
+While latched, controller hellos are refused with `panic_latched` (close 1008);
+observers are unaffected; repeated panic never re-arms; a separate rebindable
+"Allow agent control" key (default F9, Controls menu) clears the latch without
+resuming anything. The latch survives world exit/rejoin and resets on client
+restart. Additive `panicLatch` capability; the published client surfaces the
+refusal unchanged. Evidence is in the M5.1a safety record.
+
 ### M5.1 — Human precedence and complete lifecycle safety
 
 M5.1a delivers the watchdog/panic/binding foundation first. Reuse its evidence
@@ -726,7 +735,9 @@ agent-exclusive and lifecycle coverage across the expanded actuator set.
 Items:
 
 - [ ] Ping/pong watchdog with configurable timeout
-- [ ] Panic keybinding (registered, rebindable, shown in controls menu)
+- [x] Panic keybinding (registered, rebindable, shown in controls menu); panic
+      latches until a separate rebindable re-arm key clears it (D16b, 2026-10-04,
+      rendered evidence in the M5.1a safety record)
 - [ ] Human-override policy implemented + documented (three modes per
       docs/decisions.md: human-priority / agent-exclusive / panic)
 - [ ] Input-lockout keybind (agent-exclusive mode): rebindable, shown in

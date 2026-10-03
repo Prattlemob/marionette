@@ -73,7 +73,12 @@ native clients. Browser clients are rejected under the development trust
 policy. Close 1013 means overload: stop sending and treat pending request
 outcomes as unknown.
 Reconnect explicitly and inspect inventory before retrying mutations. F8 in the
-Minecraft client is the local panic control. See [the wire limits](../protocol/v1.md#transport).
+Minecraft client is the local panic control: it severs the controller (close
+1008 `local panic`) and latches controller admission off. While latched, a
+controller hello fails with error `panic_latched` (close 1008); with
+`marionette-mc` this raises `ServerError` whose `error["code"]` is
+`panic_latched`. Do not retry in a loop: wait for the player to re-arm with F9
+and surface the state to your operator. Observers are unaffected. See [the wire limits](../protocol/v1.md#transport).
 
 ## Package setup
 

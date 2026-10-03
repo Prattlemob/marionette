@@ -58,6 +58,7 @@ class BridgeServerTest {
     private static final class TestClient implements WebSocket.Listener {
         final BlockingQueue<String> messages = new LinkedBlockingQueue<>();
         final CompletableFuture<Integer> closeCode = new CompletableFuture<>();
+        final CompletableFuture<String> closeReason = new CompletableFuture<>();
         private final StringBuilder partial = new StringBuilder();
         volatile boolean stalled;
         WebSocket ws;
@@ -116,12 +117,14 @@ class BridgeServerTest {
         @Override
         public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
             closeCode.complete(statusCode);
+            closeReason.complete(reason);
             return null;
         }
 
         @Override
         public void onError(WebSocket webSocket, Throwable error) {
             closeCode.completeExceptionally(error);
+            closeReason.completeExceptionally(error);
         }
     }
 
@@ -883,6 +886,122 @@ class BridgeServerTest {
         assertFalse(server.hasController(), "panic invalidates synchronously");
         assertTrue(server.pollDisconnected());
         assertEquals(1008, client.closeCode.get(5, TimeUnit.SECONDS));
+    }
+
+    private static final String CONTROLLER_HELLO = "{\"type\":\"hello\",\"versions\":[2],\"role\":\"controller\",\"id\":\"c\"}";
+
+    /** A controller hello while latched gets panic_latched then close 1008 panic_latched. */
+    private void assertLatchedRefusal() throws Exception {
+        TestClient refused = TestClient.connect(server.port());
+        refused.send(CONTROLLER_HELLO);
+        JsonObject error = JsonParser.parseString(refused.awaitMessage()).getAsJsonObject();
+        assertEquals("error", error.get("type").getAsString());
+        assertEquals("panic_latched", error.get("code").getAsString());
+        assertEquals("c", error.get("id").getAsString());
+        assertEquals(1008, refused.closeCode.get(5, TimeUnit.SECONDS));
+        assertEquals("panic_latched", refused.closeReason.get(5, TimeUnit.SECONDS));
+        assertFalse(server.hasController());
+    }
+
+    @Test
+    void panicSeversDistinctlyThenLatchRefusesControllersButNotObservers() throws Exception {
+        TestClient observer = TestClient.connect(server.port());
+        observer.send(OBSERVER_HELLO);
+        assertTrue(observer.awaitMessage().contains("\"panicLatch\":true"));
+        TestClient controller = connectAndHello();
+        await(server::hasController);
+        assertTrue(server.panic("local panic"), "first panic engages the latch");
+        assertFalse(server.hasController(), "panic invalidates synchronously");
+        assertTrue(server.panicLatched());
+        assertEquals(1008, controller.closeCode.get(5, TimeUnit.SECONDS));
+        assertEquals("local panic", controller.closeReason.get(5, TimeUnit.SECONDS));
+        assertTrue(server.pollDisconnected(), "the sever is the controller loss");
+        for (int i = 0; i < 3; i++) assertLatchedRefusal();
+        assertFalse(server.pollDisconnected(), "refused hellos are not agent loss");
+        TestClient lateObserver = TestClient.connect(server.port());
+        lateObserver.send(OBSERVER_HELLO);
+        assertEquals("hello", JsonParser.parseString(lateObserver.awaitMessage())
+                .getAsJsonObject().get("type").getAsString(), "observer admission is unaffected");
+        server.sendObservation("{\"type\":\"observation\",\"tick\":9}");
+        assertTrue(observer.awaitMessage().contains("\"tick\":9"), "attached observer survives panic");
+        assertTrue(lateObserver.awaitMessage().contains("\"tick\":9"));
+        assertFalse(observer.closeCode.isDone());
+    }
+
+    @Test
+    void repeatedPanicNeverRearms() throws Exception {
+        assertTrue(server.panic("local panic"));
+        for (int i = 0; i < 25; i++) {
+            assertFalse(server.panic("local panic"), "repeated panic only keeps the latch");
+            assertTrue(server.panicLatched());
+        }
+        assertLatchedRefusal();
+    }
+
+    @Test
+    void rearmOnlyClearsTheLatch() throws Exception {
+        assertFalse(server.rearm(), "re-arm without a latch is a no-op");
+        TestClient controller = connectAndHello();
+        controller.send("{\"type\":\"input\",\"forward\":true}");
+        await(() -> server.drainCommands().size() == 1);
+        server.panic("local panic");
+        controller.closeCode.get(5, TimeUnit.SECONDS);
+        assertLatchedRefusal();
+        assertTrue(server.rearm());
+        assertFalse(server.panicLatched());
+        assertFalse(server.rearm(), "a second re-arm changes nothing");
+        assertFalse(server.hasController(), "re-arm admits nobody by itself");
+        assertTrue(server.drainCommands().isEmpty(), "re-arm replays nothing");
+        connectAndHello();
+        await(server::hasController);
+        assertTrue(server.drainCommands().isEmpty());
+    }
+
+    @Test
+    void latchSurvivesWorldExitAndRejoin() throws Exception {
+        TestClient controller = connectAndHello();
+        server.panic("local panic");
+        controller.closeCode.get(5, TimeUnit.SECONDS);
+        // World exit runs exactly this sever (MarionetteClient.onLoggingOut);
+        // joining a world touches no bridge state.
+        server.disconnectController("left world");
+        assertTrue(server.panicLatched());
+        assertLatchedRefusal();
+        server.disconnectController("left world");
+        assertLatchedRefusal();
+    }
+
+    @Test
+    void helloRacingPanicIsNeverLeftAttached() throws Exception {
+        int admittedThenSevered = 0;
+        int refused = 0;
+        for (int trial = 0; trial < 40; trial++) {
+            TestClient racer = TestClient.connect(server.port());
+            Thread hello = new Thread(() -> racer.send(CONTROLLER_HELLO));
+            hello.start();
+            if (trial % 2 == 0) Thread.sleep(0, trial * 25_000);
+            server.panic("local panic");
+            hello.join();
+            int code = racer.closeCode.get(5, TimeUnit.SECONDS);
+            String reason = racer.closeReason.get(5, TimeUnit.SECONDS);
+            String first = racer.messages.poll();
+            assertEquals(1008, code);
+            if ("panic_latched".equals(reason)) {
+                refused++;
+                assertTrue(first != null && first.contains("\"panic_latched\""), String.valueOf(first));
+            } else {
+                // Admitted first: severed, possibly before its hello reply was written.
+                admittedThenSevered++;
+                assertEquals("local panic", reason);
+                assertTrue(first == null || first.contains("\"hello\""), first);
+            }
+            assertTrue(racer.messages.isEmpty());
+            assertFalse(server.hasController());
+            await(() -> !server.hasController() && server.drainCommands().isEmpty());
+            server.pollDisconnected();
+            assertTrue(server.rearm());
+        }
+        assertEquals(40, admittedThenSevered + refused);
     }
 
     @Test

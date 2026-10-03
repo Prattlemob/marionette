@@ -31,6 +31,9 @@ requirement, not an afterthought. The current posture, as specified in
   controller's inputs. Each connection has independent bounded queues.
 - **Bounded work and emergency release.** See the protocol's `bridgeSafety`
   limits, overload/close behavior, pong watchdog and local F8 panic binding.
+  Panic latches controller admission off until the player presses the
+  separate re-arm key (default F9), so a reconnecting agent cannot retake
+  control.
   Safety release bypasses queued commands and cancels inventory animation.
   A responsive client releases at its next tick or rendered frame; a stalled
   Minecraft client thread cannot execute a wall-clock safety guarantee.
