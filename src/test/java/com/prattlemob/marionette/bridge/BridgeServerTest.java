@@ -796,6 +796,50 @@ class BridgeServerTest {
         }
     }
 
+    /** Reads one server frame, answering a ping with a masked pong; returns the opcode. */
+    private static int answerFrame(java.net.Socket socket) throws Exception {
+        var in = new java.io.DataInputStream(socket.getInputStream());
+        int opcode = in.readUnsignedByte() & 0x0F;
+        long length = in.readUnsignedByte() & 0x7F;
+        if (length == 126) length = in.readUnsignedShort();
+        else if (length == 127) length = in.readLong();
+        byte[] payload = in.readNBytes((int) length);
+        if (opcode == 0x9) {
+            var out = socket.getOutputStream();
+            out.write(0x8A); out.write(0x80 | payload.length);
+            out.write(new byte[4]); out.write(payload); out.flush();
+        }
+        return opcode;
+    }
+
+    @Test
+    void defaultWatchdogToleratesShortStallsAndDropsSilence() throws Exception {
+        server.stop();
+        long timeout = TimeUnit.SECONDS.toMillis(com.prattlemob.marionette.config.MarionetteConfig.pongTimeoutSeconds);
+        long interval = Math.min(1000, timeout / 4);
+        server = new BridgeServer(java.net.InetAddress.getLoopbackAddress(), 0, "test", 1, 2000, timeout);
+        server.start();
+        try (var agent = silentClient(server.port(), HELLO)) {
+            await(server::hasController);
+            // Stalls of half the lease stay below the timeout minus one ping interval.
+            for (int stall = 0; stall < 2; stall++) {
+                long until = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeout);
+                while (System.nanoTime() < until) answerFrame(agent);
+                Thread.sleep(timeout / 2);
+            }
+            long until = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeout);
+            while (System.nanoTime() < until) answerFrame(agent);
+            assertTrue(server.hasController());
+            assertFalse(server.pollDisconnected());
+
+            long silent = System.nanoTime();
+            await(server::pollDisconnected);
+            long elapsed = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - silent);
+            assertTrue(elapsed >= timeout - interval && elapsed <= timeout + interval + 500,
+                    "silent agent detected after " + elapsed + " ms");
+        }
+    }
+
     @Test
     void commandFloodClosesOnlyOffenderAndBoundsTickDrain() throws Exception {
         TestClient controller = connectAndHello();

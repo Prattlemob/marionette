@@ -58,8 +58,11 @@ public final class MarionetteConfig {
                 .comment("Seconds a new connection may take to complete the hello handshake",
                         "before it is closed. (restart required)")
                 .defineInRange("helloTimeoutSeconds", 10, 1, 60);
-        PONG_TIMEOUT = builder.comment("Maximum seconds without a pong before disconnect and release. (restart required)")
-                .defineInRange("pongTimeoutSeconds", 5, 1, 60);
+        PONG_TIMEOUT = builder
+                .comment("Maximum seconds without a pong before disconnect and release.",
+                        "Agents must keep answering pings; a stall longer than about three",
+                        "quarters of this value can disconnect a healthy agent. (restart required)")
+                .defineInRange("pongTimeoutSeconds", 2, 1, 60);
         builder.pop();
         builder.push("observation");
         RATE_DIVISOR = builder
@@ -101,7 +104,7 @@ public final class MarionetteConfig {
     public static volatile String bindAddress = "127.0.0.1";
     public static volatile int maxObservers = 2;
     public static volatile int helloTimeoutSeconds = 10;
-    public static volatile int pongTimeoutSeconds = 5;
+    public static volatile int pongTimeoutSeconds = 2;
     public static volatile int observationRateDivisor = 1;
     public static volatile int entityRadius = 32;
     public static volatile int entityMaxCount = 64;

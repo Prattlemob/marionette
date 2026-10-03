@@ -48,6 +48,11 @@ class MarionetteConfigTest {
     }
 
     @Test
+    void pongWatchdogDefaultsToTwoSeconds() {
+        assertEquals(2, MarionetteConfig.pongTimeoutSeconds);
+    }
+
+    @Test
     void observationDueAtRespectsDivisor() {
         int original = MarionetteConfig.observationRateDivisor;
         try {

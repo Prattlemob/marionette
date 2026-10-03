@@ -694,6 +694,12 @@ Items:
 Verification: [M5.1a safety record](docs/specs/2026-10-03-m5.1a-safety-verification.md).
 M3.3 visual/alt-tab debt remains separate and unchecked.
 
+Follow-up (2026-10-03, owner-approved, D16a): the default pong timeout was
+lowered from 5 to 2 seconds after consumer measurements showed 18–22 blocks of
+walking while a frozen agent held movement. Rendered re-measurement found
+8.9–10.4 blocks, with no spurious disconnects for a healthy agent with pauses
+of up to 1 s. No protocol or published-client change was made.
+
 ### M5.1 — Human precedence and complete lifecycle safety
 
 M5.1a delivers the watchdog/panic/binding foundation first. Reuse its evidence

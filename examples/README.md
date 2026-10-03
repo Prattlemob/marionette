@@ -67,9 +67,11 @@ can still correct them. Full wire rules: [protocol/v1.md](../protocol/v1.md#inve
 
 Current protocol-2 servers advertise `bridgeSafety`. Keep the WebSocket read
 loop running so the library answers pings; a frozen reader is disconnected by
-the configurable pong watchdog. Do not set an Origin header on native clients.
-Browser clients are rejected under the development trust policy. Close 1013
-means overload: stop sending and treat pending request outcomes as unknown.
+the configurable pong watchdog (2 seconds by default, so avoid blocking the
+event loop for more than about 1.5 seconds). Do not set an Origin header on
+native clients. Browser clients are rejected under the development trust
+policy. Close 1013 means overload: stop sending and treat pending request
+outcomes as unknown.
 Reconnect explicitly and inspect inventory before retrying mutations. F8 in the
 Minecraft client is the local panic control. See [the wire limits](../protocol/v1.md#transport).
 

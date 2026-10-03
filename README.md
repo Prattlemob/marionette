@@ -137,11 +137,13 @@ A [Prattlemob](https://github.com/Prattlemob) project — [prattlemob.com](https
 The rebindable **F8** panic key (Controls → Marionette) releases the agent and
 severs its controller connection, including during inventory animation or a
 paused screen. Read-only observers remain attached. The pong watchdog uses
-`bridge.pongTimeoutSeconds` (default 5, range 1–60, restart required).
+`bridge.pongTimeoutSeconds` (default 2, range 1–60, restart required).
 WebSocket libraries must continue reading and answering pings even when the
-agent has no new command to send. A frozen controller is disconnected after
-the timeout plus at most one second, then released on the next client tick or
-rendered frame. A frozen Minecraft process cannot execute release until resumed.
+agent has no new command to send; an agent event loop that blocks for more
+than about 1.5 seconds at the default can be disconnected. A frozen controller
+is disconnected after the timeout plus at most one ping interval (0.5 seconds
+at the default), then released on the next client tick or rendered frame. A
+frozen Minecraft process cannot execute release until resumed.
 
 The `bridgeSafety` capability advertises bounded inbound/outbound queues,
 32-command/2 ms per-tick scheduling, priority release, and pending-connection

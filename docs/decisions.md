@@ -483,7 +483,8 @@ mod.
 - Hostility classification source; client-side aggro inference depth — M4.4.
 - Raw-input vs. active-Baritone-goal conflict policy; which Baritone settings
   are exposed — M6.2.
-- Human-input precedence policy details and watchdog timeout default — M5.1.
+- Human-input precedence policy details — M5.1. (The watchdog timeout default
+  was resolved early: 2 seconds, D16a, 2026-10-03.)
   The policy must define **three modes** (owner-requested, 2026-07-13):
   **human-priority** (default — human input overrides/pauses agent control),
   **agent-exclusive** (a rebindable *input-lockout* keybind suppresses all
@@ -573,8 +574,8 @@ browser support with that decision.
 M5.1a resolves the configured address once to an InetAddress, clamps non-loopback
 or unresolvable values to 127.0.0.1, and passes the same address object to Netty.
 No non-loopback opt-out exists. Bridge limits and overload behavior are normative
-in protocol/v1.md under `bridgeSafety`. Pong timeout defaults to five seconds;
-local panic defaults to rebindable F8. These emergency controls do not settle
+in protocol/v1.md under `bridgeSafety`. Pong timeout defaults to two seconds
+(D16a; originally five); local panic defaults to rebindable F8. These emergency controls do not settle
 M5.1 human-precedence modes or per-mode focus-loss policy.
 
 The earlier M2.3 watermark described as a hard bound was insufficient for
@@ -583,3 +584,35 @@ bytes before scheduling writes, caps inbound work per connection, prioritizes
 release, and caps pending connections from TCP accept rather than only upgrade.
 The client checks safety at both tick and render boundaries, including paused
 screens; world exit severs the controller to invalidate stale commands.
+
+### D16a — Pong watchdog default: 2 seconds — **Settled** (2026-10-03, owner decision)
+
+A consumer measured that a frozen (SIGSTOP) or network-blackholed agent kept the
+player walking for 4.2–5.2 seconds (about 18–22 blocks) at the old 5-second
+default. The owner decided to fix this in the mod only, by lowering the default
+`bridge.pongTimeoutSeconds` into the 1–2 second range. The range (1–60),
+restart-required semantics, ping cadence rule (min(1 s, timeout/4)), close code,
+observer isolation and the wire protocol are unchanged; this is not a protocol
+or capability change.
+
+The default is **2 seconds** (pings every 0.5 s). Rendered measurements are in
+the [M5.1a safety record](specs/2026-10-03-m5.1a-safety-verification.md#watchdog-default-follow-up--2026-10-03):
+
+- At 2 seconds, freeze/blackhole detection took 2.02–2.39 s (8.9–10.4 blocks),
+  and a healthy agent with pauses of up to 1 s ran for 154 s with no
+  disconnects. A single pause of 1.5 s survived; one of 1.9 s was sometimes
+  dropped.
+- At 1 second, exposure fell to 0.84–1.15 s (3.7–5.0 blocks), but the same
+  pause profile was spuriously disconnected within 53–60 s in both runs, and
+  single pauses of 0.9–1.0 s were sometimes dropped.
+
+A healthy agent survives pauses up to the timeout minus one ping interval
+(1.5 s at the default), and sometimes slightly longer. One second therefore
+cannot tolerate ordinary sub-second agent, GC or event-loop pauses. Two seconds
+does, while still cutting walking exposure by more than half. A spurious
+disconnect fails safe but drops held intent without replay, so frequent ones
+make agents unusable. Operators may still set 1 second.
+
+Rejected for now: expiring held inputs after a lease, protocol changes (for
+example, a liveness or lease field), and a client keepalive in the published
+Python client. Revisit them only with a new owner decision.
