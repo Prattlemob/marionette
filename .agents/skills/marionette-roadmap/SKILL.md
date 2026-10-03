@@ -19,9 +19,10 @@ Read repository instructions, the live roadmap, decisions, and the shared
 [selection rules](../marionette-next-roadmap-item/references/selection.md).
 Honor any requested milestone range, core-only scope, agent, or Git policy.
 For “entire roadmap,” include optional phases; their design/release gates remain.
-Default to local implementation without committing or pushing unless the user
-has authorized those operations for this run. Carry existing authorization
-forward without asking again at every milestone.
+Default to the pull-request workflow below; the user may narrow it to local-only
+changes. Tags, package publication and direct pushes to the default branch always
+need separate approval. Carry existing authorization forward without asking again
+at every milestone.
 
 Apply the installed `orchestration` skill. Resolve its executable once: use
 `ORCA_CLI_COMMAND` when set; otherwise `orca-dev` when `ORCA_DEV_REPO_ROOT` is set;
@@ -63,13 +64,19 @@ runtime settlement/recovery evidence.
 
 ## One writer and a durable checkpoint
 
-Use one shared, explicitly resolved checkout by default, with one milestone
-worker editing it at a time. Fresh workers inherit the preceding milestone's
-actual files, including uncommitted work. The coordinator does not edit product
-code while a worker owns it. This sequential chain reflects the roadmap's real
-dependencies; parallel milestone writers would race on the contract and roadmap.
-Use separate worktrees only when requested or needed, following Orca placement
-guidance; verify integration before dispatching dependent work.
+Give each milestone its own Orca worktree, branched from the up-to-date remote
+`1.21.8` on a branch such as `roadmap/m4.6-one-shot-events`, with one worker
+editing it. Follow Orca placement guidance and record the worktree, branch and
+base in the checkpoint. The worker commits signed, hook-honoring changes there and
+never pushes. After accepting the result, the coordinator pushes the branch, opens
+a PR against `1.21.8`, and merges with a merge commit only when every applicable
+check passes and the PR is mergeable; otherwise it dispatches a repair on the same
+branch. After merge it deletes the branch, removes the worktree and fast-forwards
+the main checkout. The coordinator does not edit product code while a worker owns
+it. Milestones stay sequential because the roadmap's dependencies are real:
+dependent work starts from the merged base, never from an unmerged branch. This
+repository is public, so PR text and commit messages must describe consumer
+findings generically and never include private consumer plans or paths.
 
 Create and bind one Run for the requested scope. Store a local checkpoint under
 `git rev-parse --git-path orca-roadmap/` so runtime metadata stays out of commits.
@@ -154,7 +161,7 @@ Ownership: sole implementation worker for [checkout/scope]. The coordinator owns
 selection and progression. No nested roadmap coordinator or parallel editor.
 Baseline: [commit plus dirty-file/diff reference].
 Known debt/decisions: [specific outstanding checks and applicable authorizations].
-Git policy: [local changes only, or explicit commit/push scope].
+Git policy: [branch/worktree and PR flow, or narrower user-requested scope].
 Acceptance: [focused tests, build, concrete in-game checks, required evidence].
 Report: [absolute checkpoint-directory report path]. Include outcome, changed
 files, test/runtime evidence, blockers, and unchecked acceptance. Never mark

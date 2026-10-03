@@ -57,6 +57,8 @@ worker's uncommitted implementation is real input, not disposable scratch work.
 - Follow the session's Git policy. Do not infer authorization to push, publish,
   or change release/licensing policy from a request to implement a milestone.
   If commits are requested, include only assigned changes and preserve signing.
+  Under the PR workflow commit on the assigned branch/worktree and do not push;
+  the coordinator opens and merges the PR.
 
 A missing dependency, unavailable runtime, or failing test is a problem to
 investigate, not an immediate excuse to stop. Continue independent work while
