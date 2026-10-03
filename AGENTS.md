@@ -64,6 +64,11 @@ Use a direct workflow: inspect the relevant code and contract, make a focused
 change, and verify it. No workflow plugin is required. Add plans only when
 their complexity warrants a durable record; routine fixes do not need one.
 
+Optional roadmap workflows live in `.agents/skills/` (also linked under
+`.claude/skills/`): `marionette-next-roadmap-item` implements one eligible
+milestone; `marionette-roadmap` supervises sequential Orca workers across the
+requested roadmap scope. Use the latter only for continuous coordination.
+
 - `./gradlew test` runs headless JUnit tests.
 - `./gradlew test --tests 'com.prattlemob.marionette.control.CameraSmootherTest'`
   runs a focused suite (substitute the relevant class).

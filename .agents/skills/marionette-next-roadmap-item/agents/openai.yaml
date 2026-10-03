@@ -1,0 +1,4 @@
+interface:
+  display_name: "Marionette Next Roadmap Item"
+  short_description: "Implement and verify one Marionette milestone"
+  default_prompt: "Use $marionette-next-roadmap-item to implement the next eligible milestone in ROADMAP.md."

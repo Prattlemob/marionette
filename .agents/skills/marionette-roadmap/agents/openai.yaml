@@ -1,0 +1,4 @@
+interface:
+  display_name: "Marionette Roadmap Coordinator"
+  short_description: "Work through the roadmap with Orca workers"
+  default_prompt: "Use $marionette-roadmap to work continuously through the entire roadmap, handing each milestone to an Orca worker."
