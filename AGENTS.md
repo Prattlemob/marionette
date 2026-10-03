@@ -82,8 +82,8 @@ Keep bundled and development-runtime Netty codec versions aligned when changing
 dependencies, and verify both build and development-runtime resolution.
 
 Identity is fixed: mod id `marionette`, group/package
-`com.prattlemob.marionette`, repository `Prattlemob/marionette`. The current
-license is MIT but provisional; confirm it before release-facing work.
+`com.prattlemob.marionette`, repository `Prattlemob/marionette`. The owner confirmed the MIT license on 2026-10-03 (D12). Publication and
+release actions still require explicit authorization.
 
 ## Combined-system coordination
 

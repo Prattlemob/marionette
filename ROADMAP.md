@@ -26,10 +26,10 @@ depends on.
 
 ## Cross-project execution order (2026-10-03)
 
-Keep milestone IDs and completed history. Next implementation order is **M2.5
-(client packaging) and M5.1a (bridge safety), then M4.6 → M4.2 → M3.5 → M4.3 →
-M4.4 → M4.5 → M3.6 → M3.7 → M5.1 → M5.2**. The first two can proceed
-independently. Package publication has D12/D14 decision gates; a blocked release
+Keep milestone IDs and completed history. **M2.5 (published client) and M5.1a
+(bridge safety) are complete.** The remaining implementation order is **M4.6 →
+M4.2 → M3.5 → M4.3 → M4.4 → M4.5 → M3.6 → M3.7 → M5.1 → M5.2**.
+Further package publication retains D12/D14 decision gates; a blocked release
 does not prevent independent safety/perception work. M3.3's outstanding visual
 acceptance remains debt and must be reconciled for milestones requiring it.
 M3.8 and M4.7 are optional extensions after the core, selected by requested scope.
@@ -309,10 +309,29 @@ Items:
   connects to a rendered client, observes, moves and releases. Unsupported versions
   and missing capabilities fail clearly. Publication is an explicit acceptance gate.
 
-- [ ] Package decisions recorded; current wire contract covered
-- [ ] Examples use the package; Java/Python compatibility fixtures agree
-- [ ] Recorded live packets exercise late results, errors and disconnects
-- [ ] Clean-environment published install and rendered smoke evidence
+- [x] Package decisions recorded; current wire contract covered
+- [x] Examples use the package; Java/Python compatibility fixtures agree
+- [x] Recorded live packets exercise late results, errors and disconnects
+- [x] Clean-environment published install and rendered smoke evidence
+
+**2026-10-03: complete.** The exact reviewed `marionette-mc==0.1.0a1`
+wheel/sdist are published on [PyPI](https://pypi.org/project/marionette-mc/0.1.0a1/)
+under the owner's client-only development-alpha exception (D14/D16). A fresh
+Python 3.11.13 environment installed that pin directly from PyPI with caching
+disabled; the recorded download origin and both fetched artifact hashes match
+the approved release. That installation observed the isolated rendered client,
+moved about 0.86 blocks during a 150 ms forward hold, released all controls and
+showed zero subsequent positional drift. The owned client was stopped and its
+config restored. Video, installation report and runtime samples were retained.
+
+The earlier local acceptance remains valid: typed protocol-2 coverage, all eight
+migrated examples, shared Java/Python fixtures, 19 Python tests on 3.11/3.14,
+220 Java tests, isolated wheel/sdist installs, and recorded late-result/error/
+disconnect routing. See [the package API](python/README.md). Published-install
+acceptance now completes M2.5; it does not establish separate consumer integration.
+Authentication remains gated for mod and stable releases, and further uploads
+require authorization. M3.3 animation-quality/physical-alt-tab debt remains
+independent and unchecked. No later milestone was started in this acceptance run.
 
 ---
 
@@ -900,21 +919,21 @@ Items:
   1.21.8.
 - **Delivers:** Release build pipeline (CI builds tagged releases), correct
   `neoforge.mods.toml` metadata (Baritone as optional dependency), Modrinth +
-  CurseForge listings, changelog process. **License confirmation (D12) is a
-  blocking item** — MIT is provisional.
+  CurseForge listings, changelog process. MIT was confirmed under D12 on 2026-10-03; publication authorization and
+  other release gates remain required.
 - **Prerequisites:** M9.1.
 - **Definition of done:** A user installs Marionette from Modrinth into a
   stock NeoForge 1.21.8 instance, follows the quickstart, and drives the
   player externally; the listing correctly declares 1.21.8-only support and
   optional Baritone.
 - **Tier:** Core.
-- **Decision:** **D12 (open, blocking)** — confirm license before anything
-  release-facing; also decide mod-version ↔ protocol-version relationship in
+- **Decision:** **D12 (settled: MIT)** — explicit publication approval remains
+  required; also decide mod-version ↔ protocol-version relationship in
   the changelog policy.
 
 Items:
 
-- [ ] Confirm license (MIT provisional) — blocking (D12)
+- [x] Confirm license — MIT confirmed 2026-10-03 (D12)
 - [ ] Tag-triggered CI release workflow producing the jar
 - [ ] mods.toml metadata: optional Baritone dependency declared
 - [ ] Modrinth + CurseForge listings with the 1.21.8 pin explained (Baritone
@@ -954,7 +973,7 @@ All design decisions, their status, and rationale live in
 | D9 | Baritone surface | **Settled: adapter behind `NavigationBackend` interface** | M6.1 |
 | D10 | Server component scope | **Deferred by design** (Phase-4 gap list; opt-in rule settled) | M7.1 |
 | D11 | Framebuffer capture | Open | M8.1 |
-| D12 | License confirmation | Open — **blocking release** | M2.5, M9.2 |
+| D12 | License confirmation | **Settled: MIT**; publication still gated | M2.5, M9.2 |
 | D13 | MCP positioning | **Settled: harness-side concern, never the transport** | M2.4 |
-| D14 | Published Python client specifics | Open — publication gate | M2.5 |
+| D14 | Published Python client specifics | **Settled**; initial alpha published and verified | M2.5 |
 | D15 | Cross-project coordination | **Settled** | M2.5 onward |

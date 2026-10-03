@@ -521,13 +521,32 @@ mod.
   `InetAddress` through when M5.1 hardens loopback enforcement.
 - Mod-version ↔ protocol-version relationship in the changelog policy — M9.2.
 
-## D14 — Published Python client — **Settled scope, publication gated** (2026-10-03)
+## D14 — Published Python client — **Settled; initial alpha published** (2026-10-03)
 
 The owner selected the PyPI distribution `marionette-mc`, independent semantic
 versioning, protocol 2 support, and explicitly pinned development prereleases.
 Consumers require a pinned published package rather than copied examples or a
-local shim. M2.5 implements packaging separately. Publication remains subject to
+local shim. M2.5 implements packaging separately under `python/`, importing as
+`marionette_mc`; its initial published version is `0.1.0a1` (PEP 440 spelling of
+0.1.0 alpha 1). Python 3.11 is the baseline. Builds and tests pin dependencies;
+client versioning is independent of mod and protocol integers. Publication remains subject to
 explicit approval after build and review; confirming MIT does not authorize it.
+
+The owner explicitly approved publishing the exact reviewed `0.1.0a1` wheel and
+sdist as a **client-only development-alpha exception** to D16. They are now on
+[PyPI](https://pypi.org/project/marionette-mc/0.1.0a1/). A fresh Python 3.11
+installation from PyPI, with caching disabled and origin/hash recorded, passed
+rendered observation, brief movement and release acceptance on 2026-10-03.
+This completes M2.5, not a separate consumer integration acceptance. No further
+publication or stable/mod release is authorized by this exception.
+
+Approved SHA256 values:
+
+- Wheel: `d084f4fd104b2b200724359c9dff0bc3b6572ad6deab0c327f5760aa63c2beca`
+- Sdist: `de7f464ebbac2676920a41a2981280671b2640badb382665c3a8f25b2410a180`
+
+The uploaded artifacts retain their reviewed pre-publication README text.
+Later source-documentation updates do not change or replace those bytes.
 
 ## D15 — Cross-project coordination — **Settled** (2026-10-03)
 
@@ -546,7 +565,10 @@ shipped native Python observers/dashboard remain supported. No browser allowlist
 or remote access is introduced. Local processes are trusted without tokens;
 loopback and Origin filtering do not authenticate local users or processes.
 Authentication/provisioning remains unresolved and blocks release, including
-loopback-only release. Revisit browser support with that decision.
+loopback-only mod and stable releases. The owner approved only the exact
+`marionette-mc==0.1.0a1` client development-alpha exception recorded in D14;
+this does not resolve authentication or authorize other releases. Revisit
+browser support with that decision.
 
 M5.1a resolves the configured address once to an InetAddress, clamps non-loopback
 or unresolvable values to 127.0.0.1, and passes the same address object to Netty.

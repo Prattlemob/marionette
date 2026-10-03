@@ -52,3 +52,10 @@ logs/
 
 ### Python (example agents) ###
 __pycache__/
+
+### Python packaging and tests ###
+.venv/
+dist/
+*.egg-info/
+.mypy_cache/
+.pytest_cache/

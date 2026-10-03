@@ -122,7 +122,7 @@ The current wire contract is [protocol 2](protocol/v1.md) (canonical document pa
 
 ## License
 
-MIT — see [LICENSE](LICENSE). (The license choice is provisional until the first public release.)
+MIT — see [LICENSE](LICENSE); confirmed by the owner on 2026-10-03. Publication still requires explicit authorization.
 
 ## Disclaimer
 
@@ -153,3 +153,16 @@ Development access trusts native local processes. Browser Origin headers are
 rejected, including `null`; native clients must omit Origin. This is not local
 process authentication. Authentication remains a release gate; see
 [the security policy](SECURITY.md).
+
+## Python client
+
+Install the published development alpha with
+`python -m pip install "marionette-mc==0.1.0a1"`, then run
+`python examples/probe.py` from this checkout. The typed asyncio client supports
+Python 3.11+ and protocol 2; see [the API](python/README.md) and
+[PyPI release](https://pypi.org/project/marionette-mc/0.1.0a1/).
+
+The exact published pin passed clean-environment installation and rendered
+observation/movement/release acceptance. The owner approved this client-only
+alpha exception; mod and stable-release authentication gates remain in force.
+M2.5 completion does not establish separate consumer integration acceptance.

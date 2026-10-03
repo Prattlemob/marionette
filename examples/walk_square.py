@@ -5,32 +5,26 @@ Walks four ~5-block sides with 90° turns and reports how far from the
 start the player ended up. Doubles as the disconnect-safety test target:
 `kill -9` this script mid-walk and the player must stop within one tick.
 
-Requires:  pip install websockets
+Requires:  pip install "marionette-mc==0.1.0a1"
 Usage:     python walk_square.py [port]     (default 24680)
 """
 import asyncio
-import json
 import math
 import sys
 
-import websockets
+from _common import connect
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 24680
 SIDE_BLOCKS = 5.0
 
 
 async def next_observation(ws):
-    while True:
-        message = json.loads(await ws.recv())
-        if message.get("type") == "observation":
-            return message
-        print("non-observation message:", message)
+    return await ws.next_observation(timeout=10)
 
 
 async def main():
-    async with websockets.connect(f"ws://127.0.0.1:{PORT}/") as ws:
-        await ws.send(json.dumps({"type": "hello", "versions": [2], "role": "controller"}))
-        hello = json.loads(await ws.recv())
+    async with connect(f"ws://127.0.0.1:{PORT}/", role="controller", sections=["player"]) as ws:
+        hello = ws.hello
         assert hello.get("type") == "hello", f"handshake rejected: {hello}"
 
         start = await next_observation(ws)
@@ -38,15 +32,15 @@ async def main():
         print(f"start ({start['player']['x']:.1f}, {start['player']['z']:.1f}) yaw {yaw:.0f}")
 
         for side in range(4):
-            await ws.send(json.dumps({"type": "look", "yaw": yaw, "pitch": 0.0}))
+            await ws.look(yaw=yaw, pitch=0.0)
             origin = await next_observation(ws)
-            await ws.send(json.dumps({"type": "input", "forward": True}))
+            await ws.input(forward=True)
             while True:
                 obs = await next_observation(ws)
                 walked = math.dist((obs["player"]["x"], obs["player"]["z"]), (origin["player"]["x"], origin["player"]["z"]))
                 if walked >= SIDE_BLOCKS:
                     break
-            await ws.send(json.dumps({"type": "input", "forward": False}))
+            await ws.input(forward=False)
             print(f"side {side + 1}: walked {walked:.1f} blocks")
             yaw += 90.0
 
@@ -54,8 +48,8 @@ async def main():
         end = await next_observation(ws)
         error = math.dist((end["player"]["x"], end["player"]["z"]), (start["player"]["x"], start["player"]["z"]))
         print(f"finished {error:.1f} blocks from start")
-        await ws.send(json.dumps({"type": "release"}))
+        await ws.release()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(asyncio.wait_for(main(), timeout=120))

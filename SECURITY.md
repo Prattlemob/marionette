@@ -23,7 +23,10 @@ requirement, not an afterthought. The current posture, as specified in
 - **Local processes are trusted, not authenticated.** There are no tokens yet.
   Loopback does not isolate other users or programs on this computer. Origin
   rejection blocks browser drive-by access, not malicious native programs.
-  Authentication and provisioning must be decided before any release (D16).
+  Authentication and provisioning remain gates for mod and stable releases
+  (D16). The owner approved only the exact `marionette-mc==0.1.0a1` client-only
+  development alpha as an exception; this adds no authentication guarantee or
+  authorization for other releases (D14).
 - **One controller and bounded observers.** Observer loss cannot release a
   controller's inputs. Each connection has independent bounded queues.
 - **Bounded work and emergency release.** See the protocol's `bridgeSafety`
@@ -34,4 +37,6 @@ requirement, not an afterthought. The current posture, as specified in
 
 ## Supported versions
 
-There are no releases yet, so no versions receive security support.
+The Python client development alpha `marionette-mc==0.1.0a1` is published.
+There is no stable mod release or security-support commitment yet. The alpha
+uses the documented local-development trust model above.

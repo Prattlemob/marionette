@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "marionette-mc"
+version = "0.1.0a1"
+description = "Typed asyncio client for the Marionette Minecraft bridge"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{name = "Prattlemob"}]
+dependencies = ["websockets==15.0.1"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Operating System :: OS Independent",
+  "Typing :: Typed",
+]
+
+[project.urls]
+Repository = "https://github.com/Prattlemob/marionette"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/marionette_mc"]
+
+[tool.hatch.build.targets.sdist]
+include = ["/src", "/tests", "/README.md", "/LICENSE", "/pyproject.toml", "/requirements-dev.txt"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src/marionette_mc"]
