@@ -284,6 +284,59 @@ nothing to stay compatible with.
 - Observation mirrors actuation: when a menu is open, the frame includes its
   menu-type id and slot contents via the same addressing (M4.2).
 
+### D8a — Inventory execution and initial scope — **Settled** (2026-10-03, M3.4)
+
+The additive `inventory` capability provides intent-level open, close, inspect,
+move, hotbar swap, drop, and equip requests. The on-demand menu descriptor is
+necessary to safely address actions before M4.2's periodic inventory observation.
+It does not change the existing observation frame or protocol integer.
+
+Each mutation checks the current screen's menu type, container id and server
+state id, then validates the entire operation before routing through vanilla
+`handleInventoryMouseClick`. Player aliases resolve through each slot's backing
+inventory and container index, not its position in the menu. InventoryMenu has
+no registered MenuType, so its wire name is `minecraft:inventory`.
+
+Initial execution scope is survival/adventure player inventory and plain vanilla
+storage menus (chest/barrel, hopper, dispenser/dropper, shulker). Crafting slots,
+creative inventory, arbitrary menu subclasses and bundle click behavior are
+refused. The addressing remains generic for future menu support. Move requires
+the whole stack to fit; equip requires an empty matching armor slot; swaps
+validate both directions to avoid vanilla's overflow/drop branch. An occupied
+cursor prevents mutation. No operation chooses destinations for the agent except
+`equip`'s mechanically determined armor slot.
+
+Results acknowledge client prediction, not a server transaction. State ids are
+server revisions and may remain unchanged across local predictions; agents must
+re-inspect after synchronization. Multi-click moves finish in the same tick,
+with checks after each click. Unexpected click behavior stops without silently
+dropping or relocating cursor contents. See the
+[implementation and verification record](specs/2026-10-03-m3.4-inventory-actions.md).
+
+### D8b — Visible inventory interactions — **Settled** (2026-10-03, user request)
+
+Keep the default wire behavior instant and add opt-in `animated: true`, advertised
+as `inventoryAnimation`. The reference demo opts in by default. The client draws
+a virtual agent cursor and supplies its coordinates to the current screen's
+render path, so vanilla hover and carried-stack rendering show the actual action.
+The OS cursor is not warped. Swaps retain vanilla's number-key semantics; drops
+retain vanilla throw. Both approach their source and show a click cue.
+
+One action at a time runs as tick-side clicks separated by frame-smooth cursor
+travel and brief dwell. Results arrive after the final click. New mutations are
+refused while busy; inspection remains available. Each step checks screen/menu
+identity and expected slot/cursor contents. Release, controller loss, human
+press/scroll input, world exit, resized/replaced screens, and content changes
+cancel remaining clicks. Recovery is a vanilla click back into the original,
+empty, valid source, only for an exact match of the carried stack in the same
+live menu. Otherwise retain the cursor for human recovery or vanilla close.
+Human input restores the real pointer's hover before vanilla handles it.
+
+This extends the initial same-tick implementation in D8a; it does not add a
+background job queue, change controller/observer ownership, or claim server
+transaction guarantees. The user explicitly requested watchable cursor motion
+and accepted retaining instant execution.
+
 ## D9 — Baritone surface: API adapter behind an interface — **Settled**
 
 - Core defines a `NavigationBackend` interface; the Baritone implementation

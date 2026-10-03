@@ -24,3 +24,39 @@ joined a world.
   (slot 0 iron pickaxe, slot 1 dirt, slot 2 cooked beef, hunger not
   full): mines a block to completion, places a block, eats — no
   keyboard. Watch the rendered client.
+
+### Inventory and containers (M3.4)
+
+`python inventory.py [--port 24680] [--chest] [--instant]` exercises whole-stack move,
+number-key hotbar swap, equip, and dropping one item. It uses the additive
+`inventory` capability and the menu descriptor returned by `inspect`, without
+assuming menu slot offsets. The example animates a visible cursor by default
+(`inventoryAnimation` capability); `--instant` keeps same-tick execution.
+Move/equip show real pickup and placement; swap/drop show a cursor approach
+and click cue. Each action awaits its result before continuing. Requires Python 3.11+ and `pip install websockets`.
+
+Use a survival/adventure test world. Close all screens, empty the cursor,
+leave hotbar slot 0 and the head armor slot empty, and provision:
+
+- First main-inventory slot (`main.0`): 16 dirt.
+- Second main-inventory slot (`main.1`): one iron helmet.
+- Third main-inventory slot (`main.2`): 8 cobblestone.
+- Second hotbar slot (`hotbar.1`): one stick, to demonstrate a swap.
+
+With cheats enabled, `/clear @s` followed by these commands sets up the items
+(**clear removes existing inventory; use a disposable test world**):
+
+```text
+/item replace entity @s inventory.0 with minecraft:dirt 16
+/item replace entity @s inventory.1 with minecraft:iron_helmet
+/item replace entity @s inventory.2 with minecraft:cobblestone 8
+/item replace entity @s hotbar.1 with minecraft:stick
+```
+
+For `--chest`, point at a reachable, closed chest with an empty slot before
+starting. After the inventory sequence the example taps normal use, waits for
+the chest menu, and moves the remaining dirt into its first empty container
+slot using the same generic move command. A dropped item may be picked up
+again if the player stands on it. The script reports errors rather than blindly
+retrying mutations. Responses reflect client prediction; server synchronization
+can still correct them. Full wire rules: [protocol/v1.md](../protocol/v1.md#inventory--menu-addressed-inventory-actions).

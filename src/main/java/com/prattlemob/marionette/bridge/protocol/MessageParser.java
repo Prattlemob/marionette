@@ -101,12 +101,58 @@ public final class MessageParser {
                     optionalBoolean(json, "use"),
                     optionalRangedInt(json, "hotbar", 0, 8),
                     tapArray(json));
+            case "inventory" -> parseInventory(json, id, raw);
             case "look" -> parseLook(json, id, raw);
             case "release" -> new AgentCommand.Release();
             case "configure" -> new AgentCommand.Configure(
                     optionalRangedInt(json, "rateDivisor", 1, 100));
             default -> throw new ProtocolError(ErrorCode.UNKNOWN_TYPE, "unknown type: " + type);
         };
+    }
+
+    private static AgentCommand.InventoryAction parseInventory(JsonObject json, JsonPrimitive id, String raw) {
+        String op = optionalString(json, "op");
+        if (op == null || !Set.of("open", "inspect", "close", "move", "swap", "drop", "equip").contains(op)) {
+            throw new ProtocolError(ErrorCode.INVALID_FIELD, "unknown or missing inventory op");
+        }
+        AgentCommand.MenuRef menu = null;
+        if (!op.equals("open") && !op.equals("inspect")) {
+            if (!(json.get("menu") instanceof JsonObject ref)) {
+                throw new ProtocolError(ErrorCode.INVALID_FIELD, "menu must be an object");
+            }
+            String type = optionalString(ref, "type");
+            if (type == null || type.isBlank()) {
+                throw new ProtocolError(ErrorCode.INVALID_FIELD, "menu.type must be a nonempty string");
+            }
+            menu = new AgentCommand.MenuRef(type,
+                    requiredInt(ref, "containerId", Integer.MAX_VALUE),
+                    requiredInt(ref, "stateId", Integer.MAX_VALUE));
+        }
+        boolean needsSource = Set.of("move", "swap", "drop", "equip").contains(op);
+        return new AgentCommand.InventoryAction(op, menu,
+                needsSource ? slotRef(json, "from") : null,
+                op.equals("move") ? slotRef(json, "to") : null,
+                op.equals("swap") ? requiredInt(json, "hotbar", 8) : null,
+                op.equals("drop") && Boolean.TRUE.equals(optionalBoolean(json, "all")),
+                Boolean.TRUE.equals(optionalBoolean(json, "animated")), id, raw);
+    }
+
+    private static int requiredInt(JsonObject json, String field, int max) {
+        Integer value = optionalRangedInt(json, field, 0, max);
+        if (value == null) throw new ProtocolError(ErrorCode.INVALID_FIELD, "missing " + field);
+        return value;
+    }
+
+    private static AgentCommand.SlotRef slotRef(JsonObject json, String field) {
+        JsonElement value = json.get(field);
+        if (value instanceof JsonPrimitive primitive && primitive.isString()) {
+            String alias = primitive.getAsString();
+            if (alias.matches("hotbar\\.[0-8]|main\\.([0-9]|1[0-9]|2[0-6])|armor\\.(head|chest|legs|feet)|offhand")) {
+                return new AgentCommand.SlotRef(null, alias);
+            }
+            throw new ProtocolError(ErrorCode.INVALID_FIELD, "unknown player slot alias: " + alias);
+        }
+        return new AgentCommand.SlotRef(requiredInt(json, field, Integer.MAX_VALUE), null);
     }
 
     private static List<Integer> versions(JsonObject json) {

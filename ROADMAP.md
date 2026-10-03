@@ -369,12 +369,18 @@ Items:
 
 Items:
 
-- [ ] Menu-generic slot addressing scheme specced in `protocol/` (D8)
-- [ ] Move/swap/drop/equip operations, marshalled on tick, validated against
+- [x] Menu-generic slot addressing scheme specced in `protocol/` (D8)
+- [x] Move/swap/drop/equip operations, marshalled on tick, validated against
       the actual open menu
-- [ ] Works against a vanilla chest via the same generic addressing
-- [ ] Failure responses when an operation is impossible (slot empty, no menu
+- [x] Works against a vanilla chest via the same generic addressing
+- [x] Failure responses when an operation is impossible (slot empty, no menu
       open, etc.)
+
+- [x] Optional visible cursor animation, with cancellable pickup/carry/place
+
+Verified in a rendered client against an isolated survival world, including
+server-confirmed chest contents and failure paths. See the
+[M3.4 verification record](docs/specs/2026-10-03-m3.4-inventory-actions.md#verification).
 
 ---
 

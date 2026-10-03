@@ -36,6 +36,13 @@ public sealed interface AgentCommand extends ParsedMessage {
     record LookSmoothPoint(double x, double y, double z, Float speed,
                            JsonPrimitive id, String raw) implements AgentCommand {}
 
+    /** Inventory request, validated on the network thread and executed on the client tick. */
+    record InventoryAction(String op, MenuRef menu, SlotRef from, SlotRef to,
+                           Integer hotbar, boolean all, boolean animated, JsonPrimitive id, String raw) implements AgentCommand {}
+
+    record MenuRef(String type, int containerId, int stateId) {}
+    record SlotRef(Integer index, String alias) {}
+
     /** Release every held control immediately. */
     record Release() implements AgentCommand {}
 

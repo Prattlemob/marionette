@@ -9,6 +9,7 @@ import com.prattlemob.marionette.bridge.protocol.Messages;
 import com.prattlemob.marionette.config.MarionetteConfig;
 import com.prattlemob.marionette.config.Verbosity;
 import com.prattlemob.marionette.control.CameraSmoother;
+import com.prattlemob.marionette.control.InventoryActionApplier;
 import com.prattlemob.marionette.control.CappedRateModel;
 import com.prattlemob.marionette.control.ControlState;
 import com.prattlemob.marionette.control.ControlStateApplier;
@@ -29,6 +30,7 @@ import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RenderFrameEvent;
+import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.GameShuttingDownEvent;
 
@@ -64,6 +66,7 @@ public class MarionetteClient {
 
     private static MarionetteClient instance;
 
+    private final InventoryActionApplier inventoryApplier = new InventoryActionApplier();
     private final ControlState controlState = new ControlState();
     private final ControlStateApplier applier = new MixinInputApplier();
     private final CameraSmoother cameraSmoother = new CameraSmoother();
@@ -91,7 +94,26 @@ public class MarionetteClient {
         NeoForge.EVENT_BUS.addListener(this::onRenderFramePre);
         NeoForge.EVENT_BUS.addListener(this::onLoggingIn);
         NeoForge.EVENT_BUS.addListener(this::onLoggingOut);
+        NeoForge.EVENT_BUS.addListener(this::onInventoryMousePress);
+        NeoForge.EVENT_BUS.addListener(this::onInventoryKeyPress);
+        NeoForge.EVENT_BUS.addListener(this::onInventoryScroll);
         NeoForge.EVENT_BUS.addListener(this::onGameShuttingDown);
+    }
+
+    public InventoryActionApplier inventoryActions() {
+        return inventoryApplier;
+    }
+
+    private void onInventoryMousePress(ScreenEvent.MouseButtonPressed.Pre event) {
+        inventoryApplier.cancel("human mouse input");
+    }
+
+    private void onInventoryKeyPress(ScreenEvent.KeyPressed.Pre event) {
+        inventoryApplier.cancel("human keyboard input");
+    }
+
+    private void onInventoryScroll(ScreenEvent.MouseScrolled.Pre event) {
+        inventoryApplier.cancel("human scroll input");
     }
 
     /** Configs are loaded by client setup; start the bridge on the main thread. */
@@ -126,6 +148,7 @@ public class MarionetteClient {
     }
 
     private void onGameShuttingDown(GameShuttingDownEvent event) {
+        inventoryApplier.cancel("game shutting down", false);
         // Ordering rule (docs/decisions.md, M2.3): controls release before the
         // bridge stops. Inert in practice (ticks have stopped) but explicit.
         if (controlsEngaged) {
@@ -161,6 +184,7 @@ public class MarionetteClient {
         Minecraft minecraft = Minecraft.getInstance();
         LocalPlayer player = minecraft.player;
         boolean agentLost = bridge != null && bridge.pollDisconnected();
+        if (agentLost) inventoryApplier.cancel("controller disconnected");
 
         if (!inWorld || player == null) {
             if (agentLost) {
@@ -168,8 +192,9 @@ public class MarionetteClient {
             }
             if (bridge != null) {
                 for (BridgeServer.Received received : bridge.drainCommands()) {
-                    // Session settings apply without a world; actuation commands are discarded.
-                    if (received.command() instanceof AgentCommand.Configure) {
+                    // Settings apply without a world; inventory requests get an explicit error.
+                    if (received.command() instanceof AgentCommand.Configure
+                            || received.command() instanceof AgentCommand.InventoryAction) {
                         applyCommand(received, null);
                     }
                 }
@@ -195,6 +220,7 @@ public class MarionetteClient {
                 applyCommand(received, player);
             }
         }
+        inventoryApplier.tick();
         if (demo != null) {
             DemoScript.Stunt stunt = demo.tick(player.getYRot(), controlState);
             executeStunt(minecraft, player, stunt);
@@ -241,6 +267,14 @@ public class MarionetteClient {
 
     private void applyCommand(BridgeServer.Received received, LocalPlayer player) {
         switch (received.command()) {
+            case AgentCommand.InventoryAction inventory -> {
+                if (player == null) {
+                    received.from().sendReliable(Messages.error(ErrorCode.INVENTORY_UNAVAILABLE,
+                            "no world is loaded", inventory.id(), inventory.raw()));
+                } else {
+                    inventoryApplier.apply(inventory, received.from()::sendReliable);
+                }
+            }
             case AgentCommand.InputUpdate update -> {
                 if (update.forward() != null) controlState.setForward(update.forward());
                 if (update.back() != null) controlState.setBack(update.back());
@@ -281,6 +315,7 @@ public class MarionetteClient {
                 }
             }
             case AgentCommand.Release release -> {
+                inventoryApplier.cancel("controller released inputs");
                 controlState.releaseAll();
                 cameraSmoother.cancel();
             }
@@ -327,6 +362,7 @@ public class MarionetteClient {
 
     /** The safety rule: neutral ControlState, applier released, evidence logged. */
     private void releaseControls() {
+        inventoryApplier.cancel("controls released");
         cameraSmoother.cancel();
         controlState.releaseAll();
         applier.release();
@@ -430,6 +466,7 @@ public class MarionetteClient {
         if (event.getPlayer() == null) {
             return;
         }
+        inventoryApplier.cancel("left world", false);
         inWorld = false;
         demo = null;
         if (controlsEngaged) {

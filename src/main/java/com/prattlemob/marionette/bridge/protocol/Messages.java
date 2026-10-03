@@ -26,8 +26,19 @@ public final class Messages {
         capabilities.addProperty("camera", true);
         capabilities.addProperty("observer", true);
         capabilities.addProperty("interact", true);
+        capabilities.addProperty("inventory", true);
+        capabilities.addProperty("inventoryAnimation", true);
         reply.add("capabilities", capabilities);
         reply.addProperty("mod", modVersion);
+        return reply.toString();
+    }
+
+    public static String inventoryResult(String op, JsonPrimitive id, JsonObject menu) {
+        JsonObject reply = new JsonObject();
+        reply.addProperty("type", "inventory_result");
+        if (id != null) reply.add("id", id);
+        reply.addProperty("op", op);
+        reply.add("menu", menu);
         return reply.toString();
     }
 

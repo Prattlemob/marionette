@@ -6,7 +6,9 @@
   "client": [
     "KeyboardInputMixin",
     "MinecraftFocusPauseMixin",
-    "MinecraftInteractionMixin"
+    "MinecraftInteractionMixin",
+    "InventoryCursorMixin",
+    "InventoryHoverAccess"
   ],
   "injectors": {
     "defaultRequire": 1
