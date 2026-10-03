@@ -1,13 +1,14 @@
 package com.prattlemob.marionette.bridge;
 
 import java.net.InetSocketAddress;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.util.HashSet;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
 import java.util.Set;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -70,20 +71,27 @@ public final class BridgeServer {
     /** Max WebSocket message size; larger closes with 1009 (see protocol/v1.md). */
     private static final int MAX_FRAME_BYTES = 65536;
 
-    /** Liveness ping cadence; constant in M2.3, the watchdog timeout knob is M5.1's. */
-    private static final long PING_INTERVAL_MILLIS = 10_000;
+    /** Maximum watchdog/ping interval; shorter leases use a quarter-timeout interval. */
+    private static final long PING_INTERVAL_MILLIS = 1_000;
 
     /** One inbound command plus the connection it came from (configure and
      *  apply-time error replies are per-connection). */
-    public record Received(AgentCommand command, AgentConnection from) {}
+    public record Received(AgentCommand command, AgentConnection from, long generation) {
+        public boolean valid() { return from.valid(generation); }
+    }
 
-    private final String bindAddress;
+    private final InetAddress bindAddress;
     private final int requestedPort;
     private final String modVersion;
     private final int maxObservers;
     private final long pingIntervalMillis;
     private final long helloTimeoutMillis;
-    private final Queue<Received> inbound = new ConcurrentLinkedQueue<>();
+    private final long pongTimeoutMillis;
+    private final Set<Channel> pending = new HashSet<>(); // event-loop only
+    private final Set<Channel> sockets = new HashSet<>(); // includes incomplete HTTP
+    private int nextConnection;
+    public static final int COMMANDS_PER_TICK = 32;
+    public static final long WORK_BUDGET_NANOS = 2_000_000;
     private final AtomicReference<AgentConnection> controller = new AtomicReference<>();
     private final List<AgentConnection> observers = new CopyOnWriteArrayList<>();
     private final AtomicBoolean disconnected = new AtomicBoolean();
@@ -105,7 +113,22 @@ public final class BridgeServer {
 
     BridgeServer(String bindAddress, int port, String modVersion, int maxObservers,
                  long pingIntervalMillis, long helloTimeoutMillis) {
+        this(resolveLoopback(bindAddress), port, modVersion, maxObservers,
+                pingIntervalMillis, helloTimeoutMillis, 5_000);
+    }
+
+    public BridgeServer(InetAddress bindAddress, int port, String modVersion, int maxObservers,
+                        long helloTimeoutMillis, long pongTimeoutMillis) {
+        this(bindAddress, port, modVersion, maxObservers,
+                Math.min(PING_INTERVAL_MILLIS, Math.max(1, pongTimeoutMillis / 4)),
+                helloTimeoutMillis, pongTimeoutMillis);
+    }
+
+    private BridgeServer(InetAddress bindAddress, int port, String modVersion, int maxObservers,
+                         long pingIntervalMillis, long helloTimeoutMillis, long pongTimeoutMillis) {
+        if (!bindAddress.isLoopbackAddress()) throw new IllegalArgumentException("loopback required");
         this.bindAddress = bindAddress;
+        this.pongTimeoutMillis = pongTimeoutMillis;
         this.requestedPort = port;
         this.modVersion = modVersion;
         this.maxObservers = maxObservers;
@@ -113,7 +136,21 @@ public final class BridgeServer {
         this.helloTimeoutMillis = helloTimeoutMillis;
     }
 
-    /** nanoTime of the newest pong from the controller; 0 before the first. For the M5.1 watchdog. */
+    private static InetAddress resolveLoopback(String address) {
+        try {
+            InetAddress resolved = InetAddress.getByName(address);
+            if (!resolved.isLoopbackAddress()) throw new IllegalArgumentException("loopback required");
+            return resolved;
+        } catch (UnknownHostException e) { throw new IllegalArgumentException(e); }
+    }
+
+    /** Sever only the controller; invalidate immediately on the calling thread. */
+    public void disconnectController(String reason) {
+        AgentConnection current = controller.get();
+        if (current != null) current.close(1008, reason);
+    }
+
+    /** nanoTime of the newest pong from the controller; 0 before the first. Used for liveness diagnostics. */
     public long lastPongNanos() {
         AgentConnection current = controller.get();
         return current != null ? current.lastPongNanos() : 0;
@@ -132,9 +169,45 @@ public final class BridgeServer {
                 .childHandler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel channel) {
+                        AgentConnectionHandler handler = new AgentConnectionHandler();
                         channel.pipeline().addLast(
                                 new HttpServerCodec(),
                                 new HttpObjectAggregator(MAX_FRAME_BYTES),
+                                new io.netty.channel.ChannelDuplexHandler() {
+                                    @Override
+                                    public void write(ChannelHandlerContext ctx, Object message,
+                                                      io.netty.channel.ChannelPromise promise) {
+                                        // Netty's automatic pong path must obey backpressure too.
+                                        if ((message instanceof PingWebSocketFrame || message instanceof PongWebSocketFrame)
+                                                && !ctx.channel().isWritable()) {
+                                            io.netty.util.ReferenceCountUtil.release(message);
+                                            promise.tryFailure(new IllegalStateException("control-frame overload"));
+                                            if (handler.connection != null) handler.connection.close(1013, "overloaded");
+                                            else ctx.close();
+                                        } else ctx.write(message, promise);
+                                    }
+                                },
+                                new io.netty.channel.SimpleChannelInboundHandler<io.netty.handler.codec.http.FullHttpRequest>() {
+                                    @Override
+                                    protected void channelRead0(ChannelHandlerContext ctx,
+                                            io.netty.handler.codec.http.FullHttpRequest request) {
+                                        if (request.headers().contains(io.netty.handler.codec.http.HttpHeaderNames.ORIGIN)) {
+                                            ctx.writeAndFlush(new io.netty.handler.codec.http.DefaultFullHttpResponse(
+                                                    io.netty.handler.codec.http.HttpVersion.HTTP_1_1,
+                                                    io.netty.handler.codec.http.HttpResponseStatus.FORBIDDEN))
+                                                    .addListener(ChannelFutureListener.CLOSE);
+                                        } else ctx.fireChannelRead(request.retain());
+                                    }
+                                },
+                                new io.netty.channel.ChannelInboundHandlerAdapter() {
+                                    @Override public void channelRead(ChannelHandlerContext ctx, Object message) {
+                                        if (message instanceof CloseWebSocketFrame && handler.connection != null) {
+                                            handler.connection.session().close();
+                                            handler.connection.invalidate();
+                                        }
+                                        ctx.fireChannelRead(message);
+                                    }
+                                },
                                 new WebSocketServerProtocolHandler(WebSocketServerProtocolConfig.newBuilder()
                                         .websocketPath("/")
                                         .allowExtensions(true)
@@ -142,7 +215,7 @@ public final class BridgeServer {
                                         .dropPongFrames(false)
                                         .build()),
                                 new WebSocketFrameAggregator(MAX_FRAME_BYTES),
-                                new AgentConnectionHandler());
+                                handler);
                     }
                 });
         listener = bootstrap.bind(bindAddress, requestedPort).syncUninterruptibly().channel();
@@ -169,14 +242,35 @@ public final class BridgeServer {
         return disconnected.getAndSet(false);
     }
 
-    /** All commands received since the last drain, in arrival order, tagged with origin. */
-    public List<Received> drainCommands() {
-        List<Received> commands = new ArrayList<>();
-        Received received;
-        while ((received = inbound.poll()) != null) {
-            commands.add(received);
+    /** Priority releases first; at most one ordinary command per round-robin turn. */
+    public Received pollCommand() {
+        Received safety = pollRelease();
+        if (safety != null) return safety;
+        List<AgentConnection> active = connections().toList();
+        for (int i = 0; i < active.size(); i++) {
+            AgentConnection connection = active.get(Math.floorMod(nextConnection++, active.size()));
+            Received received = connection.pollCommand();
+            if (received != null && received.valid()) return received;
         }
-        return commands;
+        return null;
+    }
+
+    public Received pollRelease() {
+        AgentConnection current = controller.get();
+        if (current == null) return null;
+        Received received = current.pollRelease();
+        return received != null && received.valid() ? received : null;
+    }
+
+    /** Bounded convenience drain for headless consumers. The game also imposes a time budget. */
+    public List<Received> drainCommands() {
+        List<Received> result = new ArrayList<>();
+        for (int i = 0; i < COMMANDS_PER_TICK; i++) {
+            Received received = pollCommand();
+            if (received == null) break;
+            result.add(received);
+        }
+        return result;
     }
 
     /**
@@ -276,6 +370,7 @@ public final class BridgeServer {
             }
         }
         if (group != null) {
+            group.submit(() -> new ArrayList<>(sockets).forEach(Channel::close)).syncUninterruptibly();
             group.shutdownGracefully(0, 2, TimeUnit.SECONDS)
                     .awaitUninterruptibly(3, TimeUnit.SECONDS);
             group = null;
@@ -288,25 +383,34 @@ public final class BridgeServer {
         private ScheduledFuture<?> helloTimeoutTask;
 
         @Override
+        public void channelActive(ChannelHandlerContext ctx) throws Exception {
+            if (pending.size() >= 8) { ctx.close(); return; }
+            sockets.add(ctx.channel());
+            pending.add(ctx.channel());
+            helloTimeoutTask = ctx.executor().schedule(() -> {
+                if (connection == null) ctx.close();
+                else if (!connection.session().isActive()) connection.close(1002, "hello timeout");
+            }, helloTimeoutMillis, TimeUnit.MILLISECONDS);
+            super.channelActive(ctx);
+        }
+
+        @Override
         public void userEventTriggered(ChannelHandlerContext ctx, Object event) throws Exception {
             if (event instanceof WebSocketServerProtocolHandler.HandshakeComplete) {
                 ProtocolSession session = new ProtocolSession(modVersion, this::admit);
-                connection = new AgentConnection(ctx.channel(), session);
+                connection = new AgentConnection(ctx.channel(), session, () -> {
+                    if (connection != null && connection.role() == Role.CONTROLLER) disconnected.set(true);
+                });
                 pingTask = ctx.executor().scheduleAtFixedRate(
                         () -> {
-                            if (ctx.channel().isWritable()) {
+                            if (connection.pongExpired(System.nanoTime(), TimeUnit.MILLISECONDS.toNanos(pongTimeoutMillis))) {
+                                LOG.warn("Bridge {} pong timeout", connection.role());
+                                connection.close(1008, "pong timeout");
+                            } else if (connection.ready() && ctx.channel().isWritable()) {
                                 ctx.writeAndFlush(new PingWebSocketFrame());
                             }
                         },
                         pingIntervalMillis, pingIntervalMillis, TimeUnit.MILLISECONDS);
-                helloTimeoutTask = ctx.executor().schedule(
-                        () -> {
-                            if (!connection.session().isActive()) {
-                                ctx.writeAndFlush(new CloseWebSocketFrame(1002, "hello timeout"))
-                                        .addListener(ChannelFutureListener.CLOSE);
-                            }
-                        },
-                        helloTimeoutMillis, TimeUnit.MILLISECONDS);
             }
             super.userEventTriggered(ctx, event);
         }
@@ -316,6 +420,7 @@ public final class BridgeServer {
             ErrorCode refusal = tryAdmit(connection, role);
             if (refusal == null) {
                 connection.setRole(role);
+                pending.remove(connection.channel());
                 if (helloTimeoutTask != null) {
                     helloTimeoutTask.cancel(false);
                 }
@@ -336,19 +441,22 @@ public final class BridgeServer {
             }
             if (!(frame instanceof TextWebSocketFrame text)) {
                 connection.session().close();
-                ctx.writeAndFlush(new CloseWebSocketFrame(1003, "text frames only"))
-                        .addListener(ChannelFutureListener.CLOSE);
+                connection.close(1003, "text frames only");
                 return;
             }
             for (ProtocolSession.Action action : connection.session().onFrame(text.text())) {
                 switch (action) {
                     case ProtocolSession.Action.Send send ->
-                            ctx.writeAndFlush(new TextWebSocketFrame(send.json()));
-                    case ProtocolSession.Action.Enqueue enqueue ->
-                            inbound.add(new Received(enqueue.command(), connection));
+                            connection.sendReliable(send.json());
+                    case ProtocolSession.Action.Enqueue enqueue -> {
+                        if (!connection.enqueue(enqueue.command())) {
+                            connection.sendReliable(Messages.error(ErrorCode.OVERLOADED,
+                                    "command queue full", null, null));
+                            connection.close(1013, "overloaded");
+                        }
+                    }
                     case ProtocolSession.Action.Close close ->
-                            ctx.writeAndFlush(new CloseWebSocketFrame(close.code(), close.reason()))
-                                    .addListener(ChannelFutureListener.CLOSE);
+                            connection.close(close.code(), close.reason());
                 }
             }
             if (!connection.ready() && connection.session().isActive()) {
@@ -373,17 +481,15 @@ public final class BridgeServer {
             if (helloTimeoutTask != null) {
                 helloTimeoutTask.cancel(false);
             }
+            pending.remove(ctx.channel());
+            sockets.remove(ctx.channel());
             if (connection != null) {
-                connection.setReady(false);
+                connection.invalidate();
                 if (controller.compareAndSet(connection, null)) {
-                    // Commands from a dead controller must not act; an
-                    // observer's queued configure must survive it.
-                    inbound.removeIf(received -> received.from() == connection);
-                    if (connection.session().helloCompleted()) {
-                        disconnected.set(true); // only a controller loss is an agent loss
-                    }
+                    // invalidate() already cleared only this connection's work
+                    // and signaled loss once, before any courtesy close flush.
                 } else if (observers.remove(connection)) {
-                    inbound.removeIf(received -> received.from() == connection);
+
                     LOG.info("Observer disconnected; {} still watching", observers.size());
                 }
             }
@@ -392,23 +498,12 @@ public final class BridgeServer {
 
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-            if (cause instanceof TooLongFrameException) {
-                // The frame decoder/aggregator rejected an oversized message
-                // before it ever reached channelRead0. Send the 1009 close
-                // frame explicitly: a bare ctx.close() here would let
-                // WebSocketServerProtocolHandler's default close path inject
-                // its own courtesy 1000 "Bye" frame instead, masking the
-                // real cause (see protocol/v1.md's transport section).
-                // Best-effort: pre-handshake (HttpObjectAggregator) no WS
-                // encoder is wired, so the write fails harmlessly — the
-                // connection dies via the close listener either way.
-                ctx.writeAndFlush(new CloseWebSocketFrame(1009, "message too big"))
-                        .addListener(ChannelFutureListener.CLOSE);
-            } else {
-                LOG.warn("Bridge connection error ({}): {}; closing connection",
-                        cause.getClass().getSimpleName(), cause.getMessage());
-                ctx.close(); // channelInactive handles the release signal
-            }
+            int code = cause instanceof TooLongFrameException ? 1009 : 1011;
+            String reason = code == 1009 ? "message too big" : "transport error";
+            LOG.warn("Bridge connection error ({}): {}; closing connection",
+                    cause.getClass().getSimpleName(), cause.getMessage());
+            if (connection != null) connection.close(code, reason);
+            else ctx.close();
         }
     }
 }

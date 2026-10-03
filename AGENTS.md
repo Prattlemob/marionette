@@ -82,5 +82,15 @@ Keep bundled and development-runtime Netty codec versions aligned when changing
 dependencies, and verify both build and development-runtime resolution.
 
 Identity is fixed: mod id `marionette`, group/package
-`com.prattlemob.marionette`, repository `Prattlemob/marionette`. The current
-license is MIT but provisional; confirm it before release-facing work.
+`com.prattlemob.marionette`, repository `Prattlemob/marionette`. The owner confirmed the MIT license on 2026-10-03 (D12). Publication and
+release actions still require explicit authorization.
+
+## Combined-system coordination
+
+A cross-project Orca coordinator may assign a bounded milestone to the existing
+single-item skill. Before starting a standalone roadmap run, reconcile the
+Git-path orca-roadmap/system-owner.json with live ownership; do not duplicate a
+live or unverifiable coordinator. Runtime tests need exclusive client/world
+ownership. Keep consumer-specific plans and private coordination material out
+of this public repository. Published client compatibility is separate from mod
+implementation acceptance; release/license gates still apply.

@@ -2,12 +2,12 @@
 
 Reference agents speaking protocol 2
 ([`protocol/v1.md`](../protocol/v1.md)). All need Python 3.11+
-and `pip install websockets`, plus a running Marionette client that has
+and the `marionette-mc==0.1.0a1` published development-alpha package, plus a running Marionette client that has
 joined a world.
 
 - `dashboard.py` — M4.1: read-only live player state, effects, and movement flags.
   Run `python examples/dashboard.py [port]`; Ctrl-C exits without changing controls.
-- `probe.py` — connect, print observations, hold forward for 3 s, release.
+- `probe.py` — connect, print observations, hold forward for 0.2 s, release.
 - `walk_square.py` — walk a ~5-block square and report the return error.
   Also the target for the disconnect-safety test: `kill -9` it mid-walk and
   the player must stop within one tick.
@@ -17,7 +17,7 @@ joined a world.
 - `observer.py` — M2.4: read-only second connection (`role: "observer"`).
   Run it *alongside* a controller example: it slows its own stream with
   `configure` (the controller's cadence is untouched) and shows actuation
-  being refused with `role_forbidden`. `kill -9`-ing it must not disturb
+  being refused locally with `RoleError`. `kill -9`-ing it must not disturb
   the player or the controller.
 - `look_points.py` — M3.2: five smoothed look-at pans around the player,
   then contrast cases (double-speed pan, instant snap, delta burst); the
@@ -35,7 +35,7 @@ number-key hotbar swap, equip, and dropping one item. It uses the additive
 assuming menu slot offsets. The example animates a visible cursor by default
 (`inventoryAnimation` capability); `--instant` keeps same-tick execution.
 Move/equip show real pickup and placement; swap/drop show a cursor approach
-and click cue. Each action awaits its result before continuing. Requires Python 3.11+ and `pip install websockets`.
+and click cue. Each action awaits its result before continuing. Requires Python 3.11+ and the package installed.
 
 Use a survival/adventure test world. Close all screens, empty the cursor,
 leave hotbar slot 0 and the head armor slot empty, and provision:
@@ -62,3 +62,32 @@ slot using the same generic move command. A dropped item may be picked up
 again if the player stands on it. The script reports errors rather than blindly
 retrying mutations. Responses reflect client prediction; server synchronization
 can still correct them. Full wire rules: [protocol/v1.md](../protocol/v1.md#inventory--menu-addressed-inventory-actions).
+
+## Bridge safety
+
+Current protocol-2 servers advertise `bridgeSafety`. Keep the WebSocket read
+loop running so the library answers pings; a frozen reader is disconnected by
+the configurable pong watchdog (2 seconds by default, so avoid blocking the
+event loop for more than about 1.5 seconds). Do not set an Origin header on
+native clients. Browser clients are rejected under the development trust
+policy. Close 1013 means overload: stop sending and treat pending request
+outcomes as unknown.
+Reconnect explicitly and inspect inventory before retrying mutations. F8 in the
+Minecraft client is the local panic control. See [the wire limits](../protocol/v1.md#transport).
+
+## Package setup
+
+Install the explicit published pin with
+`python -m pip install "marionette-mc==0.1.0a1"`.
+For source development only, use `python -m pip install -e ./python` from the
+repository root. The published pin has passed M2.5's clean-environment and
+rendered smoke acceptance; local installation is not a substitute for separate
+consumer integration verification. See [the API and bounds](../python/README.md).
+
+All examples use typed client methods. `_common.py` demonstrates an application
+policy that monitors reliable errors, interrupts the demo on error, and closes
+the session. Gameplay demos have a 120-second outer deadline; observation waits
+are bounded and the short probe only moves for 0.2 seconds. The package keeps
+reading and coalescing observations during sleeps. There is no automatic replay
+or reconnect. Inventory errors and late replies cannot be discarded by an
+example-specific receive loop.

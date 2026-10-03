@@ -407,11 +407,10 @@ To decide: GL readback point, encoding (e.g. JPEG), resolution/rate defaults,
 and same-socket binary frames vs. a secondary connection (secondary
 recommended so vision can never degrade the core tick-synced stream).
 
-## D12 — License — **Open, blocks release** (M9.2)
+## D12 — License — **Settled** (2026-10-03)
 
-MIT is provisional. Must be confirmed with the project owner before anything
-release-facing (Modrinth/CurseForge listings, tagged releases). Worth settling
-earlier if outside contributions arrive.
+The project owner confirmed MIT on 2026-10-03. This settles the license only;
+publication, tagged releases and package uploads still require explicit approval.
 
 ---
 
@@ -484,7 +483,8 @@ mod.
 - Hostility classification source; client-side aggro inference depth — M4.4.
 - Raw-input vs. active-Baritone-goal conflict policy; which Baritone settings
   are exposed — M6.2.
-- Human-input precedence policy details and watchdog timeout default — M5.1.
+- Human-input precedence policy details — M5.1. (The watchdog timeout default
+  was resolved early: 2 seconds, D16a, 2026-10-03.)
   The policy must define **three modes** (owner-requested, 2026-07-13):
   **human-priority** (default — human input overrides/pauses agent control),
   **agent-exclusive** (a rebindable *input-lockout* keybind suppresses all
@@ -521,3 +521,98 @@ mod.
   principle bind non-loopback — resolve once and pass the resulting
   `InetAddress` through when M5.1 hardens loopback enforcement.
 - Mod-version ↔ protocol-version relationship in the changelog policy — M9.2.
+
+## D14 — Published Python client — **Settled; initial alpha published** (2026-10-03)
+
+The owner selected the PyPI distribution `marionette-mc`, independent semantic
+versioning, protocol 2 support, and explicitly pinned development prereleases.
+Consumers require a pinned published package rather than copied examples or a
+local shim. M2.5 implements packaging separately under `python/`, importing as
+`marionette_mc`; its initial published version is `0.1.0a1` (PEP 440 spelling of
+0.1.0 alpha 1). Python 3.11 is the baseline. Builds and tests pin dependencies;
+client versioning is independent of mod and protocol integers. Publication remains subject to
+explicit approval after build and review; confirming MIT does not authorize it.
+
+The owner explicitly approved publishing the exact reviewed `0.1.0a1` wheel and
+sdist as a **client-only development-alpha exception** to D16. They are now on
+[PyPI](https://pypi.org/project/marionette-mc/0.1.0a1/). A fresh Python 3.11
+installation from PyPI, with caching disabled and origin/hash recorded, passed
+rendered observation, brief movement and release acceptance on 2026-10-03.
+This completes M2.5, not a separate consumer integration acceptance. No further
+publication or stable/mod release is authorized by this exception.
+
+Approved SHA256 values:
+
+- Wheel: `d084f4fd104b2b200724359c9dff0bc3b6572ad6deab0c327f5760aa63c2beca`
+- Sdist: `de7f464ebbac2676920a41a2981280671b2640badb382665c3a8f25b2410a180`
+
+The uploaded artifacts retain their reviewed pre-publication README text.
+Later source-documentation updates do not change or replace those bytes.
+
+## D15 — Cross-project coordination — **Settled** (2026-10-03)
+
+The mod, its consumers and private system coordination remain separate repositories.
+A system coordinator may assign bounded upstream milestones and validate published
+client compatibility. It does not import consumer policy into this public project.
+Product roadmap acceptance and end-to-end consumer acceptance are separate gates.
+A published Python client is an early deliverable, not deferred release documentation.
+
+## D16 — Development local trust and bridge safety — **Interim policy approved** (2026-10-03)
+
+The owner approved native no-Origin loopback clients for development. Reject all
+HTTP requests carrying an Origin header, including `null`, with HTTP 403 before
+WebSocket upgrade. This temporarily narrows D1's browser-dashboard rationale;
+shipped native Python observers/dashboard remain supported. No browser allowlist
+or remote access is introduced. Local processes are trusted without tokens;
+loopback and Origin filtering do not authenticate local users or processes.
+Authentication/provisioning remains unresolved and blocks release, including
+loopback-only mod and stable releases. The owner approved only the exact
+`marionette-mc==0.1.0a1` client development-alpha exception recorded in D14;
+this does not resolve authentication or authorize other releases. Revisit
+browser support with that decision.
+
+M5.1a resolves the configured address once to an InetAddress, clamps non-loopback
+or unresolvable values to 127.0.0.1, and passes the same address object to Netty.
+No non-loopback opt-out exists. Bridge limits and overload behavior are normative
+in protocol/v1.md under `bridgeSafety`. Pong timeout defaults to two seconds
+(D16a; originally five); local panic defaults to rebindable F8. These emergency controls do not settle
+M5.1 human-precedence modes or per-mode focus-loss policy.
+
+The earlier M2.3 watermark described as a hard bound was insufficient for
+reliable replies and tasks waiting for the event loop. M5.1a reserves output
+bytes before scheduling writes, caps inbound work per connection, prioritizes
+release, and caps pending connections from TCP accept rather than only upgrade.
+The client checks safety at both tick and render boundaries, including paused
+screens; world exit severs the controller to invalidate stale commands.
+
+### D16a — Pong watchdog default: 2 seconds — **Settled** (2026-10-03, owner decision)
+
+A consumer measured that a frozen (SIGSTOP) or network-blackholed agent kept the
+player walking for 4.2–5.2 seconds (about 18–22 blocks) at the old 5-second
+default. The owner decided to fix this in the mod only, by lowering the default
+`bridge.pongTimeoutSeconds` into the 1–2 second range. The range (1–60),
+restart-required semantics, ping cadence rule (min(1 s, timeout/4)), close code,
+observer isolation and the wire protocol are unchanged; this is not a protocol
+or capability change.
+
+The default is **2 seconds** (pings every 0.5 s). Rendered measurements are in
+the [M5.1a safety record](specs/2026-10-03-m5.1a-safety-verification.md#watchdog-default-follow-up--2026-10-03):
+
+- At 2 seconds, freeze/blackhole detection took 2.02–2.39 s (8.9–10.4 blocks),
+  and a healthy agent with pauses of up to 1 s ran for 154 s with no
+  disconnects. A single pause of 1.5 s survived; one of 1.9 s was sometimes
+  dropped.
+- At 1 second, exposure fell to 0.84–1.15 s (3.7–5.0 blocks), but the same
+  pause profile was spuriously disconnected within 53–60 s in both runs, and
+  single pauses of 0.9–1.0 s were sometimes dropped.
+
+A healthy agent survives pauses up to the timeout minus one ping interval
+(1.5 s at the default), and sometimes slightly longer. One second therefore
+cannot tolerate ordinary sub-second agent, GC or event-loop pauses. Two seconds
+does, while still cutting walking exposure by more than half. A spurious
+disconnect fails safe but drops held intent without replay, so frequent ones
+make agents unusable. Operators may still set 1 second.
+
+Rejected for now: expiring held inputs after a lease, protocol changes (for
+example, a liveness or lease field), and a client keepalive in the published
+Python client. Revisit them only with a new owner decision.

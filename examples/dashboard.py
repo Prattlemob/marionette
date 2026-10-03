@@ -1,27 +1,23 @@
 #!/usr/bin/env python3
 """Read-only live player dashboard (protocol 2).
 
-Requires: pip install websockets
+Requires: pip install "marionette-mc==0.1.0a1"
 Usage: python examples/dashboard.py [port] (default 24680)
 Take fall damage, sprint, swim, or gain an effect to watch the state change.
 """
 import asyncio
-import json
 import sys
 
-import websockets
+from _common import connect
 
 
 async def main():
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 24680
-    async with websockets.connect(f"ws://127.0.0.1:{port}/") as ws:
-        await ws.send(json.dumps({"type": "hello", "versions": [2],
-                                  "role": "observer", "sections": ["player"]}))
-        hello = json.loads(await ws.recv())
+    async with connect(f"ws://127.0.0.1:{port}/", role="observer", sections=["player"]) as ws:
+        hello = ws.hello
         if hello.get("type") != "hello":
             raise RuntimeError(f"Handshake rejected: {hello}")
-        async for raw in ws:
-            frame = json.loads(raw)
+        async for frame in ws.observations():
             if frame.get("type") != "observation":
                 print(frame)
                 continue

@@ -1,0 +1,13 @@
+# Exact direct and transitive development dependencies; Python 3.11+.
+websockets==15.0.1
+build==1.2.2.post1
+editables==0.5
+hatchling==1.27.0
+packaging==25.0
+pathspec==0.12.1
+pluggy==1.6.0
+pyproject-hooks==1.2.0
+trove-classifiers==2025.5.9.12
+mypy==1.15.0
+mypy-extensions==1.1.0
+typing-extensions==4.14.0

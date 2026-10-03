@@ -23,6 +23,11 @@ Use only the current Task; never create another coordinator or recursively
 hand off the entire roadmap. If the assigned item is no longer eligible,
 explain why to the coordinator before changing scope.
 
+For a direct invocation, check the Git-path `orca-roadmap/system-owner.json`
+and live Orca ownership first; do not compete with an active or unverifiable
+combined coordinator. For a dispatched task, its exact assignment and ownership
+apply. Runtime tests need exclusive ownership of the named client/world.
+
 Inspect Git status and the current commit before editing. Preserve pre-existing
 changes, including previous milestones that have not been committed. An earlier
 worker's uncommitted implementation is real input, not disposable scratch work.
@@ -52,6 +57,8 @@ worker's uncommitted implementation is real input, not disposable scratch work.
 - Follow the session's Git policy. Do not infer authorization to push, publish,
   or change release/licensing policy from a request to implement a milestone.
   If commits are requested, include only assigned changes and preserve signing.
+  Under the PR workflow commit on the assigned branch/worktree and do not push;
+  the coordinator opens and merges the PR.
 
 A missing dependency, unavailable runtime, or failing test is a problem to
 investigate, not an immediate excuse to stop. Continue independent work while

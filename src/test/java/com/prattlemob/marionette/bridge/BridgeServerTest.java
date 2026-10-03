@@ -742,4 +742,225 @@ class BridgeServerTest {
         });
         assertEquals(0, builds.get());
     }
+    /** Raw client deliberately never responds to ping (JDK clients auto-pong internally). */
+    private static java.net.Socket silentClient(int port, String hello) throws Exception {
+        var socket = new java.net.Socket("127.0.0.1", port);
+        socket.setSoTimeout(2000);
+        socket.getOutputStream().write(("GET / HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\n"
+                + "Connection: Upgrade\r\nSec-WebSocket-Version: 13\r\n"
+                + "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n").getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+        int matched = 0;
+        while (matched < 4) {
+            int value = socket.getInputStream().read();
+            if (value == "\r\n\r\n".charAt(matched)) matched++; else matched = 0;
+            if (value < 0) throw new AssertionError("upgrade closed");
+        }
+        rawText(socket, hello);
+        return socket;
+    }
+    private static void rawText(java.net.Socket socket, String text) throws Exception {
+        byte[] payload = text.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(payload.length < 126);
+        var out = socket.getOutputStream();
+        out.write(0x81); out.write(0x80 | payload.length);
+        out.write(new byte[4]); out.write(payload); out.flush();
+    }
+
+    @Test
+    void watchdogIgnoresOrdinaryTrafficAndIsolatesObserverLoss() throws Exception {
+        server.stop();
+        server = new BridgeServer(java.net.InetAddress.getLoopbackAddress(), 0, "test", 1, 2000, 300);
+        server.start();
+        TestClient controller = connectAndHello();
+        try (var observer = silentClient(server.port(), OBSERVER_HELLO)) {
+            // An application error/hello frame proves admission before the watchdog window.
+            assertEquals(0x81, observer.getInputStream().read());
+            Thread.sleep(600);
+            assertTrue(server.hasController());
+            assertFalse(server.pollDisconnected());
+            connectObserver(); // slot was reclaimed by watchdog
+        }
+        controller.ws.abort();
+        await(server::pollDisconnected);
+        try (var frozen = silentClient(server.port(), HELLO)) {
+            await(server::hasController);
+            long start = System.nanoTime();
+            while (server.hasController() && System.nanoTime() - start < TimeUnit.SECONDS.toNanos(2)) {
+                try { rawText(frozen, "{\"type\":\"configure\"}"); } catch (Exception closed) { break; }
+                server.drainCommands();
+                Thread.sleep(20);
+            }
+            await(server::pollDisconnected);
+            assertFalse(server.hasController());
+            assertTrue(System.nanoTime() - start < TimeUnit.SECONDS.toNanos(2));
+        }
+    }
+
+    /** Reads one server frame, answering a ping with a masked pong; returns the opcode. */
+    private static int answerFrame(java.net.Socket socket) throws Exception {
+        var in = new java.io.DataInputStream(socket.getInputStream());
+        int opcode = in.readUnsignedByte() & 0x0F;
+        long length = in.readUnsignedByte() & 0x7F;
+        if (length == 126) length = in.readUnsignedShort();
+        else if (length == 127) length = in.readLong();
+        byte[] payload = in.readNBytes((int) length);
+        if (opcode == 0x9) {
+            var out = socket.getOutputStream();
+            out.write(0x8A); out.write(0x80 | payload.length);
+            out.write(new byte[4]); out.write(payload); out.flush();
+        }
+        return opcode;
+    }
+
+    @Test
+    void defaultWatchdogToleratesShortStallsAndDropsSilence() throws Exception {
+        server.stop();
+        long timeout = TimeUnit.SECONDS.toMillis(com.prattlemob.marionette.config.MarionetteConfig.pongTimeoutSeconds);
+        long interval = Math.min(1000, timeout / 4);
+        server = new BridgeServer(java.net.InetAddress.getLoopbackAddress(), 0, "test", 1, 2000, timeout);
+        server.start();
+        try (var agent = silentClient(server.port(), HELLO)) {
+            await(server::hasController);
+            // Stalls of half the lease stay below the timeout minus one ping interval.
+            for (int stall = 0; stall < 2; stall++) {
+                long until = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeout);
+                while (System.nanoTime() < until) answerFrame(agent);
+                Thread.sleep(timeout / 2);
+            }
+            long until = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeout);
+            while (System.nanoTime() < until) answerFrame(agent);
+            assertTrue(server.hasController());
+            assertFalse(server.pollDisconnected());
+
+            long silent = System.nanoTime();
+            await(server::pollDisconnected);
+            long elapsed = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - silent);
+            assertTrue(elapsed >= timeout - interval && elapsed <= timeout + interval + 500,
+                    "silent agent detected after " + elapsed + " ms");
+        }
+    }
+
+    @Test
+    void commandFloodClosesOnlyOffenderAndBoundsTickDrain() throws Exception {
+        TestClient controller = connectAndHello();
+        TestClient observer = connectObserver();
+        controller.send("{\"type\":\"configure\"}");
+        List<BridgeServer.Received> first = new java.util.ArrayList<>();
+        await(() -> { first.addAll(server.drainCommands()); return !first.isEmpty(); });
+        AgentConnection connection = first.getFirst().from();
+        for (int i = 0; i < 80; i++) controller.send("{\"type\":\"input\",\"forward\":true}");
+        await(() -> connection.queuedCommands() == 80);
+        assertEquals(32, server.drainCommands().size());
+        assertEquals(48, connection.queuedCommands());
+        for (int i = 0; i < 129; i++) {
+            try { controller.send("{\"type\":\"input\",\"forward\":true}"); }
+            catch (Exception closed) { break; }
+        }
+        assertEquals("overloaded", JsonParser.parseString(controller.awaitMessage()).getAsJsonObject().get("code").getAsString());
+        assertEquals(1013, controller.closeCode.get(5, TimeUnit.SECONDS));
+        await(server::pollDisconnected);
+        assertEquals(0, connection.queuedCommands());
+        assertFalse(first.getFirst().valid());
+        server.sendObservation("{\"type\":\"observation\",\"tick\":7}");
+        assertTrue(observer.awaitMessage().contains("7"));
+    }
+
+    @Test
+    void releaseInvalidatesAlreadyPolledWorkAndBypassesFullQueue() throws Exception {
+        TestClient client = connectAndHello();
+        client.send("{\"type\":\"input\",\"forward\":true}");
+        List<BridgeServer.Received> first = new java.util.ArrayList<>();
+        await(() -> { first.addAll(server.drainCommands()); return !first.isEmpty(); });
+        var stale = first.getFirst();
+        for (int i = 0; i < 128; i++) client.send("{\"type\":\"input\",\"forward\":true}");
+        await(() -> stale.from().queuedCommands() == 128);
+        client.send("{\"type\":\"release\"}");
+        await(() -> !stale.valid());
+        assertInstanceOf(AgentCommand.Release.class, server.pollRelease().command());
+        assertTrue(server.drainCommands().isEmpty());
+        assertTrue(server.hasController());
+        server.disconnectController("local panic");
+        assertFalse(server.hasController(), "panic invalidates synchronously");
+        assertTrue(server.pollDisconnected());
+        assertEquals(1008, client.closeCode.get(5, TimeUnit.SECONDS));
+    }
+
+    @Test
+    void originIsRejectedIncludingNullButNativeClientsWork() throws Exception {
+        for (String origin : List.of("https://example.com", "null", "http://localhost")) {
+            var request = java.net.http.HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + server.port() + "/"))
+                    .header("Origin", origin).GET().build();
+            assertEquals(403, HttpClient.newHttpClient().send(request,
+                    java.net.http.HttpResponse.BodyHandlers.discarding()).statusCode());
+        }
+        connectAndHello();
+    }
+
+    @Test
+    void rawTcpPendingConnectionsAreCappedAndTimeoutBeforeUpgrade() throws Exception {
+        server.stop();
+        server = new BridgeServer("127.0.0.1", 0, "test", 2, 100, 1000);
+        server.start();
+        List<java.net.Socket> sockets = new java.util.ArrayList<>();
+        try {
+            for (int i = 0; i < 9; i++) {
+                var socket = new java.net.Socket("127.0.0.1", server.port());
+                socket.setSoTimeout(2500);
+                sockets.add(socket);
+            }
+            assertEquals(-1, sockets.getLast().getInputStream().read());
+            assertEquals(-1, sockets.getFirst().getInputStream().read());
+            assertFalse(server.pollDisconnected());
+        } finally { for (var socket : sockets) socket.close(); }
+        connectAndHello();
+    }
+
+    @Test
+    void reliableRepliesToAStalledReaderCloseInsteadOfGrowingWithoutBound() throws Exception {
+        TestClient client = connectAndHello();
+        client.send("{\"type\":\"configure\"}");
+        List<BridgeServer.Received> first = new java.util.ArrayList<>();
+        await(() -> { first.addAll(server.drainCommands()); return !first.isEmpty(); });
+        var connection = first.getFirst().from();
+        TestClient observer = connectObserver();
+        client.stallReads();
+        String invalid = "{\"type\":\"unknown\",\"id\":\"" + "x".repeat(60000) + "\"}";
+        for (int i = 0; i < 200 && connection.ready(); i++) {
+            try { client.send(invalid); } catch (Exception closed) { break; }
+            assertTrue(connection.outboundBytes() <= AgentConnection.OUTBOUND_BYTES);
+        }
+        await(() -> !connection.ready());
+        await(server::pollDisconnected);
+        assertTrue(connection.outboundBytes() <= AgentConnection.OUTBOUND_BYTES);
+        client.resumeReads();
+        // A saturated TCP stream may end before its courtesy close is delivered.
+        try {
+            int code = client.closeCode.get(5, TimeUnit.SECONDS);
+            assertTrue(code == 1013 || code == 1006,
+                    "overload close or abnormal close when its courtesy frame cannot drain");
+        } catch (java.util.concurrent.ExecutionException lostCourtesyClose) { /* documented */ }
+        server.sendObservation("{\"type\":\"observation\",\"tick\":99}");
+        assertTrue(observer.awaitMessage().contains("99"));
+    }
+
+    @Test
+    void pingFloodFromANonReaderCannotBypassOutputBackpressure() throws Exception {
+        try (var socket = silentClient(server.port(), HELLO)) {
+            socket.setReceiveBufferSize(1024);
+            await(server::hasController);
+            byte[] flood = new byte[131 * 50000]; // masked 125-byte control frames
+            for (int offset = 0; offset < flood.length; offset += 131) {
+                flood[offset] = (byte) 0x89;
+                flood[offset + 1] = (byte) (0x80 | 125);
+            }
+            long start = System.nanoTime();
+            try { socket.getOutputStream().write(flood); }
+            catch (java.net.SocketException closedDuringFlood) { /* expected */ }
+            await(server::pollDisconnected);
+            assertTrue(System.nanoTime() - start < TimeUnit.SECONDS.toNanos(4),
+                    "backpressure must close before the five-second watchdog");
+            assertFalse(server.hasController());
+        }
+    }
+
 }

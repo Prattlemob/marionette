@@ -1,0 +1,310 @@
+{
+  "commands": [
+    {
+      "javaType": "Hello",
+      "wire": {
+        "type": "hello",
+        "versions": [
+          2
+        ],
+        "role": "observer",
+        "sections": [
+          "player"
+        ]
+      }
+    },
+    {
+      "javaType": "InputUpdate",
+      "wire": {
+        "type": "input",
+        "forward": true,
+        "back": false,
+        "left": true,
+        "right": false,
+        "jump": false,
+        "sneak": true,
+        "sprint": false,
+        "attack": true,
+        "use": false,
+        "hotbar": 8,
+        "tap": [
+          "jump",
+          "use"
+        ]
+      }
+    },
+    {
+      "javaType": "Look",
+      "wire": {
+        "type": "look",
+        "yaw": 90.0,
+        "pitch": -10.0
+      }
+    },
+    {
+      "javaType": "LookDelta",
+      "wire": {
+        "type": "look",
+        "mode": "delta",
+        "yaw": 5.0,
+        "pitch": 2.0
+      }
+    },
+    {
+      "javaType": "LookSmoothAngles",
+      "wire": {
+        "type": "look",
+        "mode": "smooth",
+        "yaw": 180.0,
+        "pitch": 0.0,
+        "speed": 2.0
+      }
+    },
+    {
+      "javaType": "LookSmoothPoint",
+      "wire": {
+        "type": "look",
+        "mode": "smooth",
+        "x": 1.0,
+        "y": 64.0,
+        "z": -2.0,
+        "id": "point"
+      }
+    },
+    {
+      "javaType": "Configure",
+      "wire": {
+        "type": "configure",
+        "rateDivisor": 3,
+        "sections": []
+      }
+    },
+    {
+      "javaType": "Release",
+      "wire": {
+        "type": "release"
+      }
+    },
+    {
+      "javaType": "InventoryAction",
+      "wire": {
+        "type": "inventory",
+        "op": "open",
+        "id": "open"
+      }
+    },
+    {
+      "javaType": "InventoryAction",
+      "wire": {
+        "type": "inventory",
+        "op": "inspect",
+        "id": "inspect"
+      }
+    },
+    {
+      "javaType": "InventoryAction",
+      "wire": {
+        "type": "inventory",
+        "op": "close",
+        "id": "close",
+        "menu": {
+          "type": "minecraft:inventory",
+          "containerId": 0,
+          "stateId": 3
+        }
+      }
+    },
+    {
+      "javaType": "InventoryAction",
+      "wire": {
+        "type": "inventory",
+        "op": "move",
+        "id": "move",
+        "menu": {
+          "type": "minecraft:inventory",
+          "containerId": 0,
+          "stateId": 3
+        },
+        "from": "main.0",
+        "to": "hotbar.0",
+        "animated": true
+      }
+    },
+    {
+      "javaType": "InventoryAction",
+      "wire": {
+        "type": "inventory",
+        "op": "swap",
+        "id": "swap",
+        "menu": {
+          "type": "minecraft:inventory",
+          "containerId": 0,
+          "stateId": 3
+        },
+        "from": 9,
+        "hotbar": 1
+      }
+    },
+    {
+      "javaType": "InventoryAction",
+      "wire": {
+        "type": "inventory",
+        "op": "equip",
+        "id": "equip",
+        "menu": {
+          "type": "minecraft:inventory",
+          "containerId": 0,
+          "stateId": 3
+        },
+        "from": "main.1"
+      }
+    },
+    {
+      "javaType": "InventoryAction",
+      "wire": {
+        "type": "inventory",
+        "op": "drop",
+        "id": "drop",
+        "menu": {
+          "type": "minecraft:inventory",
+          "containerId": 0,
+          "stateId": 3
+        },
+        "from": "hotbar.0",
+        "all": true
+      }
+    }
+  ],
+  "messages": [
+    {
+      "type": "hello",
+      "version": 2,
+      "capabilities": {
+        "configure": true,
+        "bridgeSafety": true,
+        "playerState": true,
+        "tap": true,
+        "camera": true,
+        "observer": true,
+        "interact": true,
+        "inventory": true,
+        "inventoryAnimation": true
+      },
+      "mod": "0.1.0",
+      "id": "hello-fixture"
+    },
+    {
+      "type": "observation",
+      "tick": 1234,
+      "player": {
+        "x": 12.5,
+        "y": 64.0,
+        "z": -8.25,
+        "yaw": 90.0,
+        "pitch": 0.0,
+        "velocity": {
+          "x": 0.0,
+          "y": -0.0784,
+          "z": 0.0
+        },
+        "health": 20.0,
+        "maxHealth": 20.0,
+        "hunger": 20,
+        "saturation": 5.0,
+        "air": 300,
+        "maxAir": 300,
+        "xp": {
+          "level": 0,
+          "progress": 0.0,
+          "total": 0
+        },
+        "onGround": true,
+        "inWater": false,
+        "sneaking": false,
+        "sprinting": false,
+        "sleeping": false,
+        "onFire": false,
+        "effects": [
+          {
+            "id": "minecraft:speed",
+            "duration": 100,
+            "amplifier": 1
+          }
+        ]
+      }
+    },
+    {
+      "type": "observation",
+      "tick": 1235
+    },
+    {
+      "type": "inventory_result",
+      "id": "inspect",
+      "op": "inspect",
+      "menu": {
+        "type": "minecraft:inventory",
+        "containerId": 0,
+        "stateId": 3,
+        "slots": [
+          {
+            "slot": 9,
+            "alias": "main.0",
+            "item": "minecraft:dirt",
+            "count": 16
+          }
+        ],
+        "carried": {
+          "item": "minecraft:air",
+          "count": 0
+        }
+      }
+    },
+    {
+      "type": "inventory_result",
+      "id": 3.5,
+      "op": "close",
+      "menu": null
+    },
+    {
+      "type": "error",
+      "code": "inventory_cancelled",
+      "message": "cancelled",
+      "id": "late",
+      "input": "{\"type\":\"release\"}"
+    },
+    {
+      "type": "error",
+      "code": "unsupported_version",
+      "message": "mod speaks protocol [2]",
+      "supported": [
+        2
+      ],
+      "id": 12,
+      "input": "{\"type\":\"hello\",\"versions\":[1]}"
+    }
+  ],
+  "invalidCommands": [
+    {
+      "wire": {
+        "type": "input",
+        "hotbar": 9
+      },
+      "code": "invalid_field"
+    },
+    {
+      "wire": {
+        "type": "configure",
+        "sections": [
+          "world"
+        ]
+      },
+      "code": "invalid_field"
+    },
+    {
+      "wire": {
+        "type": "made_up"
+      },
+      "code": "unknown_type"
+    }
+  ]
+}
