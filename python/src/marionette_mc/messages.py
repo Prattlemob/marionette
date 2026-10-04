@@ -23,6 +23,7 @@ class HelloRequest(Envelope):
     role: NotRequired[Role]
     sections: NotRequired[list[Section]]
     events: NotRequired[bool]
+    agent: NotRequired[str]
 
 
 class Hello(Envelope):
@@ -551,6 +552,58 @@ class RespawnRequest(Envelope):
     type: Literal["respawn"]
 
 
+class StatusRequest(Envelope):
+    """Diagnostics query (``status``); both roles may send it."""
+    type: Literal["status"]
+
+
+StatusState = Literal["connected", "idle", "latched"]
+HeldControl = Literal["forward", "back", "left", "right", "jump", "sneak", "sprint", "attack", "use"]
+
+
+class ConnectionCounters(TypedDict):
+    """One connection's diagnostics counters (``status``), counted since its hello was admitted.
+
+    ``observationsDropped`` counts frames that will never be delivered (a delayed but
+    delivered frame is not dropped); ``rttMillis`` is the latest ping round trip and
+    ``commandLatencyMillis`` the receipt-to-apply time of the latest applied command,
+    each ``None`` before the first.
+    """
+    agent: str | None
+    connectedMillis: int
+    observationRate: float
+    observationsSent: int
+    observationsDropped: int
+    eventsSent: int
+    queuedCommands: int
+    rttMillis: float | None
+    commandLatencyMillis: float | None
+
+
+class SessionStatus(ConnectionCounters):
+    """The requesting session's counters and settings."""
+    role: Role
+    rateDivisor: int
+    sections: list[str]
+    events: bool
+
+
+class StatusResult(Envelope):
+    """Reply to ``status``, sent only to the requester. ``state``, ``mode`` and ``held``
+    use the documented values (``StatusState``, ``ControlMode``, ``HeldControl``) but stay open."""
+    type: Literal["status_result"]
+    state: str
+    mode: str
+    paused: bool
+    inWorld: bool
+    tick: int | None
+    held: list[str]
+    panning: bool
+    observers: int
+    controller: ConnectionCounters | None
+    session: SessionStatus
+
+
 class ChatRequest(Envelope):
     """Exactly one of ``text`` (ordinary chat) and ``command`` (needs the human to enable commands)."""
     type: Literal["chat"]
@@ -558,9 +611,10 @@ class ChatRequest(Envelope):
     command: NotRequired[str]
 
 
-Command = Input | Look | Release | Configure | InventoryRequest | ScanRequest | RespawnRequest | ChatRequest
-Message = Hello | Observation | InventoryResult | ScanResult | ActionResult | Error | Event
-Reliable = InventoryResult | ScanResult | ActionResult | Error
+Command = (Input | Look | Release | Configure | InventoryRequest | ScanRequest | RespawnRequest | ChatRequest
+           | StatusRequest)
+Message = Hello | Observation | InventoryResult | ScanResult | ActionResult | StatusResult | Error | Event
+Reliable = InventoryResult | ScanResult | ActionResult | StatusResult | Error
 
 
 class InvalidMessage(ValueError):
@@ -632,7 +686,8 @@ def decode(raw: str | bytes) -> Message:
         raise InvalidMessage("type must be a string")
     schema: object = {"hello": Hello, "observation": Observation,
                       "inventory_result": InventoryResult, "scan_result": ScanResult,
-                      "action_result": ActionResult, "error": Error}.get(kind)
+                      "action_result": ActionResult, "status_result": StatusResult,
+                      "error": Error}.get(kind)
     if kind == "event":
         event = value.get("event")
         if not isinstance(event, str):

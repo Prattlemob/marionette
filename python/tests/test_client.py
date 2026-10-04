@@ -15,7 +15,7 @@ HELLO = dict(type="hello", version=2, mod="0.1.0", capabilities=dict(
     interact=True, inventory=True, inventoryAnimation=True, bridgeSafety=True, events=True,
     inventoryState=True, targetState=True, worldState=True, entityState=True, blockScan=True,
     crafting=True, swapHands=True, respawn=True, chat=True, playerIdentity=True, playerActivity=True,
-    humanPrecedence=True))
+    humanPrecedence=True, status=True))
 
 
 async def send(ws, **message):
@@ -67,6 +67,9 @@ class ClientTests(unittest.IsolatedAsyncioTestCase):
                     await send(ws, type='inventory_result', id=command['id'], op=command['op'], menu=None)
                 if command['type'] == 'respawn':
                     await send(ws, type='action_result', id=command['id'], action='respawn')
+                if command['type'] == 'status':
+                    status = dict(next(r for r in fixture['statusResults'] if r['state'] == 'connected'))
+                    await send(ws, **dict(status, id=command['id']))
                 if command['type'] == 'chat':
                     await send(ws, type='action_result', id=command['id'],
                                action='command' if 'command' in command else 'chat')

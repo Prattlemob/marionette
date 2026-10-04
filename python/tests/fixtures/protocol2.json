@@ -67,6 +67,16 @@
       }
     },
     {
+      "javaType": "Hello",
+      "wire": {
+        "type": "hello",
+        "versions": [
+          2
+        ],
+        "agent": "walker"
+      }
+    },
+    {
       "javaType": "InputUpdate",
       "wire": {
         "type": "input",
@@ -357,6 +367,13 @@
         ],
         "use": true
       }
+    },
+    {
+      "javaType": "Status",
+      "wire": {
+        "type": "status",
+        "id": "status-1"
+      }
     }
   ],
   "messages": [
@@ -387,7 +404,8 @@
         "chat": true,
         "playerIdentity": true,
         "playerActivity": true,
-        "humanPrecedence": true
+        "humanPrecedence": true,
+        "status": true
       },
       "mod": "0.1.0",
       "id": "hello-fixture"
@@ -1557,6 +1575,26 @@
         ]
       },
       "code": "invalid_field"
+    },
+    {
+      "wire": {
+        "type": "hello",
+        "versions": [
+          2
+        ],
+        "agent": ""
+      },
+      "code": "invalid_field"
+    },
+    {
+      "wire": {
+        "type": "hello",
+        "versions": [
+          2
+        ],
+        "agent": "\u00a7cred"
+      },
+      "code": "invalid_field"
     }
   ],
   "events": [
@@ -1965,6 +2003,110 @@
         "maxMessages": 5,
         "windowSeconds": 10,
         "maxLength": 256
+      }
+    }
+  ],
+  "statusResults": [
+    {
+      "type": "status_result",
+      "id": "status-1",
+      "state": "connected",
+      "mode": "human_priority",
+      "paused": false,
+      "inWorld": true,
+      "tick": 812,
+      "held": [
+        "forward",
+        "sprint"
+      ],
+      "panning": false,
+      "observers": 1,
+      "controller": {
+        "agent": "walker",
+        "connectedMillis": 5321,
+        "observationRate": 20.0,
+        "observationsSent": 106,
+        "observationsDropped": 0,
+        "eventsSent": 0,
+        "queuedCommands": 0,
+        "rttMillis": 0.8,
+        "commandLatencyMillis": 12.4
+      },
+      "session": {
+        "role": "controller",
+        "rateDivisor": 1,
+        "sections": [
+          "player"
+        ],
+        "events": false,
+        "agent": "walker",
+        "connectedMillis": 5321,
+        "observationRate": 20.0,
+        "observationsSent": 106,
+        "observationsDropped": 0,
+        "eventsSent": 0,
+        "queuedCommands": 0,
+        "rttMillis": 0.8,
+        "commandLatencyMillis": 12.4
+      }
+    },
+    {
+      "type": "status_result",
+      "id": "status-2",
+      "state": "latched",
+      "mode": "panic",
+      "paused": false,
+      "inWorld": true,
+      "tick": 1460,
+      "held": [],
+      "panning": false,
+      "observers": 1,
+      "controller": null,
+      "session": {
+        "role": "observer",
+        "rateDivisor": 5,
+        "sections": [
+          "player",
+          "world"
+        ],
+        "events": true,
+        "agent": "dashboard",
+        "connectedMillis": 60210,
+        "observationRate": 4.0,
+        "observationsSent": 240,
+        "observationsDropped": 3,
+        "eventsSent": 17,
+        "queuedCommands": 0,
+        "rttMillis": 1.3,
+        "commandLatencyMillis": null
+      }
+    },
+    {
+      "type": "status_result",
+      "id": "status-3",
+      "state": "idle",
+      "mode": "human_priority",
+      "paused": false,
+      "inWorld": false,
+      "tick": null,
+      "held": [],
+      "panning": false,
+      "observers": 0,
+      "controller": null,
+      "session": {
+        "role": "observer",
+        "rateDivisor": 1,
+        "sections": [],
+        "events": false,
+        "agent": null,
+        "connectedMillis": 12,
+        "observationRate": 0.0,
+        "observationsSent": 0,
+        "observationsDropped": 0,
+        "eventsSent": 0,
+        "queuedCommands": 0,
+        "rttMillis": null,
+        "commandLatencyMillis": null
       }
     }
   ]

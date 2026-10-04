@@ -102,6 +102,19 @@ class PythonCompatibilityTest {
             };
             assertEquals(expected, JsonParser.parseString(actual));
         }
+        // Status replies go only to the session that sent status (status).
+        for (var entry : fixture.getAsJsonArray("statusResults")) {
+            var expected = entry.getAsJsonObject();
+            var held = new java.util.ArrayList<String>();
+            expected.getAsJsonArray("held").forEach(name -> held.add(name.getAsString()));
+            var report = new StatusReport(expected.get("state").getAsString(), expected.get("mode").getAsString(),
+                    expected.get("paused").getAsBoolean(), expected.get("inWorld").getAsBoolean(),
+                    expected.get("tick").isJsonNull() ? null : expected.get("tick").getAsLong(), held,
+                    expected.get("panning").getAsBoolean(), expected.get("observers").getAsInt(),
+                    expected.get("controller").isJsonNull() ? null : counters(expected.getAsJsonObject("controller")),
+                    counters(expected.getAsJsonObject("session")));
+            assertEquals(expected, JsonParser.parseString(Messages.statusResult(report, expected.getAsJsonPrimitive("id"))));
+        }
         // Event frames are kept apart from "messages": clients that predate
         // events (and never subscribe) are only ever sent the messages above.
         for (var entry : fixture.getAsJsonArray("events")) {
@@ -113,6 +126,20 @@ class PythonCompatibilityTest {
                     GameEvent.Basis.valueOf(expected.get("basis").getAsString().toUpperCase(java.util.Locale.ROOT)), fields);
             assertEquals(expected, JsonParser.parseString(Messages.event(event, expected.get("seq").getAsLong())));
         }
+    }
+
+    private static ConnectionStatus counters(JsonObject json) {
+        var sections = new java.util.ArrayList<String>();
+        if (json.has("sections")) json.getAsJsonArray("sections").forEach(name -> sections.add(name.getAsString()));
+        return new ConnectionStatus(json.has("role") ? json.get("role").getAsString() : null,
+                json.get("agent").isJsonNull() ? null : json.get("agent").getAsString(),
+                json.get("connectedMillis").getAsLong(), json.get("observationRate").getAsDouble(),
+                json.get("observationsSent").getAsLong(), json.get("observationsDropped").getAsLong(),
+                json.get("eventsSent").getAsLong(), json.get("queuedCommands").getAsInt(),
+                json.get("rttMillis").isJsonNull() ? null : json.get("rttMillis").getAsDouble(),
+                json.get("commandLatencyMillis").isJsonNull() ? null : json.get("commandLatencyMillis").getAsDouble(),
+                json.has("rateDivisor") ? json.get("rateDivisor").getAsInt() : 1, sections,
+                json.has("events") && json.get("events").getAsBoolean());
     }
 
     private static int[] xyz(JsonObject coord) {

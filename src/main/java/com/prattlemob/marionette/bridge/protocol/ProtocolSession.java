@@ -41,10 +41,13 @@ public final class ProtocolSession {
     private Role role;
     private Set<String> sections = Set.of("player");
     private boolean events;
+    private String agent;
 
     public Set<String> sections() { return sections; }
     /** True when hello subscribed this session to one-shot events. */
     public boolean events() { return events; }
+    /** The hello display name ({@code status} capability), or null. */
+    public String agent() { return agent; }
 
     public ProtocolSession(String modVersion) {
         this(modVersion, r -> null);
@@ -102,6 +105,7 @@ public final class ProtocolSession {
                             "unsupported role: " + hello.role(), hello.id(), text)),
                     new Action.Close(1002, ErrorCode.UNSUPPORTED_ROLE.wire()));
         }
+        agent = hello.agent(); // visible to the transport's admission log
         ErrorCode refusal = admission.tryAdmit(requested);
         if (refusal != null) {
             state = State.CLOSED;
@@ -127,9 +131,10 @@ public final class ProtocolSession {
         if (state != State.ACTIVE) {
             return errorActions(ErrorCode.HELLO_REQUIRED, "hello required first", null, text);
         }
-        if (role == Role.OBSERVER && !(command instanceof AgentCommand.Configure)) {
+        if (role == Role.OBSERVER && !(command instanceof AgentCommand.Configure)
+                && !(command instanceof AgentCommand.Status)) {
             return List.of(new Action.Send(Messages.error(ErrorCode.ROLE_FORBIDDEN,
-                    "role \"observer\" may only send hello and configure",
+                    "role \"observer\" may only send hello, configure and status",
                     MessageParser.idOf(text), text)));
         }
         return List.of(new Action.Enqueue(command));

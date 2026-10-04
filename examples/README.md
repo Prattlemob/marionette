@@ -12,6 +12,12 @@ joined a world.
   `control` changes), one line per event in
   `seq` order. Needs the in-repository client (`pip install -e ./python`); the
   published 0.1.0a1 alpha has no event support. Run `python examples/events.py [port]`.
+- `status.py` — M5.2: read-only status query (`status`): connection state,
+  the controller's agent name, precedence mode and pause, the agent's held
+  controls, and observation/drop/latency counters, as the local status HUD shows
+  them. Connects as an observer named `status-example`. Needs the in-repository
+  client; the published 0.1.0a1 alpha has no `status` support. Run
+  `python examples/status.py [port]`; `--once` prints one reply and `--json` raw replies.
 - `inventory_view.py` — M4.2: read-only held item, hotbar, main inventory,
   armor, offhand and the open menu (type, D8 slot addresses, carried stack,
   supported operations or refusal, and with `inventoryStorage` the menu's

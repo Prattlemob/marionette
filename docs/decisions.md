@@ -1492,7 +1492,7 @@ The owner settled the three modes and their trust invariants earlier (Minor open
 points, 2026-07-13): **human-priority** by default, **agent-exclusive** through a
 rebindable input-lockout key, and **panic** (D16b); the lockout and panic keys
 are never suppressed, system and interface keys stay live, the lockout drops
-the moment no controller is attached, and the M5.2 HUD will show the mode.
+the moment no controller is attached, and the M5.2 HUD shows the mode (D26).
 M5.1 implements them and the remaining safety items. The contract is
 `protocol/v1.md` (Human precedence, Safety behavior, the `control` event and
 the `human_paused` reasons); the states are in
@@ -1583,7 +1583,7 @@ noted.
    unsupported and D16's release gate stands.
 10. **Notices.** Toasts report lockout engaged, released, dropped and
     unavailable; a human pause has no toast (it would fire on every correction)
-    and is logged; the M5.2 HUD will show the mode and pause.
+    and is logged; the M5.2 HUD shows the mode and pause (D26).
 
 Rejected: pausing without releasing (a held agent forward would still counter
 the human, the D4 OR-merge problem); auto-resume with replay of the agent's
@@ -1642,3 +1642,105 @@ Not established: physical (non-synthetic) keyboard and mouse input, which needs
 the owner; M3.3's physical alt-tab and human animation acceptance (separate
 debt); multiplayer servers. Queued `respawn`/`chat` discard on every release
 remains covered by unit tests (M3.7), as a request is applied within a tick.
+
+## D26 — Diagnostics: status HUD, `status` query, per-category logging — **Settled** (2026-10-04, M5.2)
+
+M5.2 makes Marionette's state visible to the person at the keyboard and to any
+connected program. The contract is `protocol/v1.md` (status, status_result, the
+hello `agent` field); the protocol integer stays 2 and the additive capability
+is `status`.
+
+**HUD.** A small top-left overlay, drawn as a GUI layer below chat, from the
+same `StatusReport` a `status` query returns. It is **on by default**: D25
+requires the precedence mode to be shown prominently, and an overlay that
+starts hidden would not show it. It stays unobtrusive for streaming: one dim
+`Marionette: idle` line without a controller; six short lines while connected
+(state, agent name and observer count, the mode — `Human priority`, a yellow
+`PAUSED by your input` or an orange `AGENT EXCLUSIVE: input locked` —, the
+agent's held controls, observation rate/sent/dropped, ping round trip and
+command latency); two red lines while panic is latched, naming the re-arm key.
+Lines stay under about 40 characters, and agent names are cut to 16 on the HUD,
+so a top-right toast never covers them at 854×480 (an earlier, longer layout
+was covered by the panic toast and was rejected). A rebindable "Toggle
+Marionette status HUD" key (default F6, unbound in vanilla 1.21.8, next to
+F7–F9; handled only in game with no screen open, never human input and never
+suppressed) flips `[hud] enabled`, which is saved, so a streamer who hides it
+keeps it hidden. F1 and the F3 debug screen also hide it.
+
+**`status` query.** Request/reply, only to the requester, behind `status`.
+Both roles may send it: it is read-only, like `configure`, and observers
+(dashboards) are its main users. It is applied on the client tick in order with
+the session's other commands, so it reflects exactly what the HUD shows at that
+moment, and it is answered while no world is loaded and while paused. A new
+reply type is safe for marionette-mc 0.1.0a1 (which ends its session on unknown
+message types, D17) because only a session that sends `status` receives it;
+0.1.0a1 never does.
+
+**Counters.** Per connection, from admission: frames sent; frames *dropped*
+(never delivered: replaced in the latest-wins stash, discarded before an event,
+or over the frame cap — unlike the older `coalesced` total, a delayed but
+delivered frame is not counted); the observation rate over the last completed
+one-second window; the last event `seq`; queued commands; the latest
+WebSocket ping round trip (the existing liveness pings; unsolicited pongs are
+ignored); and the latest command's receipt-to-apply latency, which includes
+waiting for the next client tick (up to about 50 ms).
+
+**Agent name.** An optional hello `agent` string (1–64 UTF-16 characters, no
+control characters or `§`, which would style HUD text), shown on the HUD and in
+`status`. It is informational and authenticates nothing. Invalid values are
+`invalid_field` (fatal in hello); older mods ignore the field.
+
+**Logging.** `[logging] verbosity` remains the default; six categories
+(`bridge`, `control`, `precedence`, `observation`, `events`, `client`) each
+take `INHERIT`, `QUIET`, `NORMAL` or `VERBOSE`, live. Each logs through its own
+logger, `marionette.<category>`, so a log line names its subsystem, and new
+connection lines carry `key=value` fields (`role=`, `agent=`, `code=`,
+`reason=`). Warnings and errors are never gated. The pan log markers that
+`scripts/analyze_pan.py` parses are unchanged.
+
+Rejected: a HUD hidden by default (contradicts D25); broadcasting status to
+every session (breaks 0.1.0a1, D17); carrying the counters inside observation
+frames (they would coalesce away and grow every frame); a status `event` kind
+(events are for things that happened, and would need a subscription); and an
+agent name inside `configure` (the HUD needs it from the first frame).
+
+### M5.2 implementation and verification (2026-10-04)
+
+`./gradlew build` passed with 405 tests (378 before). The in-repository Python
+client passed on 3.11 and 3.14 (86 tests, previously 78; mypy strict clean); it
+gained `Client.status()`, `connect(agent=...)`, the typed `StatusResult`, the
+shared fixtures (`statusResults`, the capability, the agent field) and
+`examples/status.py`. Nothing was published.
+
+Rendered verification ran in an isolated copy of the test world with a
+temporary harness (outside the repository) that recorded, on every rendered
+frame, the exact lines the HUD layer draws, and injected the F-keys and the
+human `S` key **synthetically** through Minecraft's registered GLFW key
+callback. Agents ran as separate processes over real WebSocket sessions; every
+agent hold was bounded (at most about 1.5 s) and nothing jumped (the merged
+jump input stayed false for all 946 traced ticks). Results of the final run:
+
+| Check | Result |
+|---|---|
+| Idle | `Marionette: idle +2 observers` (two observers attached) |
+| Connected, walking | `Marionette: connected`, `walker (controller) +2 observers`, `Human priority`, `Held: forward`, `Obs 20.1/s sent 27 drop 0`, `Ping 0.3 ms cmd 4.1 ms` while the player walked |
+| `status` vs HUD | an observer's query matched the HUD's state, mode, held controls, agent and observer count; sent within 3 frames, dropped equal, rate within 1/s |
+| Live counters | two controller queries 2 s apart: +41 frames, 19.9–20.1/s, ping and command latency present; `controller` mirrored `session` |
+| Disconnect → idle | SIGKILL ×3 and clean close ×2: HUD showed `idle` 2.2–6.1 ms after the loss (the next rendered frame); holds released 3–46 ms after |
+| Human pause | `PAUSED by your input`, `Held: none` while the human held S |
+| Lockout | `AGENT EXCLUSIVE: input locked (F7)` with the agent holding forward; `Human priority` after F7 again |
+| Panic | `Marionette: PANIC` / `Agent control off (F9 allows it)` 8.8 ms after F8; controller closed 1008 `local panic`; `status` reported `latched`, mode `panic`, no controller; a reconnect was refused `panic_latched`; F9 returned the HUD to `idle` |
+| Toggle | F6 hid the HUD and saved `enabled = false` (it stayed hidden after the config reload); F6 showed it and saved `true`; F3 hid and restored it |
+| Logging | with `control = "QUIET"` and `bridge = "VERBOSE"`: `marionette.bridge` lines `Agent connected role=controller agent=logcheck` and no control lines; with `INHERIT`, control lines returned |
+| Controls menu | F6 "Toggle Marionette status HUD" listed under Marionette with F7–F9 |
+
+Published 0.1.0a1, unmodified (wheel SHA256 as in D14), observed the whole run
+(843 observations; only `hello` and `observation` frames) and, as a
+controller, walked 6.5 blocks with a bounded hold while the HUD showed
+`unnamed agent (controller)` and `Held: forward`; it received only `hello` and
+`observation` frames.
+
+Not established: physical (non-synthetic) keys, which need the owner;
+multiplayer servers; HUD legibility at other GUI scales or window sizes than
+the development window (854×480, automatic scale). M3.3's physical alt-tab and
+animation acceptance and the M5.1 owner-review items remain separate debt.

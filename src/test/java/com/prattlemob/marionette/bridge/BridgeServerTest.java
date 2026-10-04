@@ -1388,4 +1388,56 @@ class BridgeServerTest {
             assertTrue(server.drainCommands().isEmpty());
         }
     }
+
+    @Test
+    void controllerStatusNamesTheAgentMeasuresRttAndClearsTheMomentItDisconnects() throws Exception {
+        BridgeServer fast = new BridgeServer("127.0.0.1", 0, "test-version", 2, 50, 10_000);
+        fast.start();
+        try {
+            assertNull(fast.controllerStatus(1, System.nanoTime()));
+            TestClient controller = TestClient.connect(fast.port());
+            controller.send("{\"type\":\"hello\",\"versions\":[2],\"agent\":\"walker\"}");
+            controller.awaitMessage();
+            await(() -> fast.controllerStatus(1, System.nanoTime()) != null);
+            assertEquals("walker", fast.controllerStatus(1, System.nanoTime()).agent());
+            assertEquals("controller", fast.controllerStatus(1, System.nanoTime()).role());
+            await(() -> fast.controllerStatus(1, System.nanoTime()).rttMillis() != null);
+            TestClient observer = TestClient.connect(fast.port());
+            observer.send(OBSERVER_HELLO);
+            observer.awaitMessage();
+            await(() -> fast.observerCount() == 1);
+            fast.sendObservation("{\"type\":\"observation\",\"tick\":1}");
+            controller.awaitMessage();
+            assertEquals(1, fast.controllerStatus(1, System.nanoTime()).observationsSent());
+            controller.ws.abort();
+            await(fast::pollDisconnected);
+            assertNull(fast.controllerStatus(1, System.nanoTime()), "idle as soon as the controller is lost");
+            assertEquals(1, fast.observerCount(), "observers are unaffected");
+        } finally {
+            fast.stop();
+        }
+    }
+
+    @Test
+    void anObserverStatusQueryIsQueuedForItsOwnConnection() throws Exception {
+        TestClient controller = connectAndHello();
+        TestClient observer = connectObserver();
+        observer.send("{\"type\":\"status\",\"id\":\"q\"}");
+        List<BridgeServer.Received> commands = new java.util.ArrayList<>();
+        await(() -> { commands.addAll(server.drainCommands()); return !commands.isEmpty(); });
+        var received = commands.getFirst();
+        assertTrue(received.command() instanceof AgentCommand.Status);
+        assertEquals("observer", received.from().role().wire());
+        assertTrue(received.receivedNanos() > 0);
+        assertTrue(observer.messages.isEmpty() && controller.messages.isEmpty(), "applied on the client tick");
+    }
+
+    @Test
+    void panicLatchHidesTheControllerFromStatus() throws Exception {
+        connectAndHello();
+        await(() -> server.controllerStatus(1, System.nanoTime()) != null);
+        server.panic("local panic");
+        assertNull(server.controllerStatus(1, System.nanoTime()));
+        assertTrue(server.panicLatched());
+    }
 }

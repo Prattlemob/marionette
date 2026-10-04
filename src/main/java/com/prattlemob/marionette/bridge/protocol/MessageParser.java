@@ -90,7 +90,7 @@ public final class MessageParser {
         }
         return switch (type) {
             case "hello" -> new ParsedMessage.Hello(versions(json), role(json), id, sections(json),
-                    optionalBoolean(json, "events"));
+                    optionalBoolean(json, "events"), agentName(json));
             case "input" -> new AgentCommand.InputUpdate(
                     optionalBoolean(json, "forward"),
                     optionalBoolean(json, "back"),
@@ -109,6 +109,7 @@ public final class MessageParser {
             case "respawn" -> new AgentCommand.Respawn(id, raw);
             case "chat" -> parseChat(json, id, raw);
             case "release" -> new AgentCommand.Release();
+            case "status" -> new AgentCommand.Status(id);
             case "configure" -> new AgentCommand.Configure(
                     optionalRangedInt(json, "rateDivisor", 1, 100), sections(json),
                     optionalBoolean(json, "events"));
@@ -242,6 +243,24 @@ public final class MessageParser {
             versions.add(primitive.getAsInt());
         }
         return versions;
+    }
+
+    /** Longest hello {@code agent} display name, in UTF-16 characters. */
+    public static final int AGENT_NAME_LIMIT = 64;
+
+    /**
+     * The optional hello display name: 1–64 characters, no control characters
+     * and no section sign (it would style the HUD text).
+     */
+    private static String agentName(JsonObject json) {
+        String agent = optionalString(json, "agent");
+        if (agent == null) return null;
+        if (agent.isEmpty() || agent.length() > AGENT_NAME_LIMIT
+                || agent.chars().anyMatch(c -> Character.isISOControl(c) || c == '\u00a7')) {
+            throw new ProtocolError(ErrorCode.INVALID_FIELD,
+                    "field \"agent\" must be 1-" + AGENT_NAME_LIMIT + " characters without control characters or \u00a7");
+        }
+        return agent;
     }
 
     private static String role(JsonObject json) {

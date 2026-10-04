@@ -66,6 +66,9 @@ public sealed interface AgentCommand extends ParsedMessage {
      */
     record Chat(String text, String command, JsonPrimitive id, String raw) implements AgentCommand {}
 
+    /** Diagnostics query ({@code status}); answered with status_result on the client tick. */
+    record Status(JsonPrimitive id) implements AgentCommand {}
+
     /** Release every held control immediately. */
     record Release() implements AgentCommand {}
 

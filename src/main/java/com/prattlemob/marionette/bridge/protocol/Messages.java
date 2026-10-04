@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Set;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 
@@ -48,6 +49,7 @@ public final class Messages {
         capabilities.addProperty("playerIdentity", true);
         capabilities.addProperty("playerActivity", true);
         capabilities.addProperty("humanPrecedence", true);
+        capabilities.addProperty("status", true);
         reply.add("capabilities", capabilities);
         reply.addProperty("mod", modVersion);
         return reply.toString();
@@ -60,6 +62,58 @@ public final class Messages {
         reply.addProperty("op", op);
         reply.add("menu", menu);
         return reply.toString();
+    }
+
+    /** Reply to a {@code status} query, for the requesting session only. */
+    public static String statusResult(StatusReport report, JsonPrimitive id) {
+        JsonObject reply = new JsonObject();
+        reply.addProperty("type", "status_result");
+        if (id != null) reply.add("id", id);
+        reply.addProperty("state", report.state());
+        reply.addProperty("mode", report.mode());
+        reply.addProperty("paused", report.paused());
+        reply.addProperty("inWorld", report.inWorld());
+        reply.addProperty("tick", report.tick());
+        JsonArray held = new JsonArray();
+        report.held().forEach(held::add);
+        reply.add("held", held);
+        reply.addProperty("panning", report.panning());
+        reply.addProperty("observers", report.observers());
+        reply.add("controller", report.controller() == null ? JsonNull.INSTANCE
+                : counters(report.controller()));
+        JsonObject session = new JsonObject();
+        if (report.session() != null) {
+            ConnectionStatus own = report.session();
+            session.addProperty("role", own.role());
+            session.addProperty("rateDivisor", own.rateDivisor());
+            JsonArray sections = new JsonArray();
+            own.sections().stream().sorted().forEach(sections::add);
+            session.add("sections", sections);
+            session.addProperty("events", own.events());
+            counters(own).entrySet().forEach(entry -> session.add(entry.getKey(), entry.getValue()));
+        }
+        reply.add("session", session);
+        return reply.toString();
+    }
+
+    private static JsonObject counters(ConnectionStatus status) {
+        JsonObject counters = new JsonObject();
+        counters.addProperty("agent", status.agent());
+        counters.addProperty("connectedMillis", status.connectedMillis());
+        counters.addProperty("observationRate", round(status.observationRate()));
+        counters.addProperty("observationsSent", status.observationsSent());
+        counters.addProperty("observationsDropped", status.observationsDropped());
+        counters.addProperty("eventsSent", status.eventsSent());
+        counters.addProperty("queuedCommands", status.queuedCommands());
+        counters.addProperty("rttMillis", status.rttMillis() == null ? null : round(status.rttMillis()));
+        counters.addProperty("commandLatencyMillis",
+                status.commandLatencyMillis() == null ? null : round(status.commandLatencyMillis()));
+        return counters;
+    }
+
+    /** One decimal place: diagnostics, not measurements of record. */
+    private static double round(double value) {
+        return Math.round(value * 10.0) / 10.0;
     }
 
     /** Reply to an accepted {@code respawn} or {@code chat} request: "respawn", "chat" or "command". */

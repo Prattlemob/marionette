@@ -2,6 +2,8 @@ package com.prattlemob.marionette.config;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.EnumMap;
+import java.util.Map;
 
 import com.prattlemob.marionette.Marionette;
 
@@ -41,6 +43,9 @@ public final class MarionetteConfig {
     private static final ModConfigSpec.IntValue CHAT_MAX_MESSAGES;
     private static final ModConfigSpec.DoubleValue SMOOTHING_SPEED;
     private static final ModConfigSpec.EnumValue<Verbosity> VERBOSITY;
+    private static final Map<LogCategory, ModConfigSpec.EnumValue<CategoryVerbosity>> CATEGORY_VERBOSITY =
+            new EnumMap<>(LogCategory.class);
+    private static final ModConfigSpec.BooleanValue HUD_ENABLED;
     public static final ModConfigSpec SPEC;
 
     static {
@@ -133,8 +138,21 @@ public final class MarionetteConfig {
         builder.push("logging");
         VERBOSITY = builder
                 .comment("QUIET: warnings/errors only. NORMAL: lifecycle + connection events.",
-                        "VERBOSE: adds per-tick heartbeat and puppet-position evidence logs. (live)")
+                        "VERBOSE: adds per-tick heartbeat and puppet-position evidence logs. (live)",
+                        "The default for every category below.")
                 .defineEnum("verbosity", Verbosity.NORMAL);
+        for (LogCategory category : LogCategory.values()) {
+            CATEGORY_VERBOSITY.put(category, builder
+                    .comment("Verbosity of the '" + category.key() + "' category (logger marionette."
+                            + category.key() + "); INHERIT uses verbosity above. (live)")
+                    .defineEnum(category.key(), CategoryVerbosity.INHERIT));
+        }
+        builder.pop();
+        builder.push("hud");
+        HUD_ENABLED = builder
+                .comment("Show the Marionette status overlay (connection, precedence mode, held agent",
+                        "controls, counters). The rebindable HUD key toggles it and saves this value. (live)")
+                .define("enabled", true);
         builder.pop();
         SPEC = builder.build();
     }
@@ -159,11 +177,12 @@ public final class MarionetteConfig {
     public static volatile int chatMaxMessages = 5;
     public static volatile double cameraSmoothingSpeed = 180.0;
     public static volatile Verbosity verbosity = Verbosity.NORMAL;
+    public static volatile boolean hudEnabled = true;
 
     private MarionetteConfig() {
     }
 
-    /** True when Marionette should emit logs gated at {@code level}. */
+    /** True when Marionette should emit logs gated at {@code level} (global verbosity). */
     public static boolean logAt(Verbosity level) {
         return verbosity.atLeast(level);
     }
@@ -245,5 +264,23 @@ public final class MarionetteConfig {
         chatMaxMessages = CHAT_MAX_MESSAGES.get();
         cameraSmoothingSpeed = SMOOTHING_SPEED.get();
         verbosity = VERBOSITY.get();
+        Map<LogCategory, Verbosity> overrides = new EnumMap<>(LogCategory.class);
+        CATEGORY_VERBOSITY.forEach((category, value) -> {
+            Verbosity override = value.get().verbosity();
+            if (override != null) overrides.put(category, override);
+        });
+        MarionetteLog.configure(verbosity, overrides);
+        hudEnabled = HUD_ENABLED.get();
+    }
+
+    /** Toggle the status HUD and persist the choice (client thread). */
+    public static boolean toggleHud() {
+        boolean enabled = !hudEnabled;
+        hudEnabled = enabled;
+        if (SPEC.isLoaded()) {
+            HUD_ENABLED.set(enabled);
+            HUD_ENABLED.save();
+        }
+        return enabled;
     }
 }

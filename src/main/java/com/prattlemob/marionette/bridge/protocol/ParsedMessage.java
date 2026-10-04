@@ -10,8 +10,13 @@ public sealed interface ParsedMessage permits ParsedMessage.Hello, AgentCommand 
     /**
      * Handshake opener; must be the first message on a connection.
      * {@code role} is already defaulted to "controller" when absent;
-     * {@code id} is the envelope id or null.
+     * {@code id} is the envelope id or null; {@code agent} is the optional
+     * display name ({@code status} capability) or null.
      */
     record Hello(List<Integer> versions, String role, JsonPrimitive id, Set<String> sections,
-                 Boolean events) implements ParsedMessage {}
+                 Boolean events, String agent) implements ParsedMessage {
+        public Hello(List<Integer> versions, String role, JsonPrimitive id, Set<String> sections, Boolean events) {
+            this(versions, role, id, sections, events, null);
+        }
+    }
 }

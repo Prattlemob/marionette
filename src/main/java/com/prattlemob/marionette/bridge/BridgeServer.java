@@ -19,11 +19,14 @@ import java.util.stream.Stream;
 
 import com.google.gson.JsonObject;
 import com.prattlemob.marionette.bridge.protocol.AgentCommand;
+import com.prattlemob.marionette.bridge.protocol.ConnectionStatus;
 import com.prattlemob.marionette.bridge.protocol.Messages;
 import com.prattlemob.marionette.bridge.protocol.ErrorCode;
 import com.prattlemob.marionette.bridge.protocol.GameEvent;
 import com.prattlemob.marionette.bridge.protocol.ProtocolSession;
 import com.prattlemob.marionette.bridge.protocol.Role;
+import com.prattlemob.marionette.config.LogCategory;
+import com.prattlemob.marionette.config.MarionetteLog;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -79,7 +82,7 @@ public final class BridgeServer {
 
     /** One inbound command plus the connection it came from (configure and
      *  apply-time error replies are per-connection). */
-    public record Received(AgentCommand command, AgentConnection from, long generation) {
+    public record Received(AgentCommand command, AgentConnection from, long generation, long receivedNanos) {
         public boolean valid() { return from.valid(generation); }
     }
 
@@ -211,7 +214,7 @@ public final class BridgeServer {
             panicLatched = false;
             refused = latchedRefusals;
         }
-        LOG.info("Panic latch cleared; {} controller hello(s) were refused while latched", refused);
+        MarionetteLog.normal(LogCategory.BRIDGE, "Panic latch cleared refusedWhileLatched={}", refused);
         return true;
     }
 
@@ -428,9 +431,20 @@ public final class BridgeServer {
         connections().forEach(connection -> connection.sendEvent(event));
     }
 
-    /** Ready observer sessions; for headless tests. */
-    int observerCount() {
+    /** Ready observer sessions. */
+    public int observerCount() {
         return (int) observers.stream().filter(AgentConnection::ready).count();
+    }
+
+    /** Advance every connection's observation-rate window; client thread, each tick. */
+    public void sampleRates(long nowNanos) {
+        connections().forEach(connection -> connection.sampleRate(nowNanos));
+    }
+
+    /** The attached controller's counters (status, HUD), or null when none is attached. */
+    public ConnectionStatus controllerStatus(int defaultDivisor, long nowNanos) {
+        AgentConnection current = controller.get();
+        return current != null && current.ready() && !panicLatched() ? current.status(defaultDivisor, nowNanos) : null;
     }
 
     /** Observation frames deferred/dropped across all connections since they attached. */
@@ -449,7 +463,9 @@ public final class BridgeServer {
         if (role == Role.CONTROLLER) {
             synchronized (admissionLock) {
                 if (panicLatched) {
-                    if (++latchedRefusals == 1) LOG.info("Controller hello refused: panic latched");
+                    if (++latchedRefusals == 1) {
+                        MarionetteLog.normal(LogCategory.BRIDGE, "Controller hello refused: panic latched");
+                    }
                     else LOG.debug("Controller hello refused: panic latched ({} since panic)", latchedRefusals);
                     return ErrorCode.PANIC_LATCHED;
                 }
@@ -550,6 +566,7 @@ public final class BridgeServer {
                                 LOG.warn("Bridge {} pong timeout", connection.role());
                                 connection.close(1008, "pong timeout");
                             } else if (connection.ready() && ctx.channel().isWritable()) {
+                                connection.recordPing(System.nanoTime());
                                 ctx.writeAndFlush(new PingWebSocketFrame());
                             }
                         },
@@ -562,7 +579,10 @@ public final class BridgeServer {
         private ErrorCode admit(Role role) {
             ErrorCode refusal = tryAdmit(connection, role);
             if (refusal == null) {
+                connection.setAgent(connection.session().agent());
                 connection.setRole(role);
+                MarionetteLog.normal(LogCategory.BRIDGE, "Agent connected role={} agent={}{}", role.wire(),
+                        connection.agent(), role == Role.OBSERVER ? " observers=" + observers.size() : "");
                 pending.remove(connection.channel());
                 if (helloTimeoutTask != null) {
                     helloTimeoutTask.cancel(false);
@@ -637,9 +657,11 @@ public final class BridgeServer {
                 if (controller.compareAndSet(connection, null)) {
                     // invalidate() already cleared only this connection's work
                     // and signaled loss once, before any courtesy close flush.
+                    MarionetteLog.normal(LogCategory.BRIDGE, "Controller disconnected agent={}", connection.agent());
                 } else if (observers.remove(connection)) {
 
-                    LOG.info("Observer disconnected; {} still watching", observers.size());
+                    MarionetteLog.normal(LogCategory.BRIDGE, "Observer disconnected agent={} observers={}",
+                            connection.agent(), observers.size());
                 }
             }
             super.channelInactive(ctx);
