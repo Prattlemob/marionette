@@ -11,9 +11,10 @@ from websockets.asyncio.client import ClientConnection, connect as ws_connect
 from websockets.exceptions import ConnectionClosed
 
 from .messages import (
-    PROTOCOL_VERSION, BlockPos, Command, Configure, Error, Event, Hello, Input, InputFields,
+    PROTOCOL_VERSION, ActionResult, BlockPos, ChatRequest, Command, Configure, Error, Event, Hello, Input,
+    InputFields,
     InventoryRequest, InventoryResult, InvalidMessage, Look, LookFields, MenuRef,
-    Observation, Operation, Reliable, Role, ScanRequest, ScanResult, Section, SlotRef,
+    Observation, Operation, Reliable, RespawnRequest, Role, ScanRequest, ScanResult, Section, SlotRef,
     UnsupportedMessage, check_scan, decode, validate,
 )
 
@@ -50,7 +51,7 @@ class ServerError(ClientError):
 
     @property
     def reason(self) -> str | None:
-        """Machine-readable inventory (``inventoryStorage``) or scan (``blockScan``) reason, if sent."""
+        """Machine-readable inventory, scan, respawn or chat reason, if sent."""
         return self.error.get("reason")
 
 
@@ -178,7 +179,7 @@ class Client:
                     if self._observation is not None:
                         self.observations_coalesced += 1
                     self._observation = message
-                elif message["type"] in ("error", "inventory_result", "scan_result"):
+                elif message["type"] in ("error", "inventory_result", "scan_result", "action_result"):
                     reply = cast(Reliable, message)
                     request_id = reply.get("id")
                     future = self._pending.pop(request_id, None) if isinstance(request_id, str) else None
@@ -277,6 +278,8 @@ class Client:
         if any(k in fields for k in ("attack", "use", "hotbar")) or any(
                 k in ("attack", "use") for k in fields.get("tap", [])):
             self.require("interact")
+        if "swap_hands" in fields.get("tap", []):
+            self.require("swapHands")
         if "hotbar" in fields and not 0 <= fields["hotbar"] <= 8:
             raise ValueError("hotbar must be 0–8")
         await self._send(message)
@@ -420,6 +423,66 @@ class Client:
             await self.close()
             raise
         return reply
+
+    async def respawn(self, *, timeout: float | None = None) -> ActionResult:
+        """Press the death screen's Respawn button (``respawn``); controller only.
+
+        Returns once the request was sent; the server's respawn shows in observations
+        and, for subscribers, as a ``respawn`` event. Refusals raise ``ServerError``
+        (``respawn_refused``, reasons ``not_dead``/``hardcore``/``no_world``).
+        """
+        self.require("respawn")
+        request_id = self._next_id("respawn")
+        wait = self._request_wait(timeout)
+        message: RespawnRequest = {"type": "respawn", "id": request_id}
+        reply = await self._request(message, request_id, wait)
+        if reply["type"] != "action_result" or reply["action"] != "respawn":
+            await self.close()
+            raise InvalidMessage("respawn result does not match request")
+        return reply
+
+    async def chat(self, text: str | None = None, *, command: str | None = None,
+                   timeout: float | None = None) -> ActionResult:
+        """Send ordinary chat (``text``) or run a command (``command``) — exactly one (``chat``).
+
+        The mod applies the limits: commands are refused unless the human enabled
+        them (``commands_disabled``), plus length, character, ``/``-prefix and rate
+        limits; refusals raise ``ServerError`` (``chat_refused``) with
+        ``error["limits"]`` and, when rate limited, ``error["retryAfterMs"]``. A
+        result means the message was sent, not that the server accepted it.
+        """
+        self.require("chat")
+        if (text is None) == (command is None):
+            raise ValueError("chat takes exactly one of text or command")
+        content = text if command is None else command
+        if not isinstance(content, str):
+            raise ValueError("chat text/command must be a string")
+        request_id = self._next_id("chat")
+        wait = self._request_wait(timeout)
+        message: ChatRequest = {"type": "chat", "id": request_id}
+        if command is None:
+            message["text"] = content
+        else:
+            message["command"] = content
+        reply = await self._request(message, request_id, wait)
+        if reply["type"] != "action_result" or reply["action"] != ("chat" if command is None else "command"):
+            await self.close()
+            raise InvalidMessage("chat result does not match request")
+        return reply
+
+    def _next_id(self, kind: str) -> str:
+        self._active()
+        if self.role != "controller":
+            raise RoleError(f"{kind} requires controller role")
+        if len(self._pending) >= self._pending_limit:
+            raise CapacityError("too many pending requests")
+        self._sequence += 1
+        return f"{kind}-{self._sequence}"
+
+    def _request_wait(self, timeout: float | None) -> float:
+        wait = self._request_timeout if timeout is None else timeout
+        positive(wait, "timeout")
+        return wait
 
     async def _request(self, message: Command, request_id: str, wait: float) -> Reliable:
         """Send one correlated request. Timeout/cancellation does not cancel server work."""

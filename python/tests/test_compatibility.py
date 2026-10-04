@@ -1,8 +1,8 @@
 import json
 from pathlib import Path
 import unittest
-from marionette_mc.messages import (decode, validate, HelloRequest, Input, Look,
-                                    Release, Configure, InventoryRequest, ScanRequest)
+from marionette_mc.messages import (decode, validate, HelloRequest, Input, Look, Release, Configure,
+                                    InventoryRequest, ScanRequest, RespawnRequest, ChatRequest)
 
 
 class CompatibilityTests(unittest.TestCase):
@@ -12,11 +12,16 @@ class CompatibilityTests(unittest.TestCase):
             with self.subTest(message=message):
                 self.assertEqual(decode(json.dumps(message)), message)
         schemas = dict(hello=HelloRequest, input=Input, look=Look, release=Release,
-                       configure=Configure, inventory=InventoryRequest, scan=ScanRequest)
+                       configure=Configure, inventory=InventoryRequest, scan=ScanRequest,
+                       respawn=RespawnRequest, chat=ChatRequest)
         for command in fixture['commands']:
             validate(command['wire'], schemas[command['wire']['type']])
         # Sent only in reply to scan (blockScan); kept apart from "messages".
         for result in fixture['scanResults']:
+            with self.subTest(result=result):
+                self.assertEqual(decode(json.dumps(result)), result)
+        # Sent only in reply to respawn/chat (respawn, chat); kept apart from "messages".
+        for result in fixture['actionResults']:
             with self.subTest(result=result):
                 self.assertEqual(decode(json.dumps(result)), result)
 

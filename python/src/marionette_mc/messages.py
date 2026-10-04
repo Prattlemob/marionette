@@ -7,7 +7,7 @@ from typing import Iterator, Literal, NotRequired, TypedDict, Union, cast, get_a
 PROTOCOL_VERSION = 2
 Role = Literal["controller", "observer"]
 Section = Literal["player", "inventory", "target", "world", "entities"]
-Tap = Literal["jump", "attack", "use"]
+Tap = Literal["jump", "attack", "use", "swap_hands"]
 Operation = Literal["open", "inspect", "move", "swap", "equip", "drop", "craft", "close"]
 RequestId = str | int | float
 SlotRef = str | int
@@ -50,7 +50,28 @@ class Effect(TypedDict):
     amplifier: int
 
 
+class PlayerRef(TypedDict):
+    """A player's profile identity (``playerIdentity``)."""
+    uuid: str
+    name: str
+
+
+class UsingItem(TypedDict):
+    """The item being used (``playerActivity``). ``hand`` is ``"main_hand"`` or ``"off_hand"``."""
+    hand: str
+    item: str
+    ticks: int
+
+
+class Vehicle(TypedDict):
+    """The ridden entity (``playerActivity``); ``id`` matches entity and target ids."""
+    id: int
+    type: str
+
+
 class Player(Vector):
+    """The ``player`` section. Fields after ``effects`` need ``playerIdentity``
+    (``uuid``, ``name``) or ``playerActivity`` (the rest)."""
     yaw: float
     pitch: float
     velocity: Vector
@@ -68,6 +89,13 @@ class Player(Vector):
     sleeping: bool
     onFire: bool
     effects: list[Effect]
+    uuid: NotRequired[str]
+    name: NotRequired[str]
+    swimming: NotRequired[bool]
+    fallFlying: NotRequired[bool]
+    blocking: NotRequired[bool]
+    usingItem: NotRequired[UsingItem | None]
+    vehicle: NotRequired[Vehicle | None]
 
 
 class Enchantment(TypedDict):
@@ -88,6 +116,7 @@ class Stack(TypedDict):
     storedEnchantments: NotRequired[list[Enchantment]]
     storedEnchantmentsTruncated: NotRequired[bool]
     potion: NotRequired[str]
+    charged: NotRequired[bool]
 
 
 SlotRefusal = Literal["crafting", "result", "inactive", "bundle"]
@@ -260,7 +289,8 @@ class Entity(Vector):
     """One ``entities`` entry. ``hostility`` is a ``Hostility`` and ``targetingMe``
     a ``TargetingMe``, but both stay open strings: treat unknown values as
     ``"other"`` and ``"unknown"``. Living entities add ``health``, ``maxHealth``
-    and ``targetingMe``; players ``name``; dropped items ``item``.
+    and ``targetingMe``; players ``name`` (and ``uuid`` with ``playerIdentity``);
+    dropped items ``item``.
     """
     id: int
     type: str
@@ -271,6 +301,7 @@ class Entity(Vector):
     maxHealth: NotRequired[float]
     targetingMe: NotRequired[str]
     name: NotRequired[str]
+    uuid: NotRequired[str]
     item: NotRequired[DroppedItem]
 
 
@@ -329,15 +360,37 @@ class ScanResult(Envelope):
     indices: list[int]
 
 
+ActionKind = Literal["respawn", "chat", "command"]
+RespawnReason = Literal["no_world", "not_dead", "hardcore"]
+ChatReason = Literal["no_world", "client_restricted", "chat_disabled", "commands_disabled", "empty",
+                     "too_long", "illegal_character", "slash_prefix", "rate_limited"]
+
+
+class ChatLimits(TypedDict):
+    """The chat limits in force, sent with every ``chat_refused`` error (``chat``)."""
+    maxMessages: int
+    windowSeconds: int
+    maxLength: int
+
+
+class ActionResult(Envelope):
+    """Reply to an accepted ``respawn`` or ``chat`` request: the request was sent to
+    the server, not acknowledged by it. ``action`` is an ``ActionKind`` but stays open."""
+    type: Literal["action_result"]
+    action: str
+
+
 class Error(Envelope):
     type: Literal["error"]
     code: str
     message: str
     input: NotRequired[str]
     supported: NotRequired[list[int]]
-    # Inventory (inventoryStorage, see RejectionReason) or scan (blockScan, see ScanReason) reason.
+    # Inventory (inventoryStorage, see RejectionReason), scan (blockScan, see ScanReason),
+    # respawn (RespawnReason) or chat (ChatReason) reason.
     reason: NotRequired[str]
-    limits: NotRequired[ScanLimits]
+    limits: NotRequired[ScanLimits | ChatLimits]
+    retryAfterMs: NotRequired[int]
 
 
 class InputFields(TypedDict, total=False):
@@ -399,6 +452,7 @@ class DamageSource(TypedDict):
     type: str | None
     attacker: str | None
     direct: str | None
+    attackerPlayer: NotRequired[PlayerRef | None]
 
 
 class DamageEvent(EventEnvelope):
@@ -436,6 +490,7 @@ class ChatEvent(EventEnvelope):
     kind: Literal["chat", "system", "action_bar"]
     text: str | None
     sender: str | None
+    senderName: NotRequired[str | None]
     chatType: str | None
     truncated: bool
 
@@ -474,9 +529,20 @@ class ScanRequest(Envelope):
     min: NotRequired[BlockPos]
 
 
-Command = Input | Look | Release | Configure | InventoryRequest | ScanRequest
-Message = Hello | Observation | InventoryResult | ScanResult | Error | Event
-Reliable = InventoryResult | ScanResult | Error
+class RespawnRequest(Envelope):
+    type: Literal["respawn"]
+
+
+class ChatRequest(Envelope):
+    """Exactly one of ``text`` (ordinary chat) and ``command`` (needs the human to enable commands)."""
+    type: Literal["chat"]
+    text: NotRequired[str]
+    command: NotRequired[str]
+
+
+Command = Input | Look | Release | Configure | InventoryRequest | ScanRequest | RespawnRequest | ChatRequest
+Message = Hello | Observation | InventoryResult | ScanResult | ActionResult | Error | Event
+Reliable = InventoryResult | ScanResult | ActionResult | Error
 
 
 class InvalidMessage(ValueError):
@@ -548,7 +614,7 @@ def decode(raw: str | bytes) -> Message:
         raise InvalidMessage("type must be a string")
     schema: object = {"hello": Hello, "observation": Observation,
                       "inventory_result": InventoryResult, "scan_result": ScanResult,
-                      "error": Error}.get(kind)
+                      "action_result": ActionResult, "error": Error}.get(kind)
     if kind == "event":
         event = value.get("event")
         if not isinstance(event, str):

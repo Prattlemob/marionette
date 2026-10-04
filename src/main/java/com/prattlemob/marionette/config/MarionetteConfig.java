@@ -34,6 +34,9 @@ public final class MarionetteConfig {
     private static final ModConfigSpec.IntValue BLOCK_SCAN_RADIUS;
     private static final ModConfigSpec.IntValue BLOCK_SCAN_BUDGET;
     private static final ModConfigSpec.BooleanValue SUPPRESS_PAUSE;
+    private static final ModConfigSpec.BooleanValue ALLOW_CHAT;
+    private static final ModConfigSpec.BooleanValue ALLOW_COMMANDS;
+    private static final ModConfigSpec.IntValue CHAT_MAX_MESSAGES;
     private static final ModConfigSpec.DoubleValue SMOOTHING_SPEED;
     private static final ModConfigSpec.EnumValue<Verbosity> VERBOSITY;
     public static final ModConfigSpec SPEC;
@@ -93,6 +96,20 @@ public final class MarionetteConfig {
                         "the session keeps running and streaming when unfocused. (live)")
                 .define("suppressPauseOnLostFocus", true);
         builder.pop();
+        builder.push("chat");
+        ALLOW_CHAT = builder
+                .comment("Allow the controller to send ordinary chat messages with the `chat` request. (live)")
+                .define("allowChat", true);
+        ALLOW_COMMANDS = builder
+                .comment("Allow the controller to execute commands with the `chat` request's `command`",
+                        "field, as if typed after '/'. Off by default: commands can change the world,",
+                        "game rules and other players. (live)")
+                .define("allowCommands", false);
+        CHAT_MAX_MESSAGES = builder
+                .comment("Most accepted chat messages and commands together in any 10-second window,",
+                        "for the whole client (reconnecting does not reset it). (live)")
+                .defineInRange("maxMessages", 5, 1, 8);
+        builder.pop();
         builder.push("camera");
         SMOOTHING_SPEED = builder
                 .comment("Characteristic speed of smoothed camera pans, in degrees/second. (live)",
@@ -121,6 +138,9 @@ public final class MarionetteConfig {
     public static volatile int blockScanRadius = 16;
     public static volatile int blockScanBlocksPerTick = 1024;
     public static volatile boolean suppressPauseOnLostFocus = true;
+    public static volatile boolean allowChat = true;
+    public static volatile boolean allowCommands = false;
+    public static volatile int chatMaxMessages = 5;
     public static volatile double cameraSmoothingSpeed = 180.0;
     public static volatile Verbosity verbosity = Verbosity.NORMAL;
 
@@ -184,6 +204,9 @@ public final class MarionetteConfig {
         blockScanRadius = BLOCK_SCAN_RADIUS.get();
         blockScanBlocksPerTick = BLOCK_SCAN_BUDGET.get();
         suppressPauseOnLostFocus = SUPPRESS_PAUSE.get();
+        allowChat = ALLOW_CHAT.get();
+        allowCommands = ALLOW_COMMANDS.get();
+        chatMaxMessages = CHAT_MAX_MESSAGES.get();
         cameraSmoothingSpeed = SMOOTHING_SPEED.get();
         verbosity = VERBOSITY.get();
     }

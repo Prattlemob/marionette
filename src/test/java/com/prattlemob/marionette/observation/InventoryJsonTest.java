@@ -157,4 +157,14 @@ class InventoryJsonTest {
         small.add("menu", JsonNull.INSTANCE);
         assertEquals(1, InventoryJson.boundSection(small).size());
     }
+
+    @Test
+    void loadedCrossbowIsMarkedChargedOnlyWhenLoaded() {
+        JsonObject loaded = InventoryJson.stack(new InventoryJson.Stack("minecraft:crossbow", 1, 0, 465, null,
+                List.of(), List.of(), null, true));
+        assertTrue(loaded.get("charged").getAsBoolean());
+        JsonObject empty = InventoryJson.stack(new InventoryJson.Stack("minecraft:crossbow", 1, 0, 465, null,
+                List.of(), List.of(), null));
+        assertFalse(empty.has("charged"));
+    }
 }

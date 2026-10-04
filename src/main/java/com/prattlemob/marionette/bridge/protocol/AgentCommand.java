@@ -56,6 +56,16 @@ public sealed interface AgentCommand extends ParsedMessage {
     record BlockCoord(int x, int y, int z) {}
     record SlotRef(Integer index, String alias) {}
 
+    /** Leave the death screen ({@code respawn}); refusals are decided on the client tick. */
+    record Respawn(JsonPrimitive id, String raw) implements AgentCommand {}
+
+    /**
+     * Ordinary chat or a command line ({@code chat}); exactly one of {@code text}
+     * and {@code command} is non-null, as received (normalized and limited on the
+     * client tick, see ChatPolicy).
+     */
+    record Chat(String text, String command, JsonPrimitive id, String raw) implements AgentCommand {}
+
     /** Release every held control immediately. */
     record Release() implements AgentCommand {}
 

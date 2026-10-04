@@ -1287,4 +1287,65 @@ class BridgeServerTest {
         }
     }
 
+    private static final List<String> GAMEPLAY_REQUESTS = List.of(
+            "{\"type\":\"chat\",\"id\":\"c\",\"text\":\"hi\"}",
+            "{\"type\":\"respawn\",\"id\":\"r\"}",
+            "{\"type\":\"input\",\"use\":true,\"tap\":[\"swap_hands\"]}");
+
+    /** Queue the M3.7 actuators behind one polled command; returns that polled (held) command. */
+    private BridgeServer.Received queueGameplay(java.util.function.Consumer<String> send) throws Exception {
+        send.accept("{\"type\":\"input\",\"forward\":true}");
+        List<BridgeServer.Received> first = new java.util.ArrayList<>();
+        await(() -> { first.addAll(server.drainCommands()); return !first.isEmpty(); });
+        GAMEPLAY_REQUESTS.forEach(send);
+        await(() -> first.getFirst().from().queuedCommands() == GAMEPLAY_REQUESTS.size());
+        return first.getFirst();
+    }
+
+    @Test
+    void everySafetyReleaseDiscardsQueuedGameplayRequestsUnanswered() throws Exception {
+        // release
+        TestClient client = connectAndHello();
+        var polled = queueGameplay(client::send);
+        client.send("{\"type\":\"release\"}");
+        await(() -> !polled.valid());
+        assertInstanceOf(AgentCommand.Release.class, server.pollRelease().command());
+        assertTrue(server.drainCommands().isEmpty(), "chat/respawn/swap queued before release never apply");
+        // disconnect
+        var lost = queueGameplay(client::send);
+        client.ws.abort();
+        await(server::pollDisconnected);
+        assertFalse(lost.valid());
+        assertTrue(server.drainCommands().isEmpty());
+        // panic
+        TestClient panicked = connectAndHello();
+        var severed = queueGameplay(panicked::send);
+        assertTrue(server.panic("local panic"));
+        assertFalse(severed.valid(), "panic invalidates synchronously");
+        assertTrue(server.drainCommands().isEmpty());
+        assertTrue(server.pollDisconnected());
+        assertTrue(server.rearm());
+        for (String text : List.of(panicked.messages.toArray(new String[0]))) {
+            assertFalse(text.contains("action_result"), "nothing was answered: " + text);
+        }
+    }
+
+    @Test
+    void watchdogDiscardsQueuedGameplayRequests() throws Exception {
+        server.stop();
+        server = new BridgeServer(java.net.InetAddress.getLoopbackAddress(), 0, "test", 1, 2000, 1000);
+        server.start();
+        try (var frozen = silentClient(server.port(), HELLO)) {
+            await(server::hasController);
+            rawText(frozen, "{\"type\":\"input\",\"forward\":true}");
+            List<BridgeServer.Received> first = new java.util.ArrayList<>();
+            await(() -> { first.addAll(server.drainCommands()); return !first.isEmpty(); });
+            for (String request : GAMEPLAY_REQUESTS) rawText(frozen, request);
+            await(() -> first.getFirst().from().queuedCommands() == 3);
+            // The frozen agent never answers pings: the watchdog drops it and its queue.
+            await(server::pollDisconnected);
+            assertFalse(first.getFirst().valid());
+            assertTrue(server.drainCommands().isEmpty());
+        }
+    }
 }

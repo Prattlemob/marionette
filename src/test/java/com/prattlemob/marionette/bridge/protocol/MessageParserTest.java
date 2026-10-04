@@ -429,4 +429,47 @@ class MessageParserTest {
                     assertThrows(ProtocolError.class, () -> MessageParser.parse(frame)).code(), frame);
         }
     }
+
+    @Test
+    void parsesRespawnWithItsIdAndFrame() {
+        String frame = "{\"type\":\"respawn\",\"id\":\"r1\"}";
+        var respawn = assertInstanceOf(AgentCommand.Respawn.class, MessageParser.parse(frame));
+        assertEquals(new JsonPrimitive("r1"), respawn.id());
+        assertEquals(frame, respawn.raw());
+    }
+
+    @Test
+    void parsesChatTextOrCommandVerbatim() {
+        var text = assertInstanceOf(AgentCommand.Chat.class,
+                MessageParser.parse("{\"type\":\"chat\",\"id\":4,\"text\":\"  hi  \"}"));
+        assertEquals("  hi  ", text.text(), "normalization happens on the client tick");
+        assertNull(text.command());
+        assertEquals(new JsonPrimitive(4), text.id());
+        var command = assertInstanceOf(AgentCommand.Chat.class,
+                MessageParser.parse("{\"type\":\"chat\",\"command\":\"/time set day\"}"));
+        assertNull(command.text());
+        assertEquals("/time set day", command.command());
+    }
+
+    @Test
+    void rejectsChatWithoutExactlyOneStringField() {
+        for (String frame : List.of(
+                "{\"type\":\"chat\"}",
+                "{\"type\":\"chat\",\"text\":\"a\",\"command\":\"b\"}",
+                "{\"type\":\"chat\",\"text\":5}",
+                "{\"type\":\"chat\",\"command\":null}",
+                "{\"type\":\"chat\",\"text\":[\"a\"]}")) {
+            assertEquals(ErrorCode.INVALID_FIELD,
+                    assertThrows(ProtocolError.class, () -> MessageParser.parse(frame)).code(), frame);
+        }
+    }
+
+    @Test
+    void parsesSwapHandsTap() {
+        var update = assertInstanceOf(AgentCommand.InputUpdate.class,
+                MessageParser.parse("{\"type\":\"input\",\"tap\":[\"swap_hands\",\"use\"]}"));
+        assertEquals(Set.of(TapControl.SWAP_HANDS, TapControl.USE), update.taps());
+        assertEquals(ErrorCode.INVALID_FIELD, assertThrows(ProtocolError.class,
+                () -> MessageParser.parse("{\"type\":\"input\",\"tap\":[\"swapHands\"]}")).code());
+    }
 }

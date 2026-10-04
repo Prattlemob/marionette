@@ -14,7 +14,7 @@ HELLO = dict(type="hello", version=2, mod="0.1.0", capabilities=dict(
     configure=True, observer=True, playerState=True, tap=True, camera=True,
     interact=True, inventory=True, inventoryAnimation=True, bridgeSafety=True, events=True,
     inventoryState=True, targetState=True, worldState=True, entityState=True, blockScan=True,
-    crafting=True))
+    crafting=True, swapHands=True, respawn=True, chat=True, playerIdentity=True, playerActivity=True))
 
 
 async def send(ws, **message):
@@ -64,6 +64,11 @@ class ClientTests(unittest.IsolatedAsyncioTestCase):
                 frames.append(command)
                 if command['type'] == 'inventory':
                     await send(ws, type='inventory_result', id=command['id'], op=command['op'], menu=None)
+                if command['type'] == 'respawn':
+                    await send(ws, type='action_result', id=command['id'], action='respawn')
+                if command['type'] == 'chat':
+                    await send(ws, type='action_result', id=command['id'],
+                               action='command' if 'command' in command else 'chat')
                 if command['type'] == 'scan':
                     size = command['size']
                     await send(ws, type='scan_result', id=command['id'], dimension='minecraft:overworld',

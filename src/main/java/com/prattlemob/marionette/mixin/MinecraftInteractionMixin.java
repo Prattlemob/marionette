@@ -16,7 +16,7 @@ import net.minecraft.client.MouseHandler;
 import net.minecraft.client.gui.screens.Screen;
 
 /**
- * M3.3: OR-merges agent attack/use intent into the values
+ * M3.3: OR-merges agent attack/use (and, M3.7, swap-hands) intent into the values
  * {@code Minecraft.handleKeybinds()} reads — the same
  * manipulate-meaning-not-key-state philosophy as the D4 movement mixin,
  * at the method vanilla routes clicks and holds through. Vanilla itself
@@ -80,6 +80,11 @@ public abstract class MinecraftInteractionMixin {
         }
         if (mapping == minecraft.options.keyUse) {
             return vanilla || state.consumeTap(TapControl.USE);
+        }
+        if (mapping == minecraft.options.keySwapOffhand) {
+            // M3.7 (swapHands): one press of vanilla's swap-offhand key; vanilla
+            // sends its own server request and keeps the spectator rule.
+            return vanilla || state.consumeTap(TapControl.SWAP_HANDS);
         }
         return vanilla;
     }

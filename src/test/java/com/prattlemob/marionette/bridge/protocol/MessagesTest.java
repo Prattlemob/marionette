@@ -195,4 +195,34 @@ class MessagesTest {
         assertTrue(event.has("item") && event.get("item").isJsonNull());
         assertEquals("client", event.get("basis").getAsString());
     }
+
+    @Test
+    void helloReplyAdvertisesGameplayCapabilities() {
+        JsonObject capabilities = parse(Messages.helloReply(2, "0.1.0", null)).getAsJsonObject("capabilities");
+        for (String name : List.of("swapHands", "respawn", "chat", "playerIdentity", "playerActivity")) {
+            assertTrue(capabilities.get(name).getAsBoolean(), name);
+        }
+    }
+
+    @Test
+    void actionResultEchoesIdAndNamesTheAction() {
+        assertEquals(parse("{\"type\":\"action_result\",\"id\":\"c1\",\"action\":\"command\"}"),
+                parse(Messages.actionResult("command", new com.google.gson.JsonPrimitive("c1"))));
+        assertEquals(parse("{\"type\":\"action_result\",\"action\":\"respawn\"}"),
+                parse(Messages.actionResult("respawn", null)));
+    }
+
+    @Test
+    void chatErrorCarriesReasonLimitsAndOnlyRateRefusalsRetry() {
+        JsonObject limited = parse(Messages.chatError("rate_limited", "slow down", new com.google.gson.JsonPrimitive(3),
+                "{}", 5, 10, 256, 1234L));
+        assertEquals("chat_refused", limited.get("code").getAsString());
+        assertEquals("rate_limited", limited.get("reason").getAsString());
+        assertEquals(parse("{\"maxMessages\":5,\"windowSeconds\":10,\"maxLength\":256}"), limited.getAsJsonObject("limits"));
+        assertEquals(1234L, limited.get("retryAfterMs").getAsLong());
+        assertEquals(3, limited.get("id").getAsInt());
+        JsonObject disabled = parse(Messages.chatError("commands_disabled", "off", null, "{}", 5, 10, 256, null));
+        assertFalse(disabled.has("retryAfterMs"));
+        assertFalse(disabled.has("id"));
+    }
 }

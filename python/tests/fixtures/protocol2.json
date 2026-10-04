@@ -324,6 +324,39 @@
           "z": 16
         }
       }
+    },
+    {
+      "javaType": "Chat",
+      "wire": {
+        "type": "chat",
+        "id": "c1",
+        "text": "hello"
+      }
+    },
+    {
+      "javaType": "Chat",
+      "wire": {
+        "type": "chat",
+        "id": "c2",
+        "command": "time set day"
+      }
+    },
+    {
+      "javaType": "Respawn",
+      "wire": {
+        "type": "respawn",
+        "id": "r1"
+      }
+    },
+    {
+      "javaType": "InputUpdate",
+      "wire": {
+        "type": "input",
+        "tap": [
+          "swap_hands"
+        ],
+        "use": true
+      }
     }
   ],
   "messages": [
@@ -348,7 +381,12 @@
         "worldState": true,
         "entityState": true,
         "blockScan": true,
-        "crafting": true
+        "crafting": true,
+        "swapHands": true,
+        "respawn": true,
+        "chat": true,
+        "playerIdentity": true,
+        "playerActivity": true
       },
       "mod": "0.1.0",
       "id": "hello-fixture"
@@ -913,6 +951,60 @@
       }
     },
     {
+      "type": "observation",
+      "tick": 2234,
+      "player": {
+        "x": 12.5,
+        "y": 64.0,
+        "z": -8.25,
+        "yaw": 90.0,
+        "pitch": 0.0,
+        "velocity": {
+          "x": 0.0,
+          "y": -0.0784,
+          "z": 0.0
+        },
+        "health": 20.0,
+        "maxHealth": 20.0,
+        "hunger": 20,
+        "saturation": 5.0,
+        "air": 300,
+        "maxAir": 300,
+        "xp": {
+          "level": 0,
+          "progress": 0.0,
+          "total": 0
+        },
+        "onGround": true,
+        "inWater": false,
+        "sneaking": false,
+        "sprinting": false,
+        "sleeping": false,
+        "onFire": false,
+        "effects": [
+          {
+            "id": "minecraft:speed",
+            "duration": 100,
+            "amplifier": 1
+          }
+        ],
+        "uuid": "380df991-f603-344c-a090-369bad2a924a",
+        "name": "Dev",
+        "swimming": false,
+        "fallFlying": false,
+        "blocking": true,
+        "usingItem": {
+          "hand": "off_hand",
+          "item": "minecraft:shield",
+          "ticks": 12
+        },
+        "vehicle": {
+          "id": 417,
+          "type": "minecraft:oak_boat"
+        }
+      }
+    },
+    {
       "type": "inventory_result",
       "id": "inspect",
       "op": "inspect",
@@ -1426,6 +1518,36 @@
         }
       },
       "code": "invalid_field"
+    },
+    {
+      "wire": {
+        "type": "chat",
+        "text": "a",
+        "command": "b"
+      },
+      "code": "invalid_field"
+    },
+    {
+      "wire": {
+        "type": "chat"
+      },
+      "code": "invalid_field"
+    },
+    {
+      "wire": {
+        "type": "chat",
+        "text": 7
+      },
+      "code": "invalid_field"
+    },
+    {
+      "wire": {
+        "type": "input",
+        "tap": [
+          "swapHands"
+        ]
+      },
+      "code": "invalid_field"
     }
   ],
   "events": [
@@ -1439,7 +1561,8 @@
       "source": {
         "type": "minecraft:mob_attack",
         "attacker": "minecraft:zombie",
-        "direct": "minecraft:zombie"
+        "direct": "minecraft:zombie",
+        "attackerPlayer": null
       },
       "amount": 2.5,
       "health": 17.5
@@ -1514,6 +1637,7 @@
       "kind": "chat",
       "text": "[Dev] hello",
       "sender": "00000000-0000-0000-0000-000000000001",
+      "senderName": null,
       "chatType": "minecraft:say_command",
       "truncated": false
     },
@@ -1527,6 +1651,7 @@
       "kind": "action_bar",
       "text": "Hi",
       "sender": null,
+      "senderName": null,
       "chatType": null,
       "truncated": false
     },
@@ -1543,6 +1668,39 @@
         "y": -59,
         "z": 3
       }
+    },
+    {
+      "type": "event",
+      "event": "chat",
+      "seq": 11,
+      "worldSession": "5d0c6f3e9a4b2c18",
+      "tick": 480,
+      "basis": "server",
+      "kind": "chat",
+      "text": "<Dev> hello",
+      "sender": "380df991-f603-344c-a090-369bad2a924a",
+      "senderName": "Dev",
+      "chatType": "minecraft:chat",
+      "truncated": false
+    },
+    {
+      "type": "event",
+      "event": "damage",
+      "seq": 12,
+      "worldSession": "5d0c6f3e9a4b2c18",
+      "tick": 490,
+      "basis": "server",
+      "source": {
+        "type": "minecraft:player_attack",
+        "attacker": "minecraft:player",
+        "direct": "minecraft:player",
+        "attackerPlayer": {
+          "uuid": "5f6c3b0e-8a1d-4c2e-9b7a-1d2e3f4a5b6c",
+          "name": "Alex"
+        }
+      },
+      "amount": 1.0,
+      "health": 19.0
     }
   ],
   "scanResults": [
@@ -1613,6 +1771,58 @@
         1,
         2
       ]
+    }
+  ],
+  "actionResults": [
+    {
+      "type": "action_result",
+      "id": "c1",
+      "action": "chat"
+    },
+    {
+      "type": "action_result",
+      "id": "c2",
+      "action": "command"
+    },
+    {
+      "type": "action_result",
+      "id": "r1",
+      "action": "respawn"
+    },
+    {
+      "type": "error",
+      "code": "chat_refused",
+      "message": "commands are disabled by chat.allowCommands",
+      "id": "c2",
+      "input": "{\"type\":\"chat\",\"id\":\"c2\",\"command\":\"time set day\"}",
+      "reason": "commands_disabled",
+      "limits": {
+        "maxMessages": 5,
+        "windowSeconds": 10,
+        "maxLength": 256
+      }
+    },
+    {
+      "type": "error",
+      "code": "chat_refused",
+      "message": "more than 5 messages in 10 seconds",
+      "id": "c3",
+      "input": "{\"type\":\"chat\",\"id\":\"c3\",\"text\":\"again\"}",
+      "reason": "rate_limited",
+      "limits": {
+        "maxMessages": 5,
+        "windowSeconds": 10,
+        "maxLength": 256
+      },
+      "retryAfterMs": 4210
+    },
+    {
+      "type": "error",
+      "code": "respawn_refused",
+      "message": "the player is alive",
+      "id": "r2",
+      "input": "{\"type\":\"respawn\",\"id\":\"r2\"}",
+      "reason": "not_dead"
     }
   ]
 }

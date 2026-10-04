@@ -270,4 +270,41 @@ class ControlStateTest {
         assertTrue(state.jump());
         assertTrue(state.consumeTap(TapControl.JUMP));
     }
+
+    @Test
+    void swapHandsTapIsOneShotAndEveryReleaseDropsIt() {
+        ControlState state = new ControlState();
+        state.tap(TapControl.SWAP_HANDS);
+        assertFalse(state.anyHeld(), "a pending swap is not a held control");
+        assertTrue(state.consumeTap(TapControl.SWAP_HANDS));
+        assertFalse(state.consumeTap(TapControl.SWAP_HANDS));
+        state.tap(TapControl.SWAP_HANDS);
+        state.releaseAll();
+        assertFalse(state.consumeTap(TapControl.SWAP_HANDS), "release-all (disconnect, watchdog, panic) drops it");
+        state.tap(TapControl.SWAP_HANDS);
+        state.dropInteractionTaps();
+        assertFalse(state.consumeTap(TapControl.SWAP_HANDS), "an unconsumed tap dies at tick end");
+        state.tap(TapControl.SWAP_HANDS);
+        state.releaseInteractions();
+        assertFalse(state.consumeTap(TapControl.SWAP_HANDS), "opening a screen drops it");
+        assertEquals("swap_hands", TapControl.SWAP_HANDS.wire());
+        assertEquals(TapControl.SWAP_HANDS, TapControl.fromWire("swap_hands"));
+    }
+
+    @Test
+    void releaseAllLetsGoOfHeldUseAndSteeringActuators() {
+        // Shield/bow/crossbow/trident use, boat and mount steering, and swimming are
+        // the held use and movement controls: one release-all frees all of them.
+        ControlState state = new ControlState();
+        state.setUse(true);
+        state.setForward(true);
+        state.setLeft(true);
+        state.setSprint(true);
+        state.setSneak(true);
+        state.tap(TapControl.SWAP_HANDS);
+        state.releaseAll();
+        assertFalse(state.anyHeld());
+        assertFalse(state.consumeTap(TapControl.USE), "the hold's edge click is dropped too");
+        assertFalse(state.consumeTap(TapControl.SWAP_HANDS));
+    }
 }

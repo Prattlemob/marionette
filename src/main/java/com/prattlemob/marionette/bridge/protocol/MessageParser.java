@@ -106,6 +106,8 @@ public final class MessageParser {
             case "inventory" -> parseInventory(json, id, raw);
             case "look" -> parseLook(json, id, raw);
             case "scan" -> parseScan(json, id, raw);
+            case "respawn" -> new AgentCommand.Respawn(id, raw);
+            case "chat" -> parseChat(json, id, raw);
             case "release" -> new AgentCommand.Release();
             case "configure" -> new AgentCommand.Configure(
                     optionalRangedInt(json, "rateDivisor", 1, 100), sections(json),
@@ -160,6 +162,16 @@ public final class MessageParser {
                 counted ? optionalRangedInt(json, "count", 1, Integer.MAX_VALUE) : null,
                 op.equals("drop") && Boolean.TRUE.equals(optionalBoolean(json, "all")),
                 Boolean.TRUE.equals(optionalBoolean(json, "animated")), id, raw);
+    }
+
+    /** Exactly one of text/command, as a string; content limits are applied on the client tick. */
+    private static AgentCommand.Chat parseChat(JsonObject json, JsonPrimitive id, String raw) {
+        String text = optionalString(json, "text");
+        String command = optionalString(json, "command");
+        if ((text == null) == (command == null)) {
+            throw new ProtocolError(ErrorCode.INVALID_FIELD, "chat requires exactly one of \"text\" or \"command\"");
+        }
+        return new AgentCommand.Chat(text, command, id, raw);
     }
 
     /** Largest per-axis scan extent; the volume cap is checked when the scan is applied. */

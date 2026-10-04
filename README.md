@@ -100,6 +100,19 @@ config files); values marked *(restart required)* are read once at startup.
 	#the session keeps running and streaming when unfocused. (live)
 	suppressPauseOnLostFocus = true
 
+[chat]
+	#Allow the controller to send ordinary chat messages with the `chat` request. (live)
+	allowChat = true
+	#Allow the controller to execute commands with the `chat` request's `command`
+	#field, as if typed after '/'. Off by default: commands can change the world,
+	#game rules and other players. (live)
+	allowCommands = false
+	#Most accepted chat messages and commands together in any 10-second window,
+	#for the whole client (reconnecting does not reset it). (live)
+	# Default: 5
+	# Range: 1 ~ 8
+	maxMessages = 5
+
 [camera]
 	#Characteristic speed of smoothed camera pans, in degrees/second. (live)
 	#Agents scale it per pan with the `speed` multiplier on look mode "smooth".
@@ -118,6 +131,8 @@ Notes:
 
 - A non-loopback `bindAddress` is ignored and clamped to `127.0.0.1` with a
   loud warning. Remote binding is unsupported (D16).
+- `allowCommands` is the human's switch: agents can never enable command
+  execution themselves (D24).
 - `suppressPauseOnLostFocus` only takes effect while an agent is connected;
   with no agent attached the game pauses on focus loss exactly as vanilla.
 - The `[observation]` radius/count caps are defined ahead of the features
