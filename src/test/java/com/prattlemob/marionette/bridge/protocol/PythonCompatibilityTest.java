@@ -21,6 +21,10 @@ class PythonCompatibilityTest {
                 assertEquals(8, input.hotbar());
                 assertEquals(2, input.taps().size());
             }
+            if (command instanceof AgentCommand.Scan scan) {
+                assertEquals(item.getAsJsonObject("wire").get("id"), scan.id());
+                assertEquals(16, scan.size().x());
+            }
             if (command instanceof AgentCommand.InventoryAction inventory) {
                 assertEquals(item.getAsJsonObject("wire").get("op").getAsString(), inventory.op());
                 assertEquals(item.getAsJsonObject("wire").get("id"), inventory.id());
@@ -45,7 +49,13 @@ class PythonCompatibilityTest {
                 }
                 case "inventory_result" -> Messages.inventoryResult(expected.get("op").getAsString(), id,
                         expected.get("menu").isJsonNull() ? null : expected.getAsJsonObject("menu"));
-                case "error" -> expected.get("code").getAsString().equals("unsupported_version")
+                case "error" -> expected.get("code").getAsString().startsWith("scan_")
+                        ? Messages.scanError(ErrorCode.valueOf(expected.get("code").getAsString().toUpperCase(java.util.Locale.ROOT)),
+                                expected.get("reason").getAsString(), expected.get("message").getAsString(), id,
+                                expected.get("input").getAsString(), expected.has("limits") ? new int[] {
+                                        expected.getAsJsonObject("limits").get("radius").getAsInt(),
+                                        expected.getAsJsonObject("limits").get("maxVolume").getAsInt()} : null)
+                        : expected.get("code").getAsString().equals("unsupported_version")
                         ? Messages.unsupportedVersionError(List.of(2), id, expected.get("input").getAsString())
                         : Messages.error(java.util.Arrays.stream(ErrorCode.values())
                                         .filter(c -> c.wire().equals(expected.get("code").getAsString())).findFirst().orElseThrow(),
@@ -53,6 +63,18 @@ class PythonCompatibilityTest {
                                 expected.get("message").getAsString(), id, expected.get("input").getAsString());
                 default -> throw new AssertionError("unknown fixture");
             };
+            assertEquals(expected, JsonParser.parseString(actual));
+        }
+        // Scan results go only to a client that sent scan (blockScan), so they are kept apart too.
+        for (var entry : fixture.getAsJsonArray("scanResults")) {
+            var expected = entry.getAsJsonObject();
+            var palette = new java.util.ArrayList<String>();
+            expected.getAsJsonArray("palette").forEach(name -> palette.add(name.isJsonNull() ? null : name.getAsString()));
+            var indices = new int[expected.getAsJsonArray("indices").size()];
+            for (int i = 0; i < indices.length; i++) indices[i] = expected.getAsJsonArray("indices").get(i).getAsInt();
+            String actual = Messages.scanResult(expected.getAsJsonPrimitive("id"), expected.get("dimension").getAsString(),
+                    xyz(expected.getAsJsonObject("min")), xyz(expected.getAsJsonObject("size")),
+                    expected.get("startTick").getAsLong(), expected.get("tick").getAsLong(), palette, indices);
             assertEquals(expected, JsonParser.parseString(actual));
         }
         // Event frames are kept apart from "messages": clients that predate
@@ -66,5 +88,9 @@ class PythonCompatibilityTest {
                     GameEvent.Basis.valueOf(expected.get("basis").getAsString().toUpperCase(java.util.Locale.ROOT)), fields);
             assertEquals(expected, JsonParser.parseString(Messages.event(event, expected.get("seq").getAsLong())));
         }
+    }
+
+    private static int[] xyz(JsonObject coord) {
+        return new int[] {coord.get("x").getAsInt(), coord.get("y").getAsInt(), coord.get("z").getAsInt()};
     }
 }

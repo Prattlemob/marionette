@@ -13,7 +13,7 @@ from marionette_mc.messages import InvalidMessage, decode
 HELLO = dict(type="hello", version=2, mod="0.1.0", capabilities=dict(
     configure=True, observer=True, playerState=True, tap=True, camera=True,
     interact=True, inventory=True, inventoryAnimation=True, bridgeSafety=True, events=True,
-    inventoryState=True, targetState=True, worldState=True, entityState=True))
+    inventoryState=True, targetState=True, worldState=True, entityState=True, blockScan=True))
 
 
 async def send(ws, **message):
@@ -63,6 +63,12 @@ class ClientTests(unittest.IsolatedAsyncioTestCase):
                 frames.append(command)
                 if command['type'] == 'inventory':
                     await send(ws, type='inventory_result', id=command['id'], op=command['op'], menu=None)
+                if command['type'] == 'scan':
+                    size = command['size']
+                    await send(ws, type='scan_result', id=command['id'], dimension='minecraft:overworld',
+                               min=command.get('min', dict(x=0, y=0, z=0)), size=size, order='yzx',
+                               startTick=1, tick=2, palette=['minecraft:air'],
+                               indices=[0] * (size['x'] * size['y'] * size['z']))
         async with endpoint(handler) as uri:
             async with connect(uri) as client:
                 for item in fixture['commands']:

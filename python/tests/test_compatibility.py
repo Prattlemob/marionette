@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 import unittest
 from marionette_mc.messages import (decode, validate, HelloRequest, Input, Look,
-                                    Release, Configure, InventoryRequest)
+                                    Release, Configure, InventoryRequest, ScanRequest)
 
 
 class CompatibilityTests(unittest.TestCase):
@@ -12,9 +12,13 @@ class CompatibilityTests(unittest.TestCase):
             with self.subTest(message=message):
                 self.assertEqual(decode(json.dumps(message)), message)
         schemas = dict(hello=HelloRequest, input=Input, look=Look, release=Release,
-                       configure=Configure, inventory=InventoryRequest)
+                       configure=Configure, inventory=InventoryRequest, scan=ScanRequest)
         for command in fixture['commands']:
             validate(command['wire'], schemas[command['wire']['type']])
+        # Sent only in reply to scan (blockScan); kept apart from "messages".
+        for result in fixture['scanResults']:
+            with self.subTest(result=result):
+                self.assertEqual(decode(json.dumps(result)), result)
 
     def test_public_package_is_typed_and_versioned(self):
         import marionette_mc

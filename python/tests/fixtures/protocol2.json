@@ -263,6 +263,35 @@
           "world"
         ]
       }
+    },
+    {
+      "javaType": "Scan",
+      "wire": {
+        "type": "scan",
+        "id": "terrain",
+        "size": {
+          "x": 16,
+          "y": 8,
+          "z": 16
+        }
+      }
+    },
+    {
+      "javaType": "Scan",
+      "wire": {
+        "type": "scan",
+        "id": "pit",
+        "min": {
+          "x": -8,
+          "y": -62,
+          "z": -8
+        },
+        "size": {
+          "x": 16,
+          "y": 8,
+          "z": 16
+        }
+      }
     }
   ],
   "messages": [
@@ -285,7 +314,8 @@
         "inventoryStorage": true,
         "targetState": true,
         "worldState": true,
-        "entityState": true
+        "entityState": true,
+        "blockScan": true
       },
       "mod": "0.1.0",
       "id": "hello-fixture"
@@ -1000,6 +1030,34 @@
       ],
       "id": 12,
       "input": "{\"type\":\"hello\",\"versions\":[1]}"
+    },
+    {
+      "type": "error",
+      "code": "scan_refused",
+      "message": "scan box exceeds the configured radius 16 around the player",
+      "id": "far",
+      "input": "{\"type\":\"scan\",\"id\":\"far\",\"min\":{\"x\":100,\"y\":-60,\"z\":0},\"size\":{\"x\":16,\"y\":8,\"z\":16}}",
+      "reason": "over_radius",
+      "limits": {
+        "radius": 16,
+        "maxVolume": 8192
+      }
+    },
+    {
+      "type": "error",
+      "code": "scan_refused",
+      "message": "another scan is in progress",
+      "id": "second",
+      "input": "{\"type\":\"scan\",\"id\":\"second\",\"size\":{\"x\":4,\"y\":4,\"z\":4}}",
+      "reason": "busy"
+    },
+    {
+      "type": "error",
+      "code": "scan_cancelled",
+      "message": "controls released",
+      "id": "terrain",
+      "input": "{\"type\":\"scan\",\"id\":\"terrain\",\"size\":{\"x\":16,\"y\":8,\"z\":16}}",
+      "reason": "released"
     }
   ],
   "invalidCommands": [
@@ -1039,6 +1097,38 @@
       "wire": {
         "type": "configure",
         "events": "yes"
+      },
+      "code": "invalid_field"
+    },
+    {
+      "wire": {
+        "type": "scan"
+      },
+      "code": "invalid_field"
+    },
+    {
+      "wire": {
+        "type": "scan",
+        "size": {
+          "x": 0,
+          "y": 8,
+          "z": 16
+        }
+      },
+      "code": "invalid_field"
+    },
+    {
+      "wire": {
+        "type": "scan",
+        "min": {
+          "x": 0,
+          "y": 64
+        },
+        "size": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        }
       },
       "code": "invalid_field"
     }
@@ -1158,6 +1248,76 @@
         "y": -59,
         "z": 3
       }
+    }
+  ],
+  "scanResults": [
+    {
+      "type": "scan_result",
+      "id": "pit",
+      "dimension": "minecraft:overworld",
+      "min": {
+        "x": 10,
+        "y": 64,
+        "z": -3
+      },
+      "size": {
+        "x": 3,
+        "y": 2,
+        "z": 2
+      },
+      "order": "yzx",
+      "startTick": 812,
+      "tick": 812,
+      "palette": [
+        "minecraft:stone",
+        "minecraft:dirt",
+        "minecraft:water",
+        "minecraft:air",
+        "minecraft:oak_log"
+      ],
+      "indices": [
+        0,
+        0,
+        1,
+        0,
+        2,
+        1,
+        3,
+        3,
+        4,
+        3,
+        3,
+        3
+      ]
+    },
+    {
+      "type": "scan_result",
+      "id": 7,
+      "dimension": "minecraft:the_nether",
+      "min": {
+        "x": 0,
+        "y": 127,
+        "z": 0
+      },
+      "size": {
+        "x": 2,
+        "y": 2,
+        "z": 1
+      },
+      "order": "yzx",
+      "startTick": 40,
+      "tick": 41,
+      "palette": [
+        "minecraft:bedrock",
+        "minecraft:void_air",
+        null
+      ],
+      "indices": [
+        0,
+        2,
+        1,
+        2
+      ]
     }
   ]
 }

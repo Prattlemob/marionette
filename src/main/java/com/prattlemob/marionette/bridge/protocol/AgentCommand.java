@@ -41,6 +41,15 @@ public sealed interface AgentCommand extends ParsedMessage {
                            Integer hotbar, boolean all, boolean animated, JsonPrimitive id, String raw) implements AgentCommand {}
 
     record MenuRef(String type, int containerId, int stateId) {}
+
+    /**
+     * Bounded block scan request ({@code blockScan}); a null {@code min} centres
+     * the box on the player's feet block when applied. Caps are checked on the
+     * client tick, where the player's position is known.
+     */
+    record Scan(BlockCoord min, BlockCoord size, JsonPrimitive id, String raw) implements AgentCommand {}
+
+    record BlockCoord(int x, int y, int z) {}
     record SlotRef(Integer index, String alias) {}
 
     /** Release every held control immediately. */

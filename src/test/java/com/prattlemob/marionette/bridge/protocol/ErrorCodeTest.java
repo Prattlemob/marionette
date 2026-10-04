@@ -51,4 +51,12 @@ class ErrorCodeTest {
         assertTrue(ErrorCode.PANIC_LATCHED.fatal());
         assertEquals(1008, ErrorCode.PANIC_LATCHED.closeCode());
     }
+
+    @Test
+    void scanErrorsAreNonFatal() {
+        assertEquals("scan_refused", ErrorCode.SCAN_REFUSED.wire());
+        assertEquals("scan_cancelled", ErrorCode.SCAN_CANCELLED.wire());
+        assertFalse(ErrorCode.SCAN_REFUSED.fatal());
+        assertFalse(ErrorCode.SCAN_CANCELLED.fatal());
+    }
 }

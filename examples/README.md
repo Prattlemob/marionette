@@ -32,6 +32,12 @@ joined a world.
   flag. Needs the in-repository client; the published 0.1.0a1 alpha cannot
   select that section. Run `python examples/entity_view.py [port]`; `--once`
   prints one frame and `--json` prints raw frames.
+- `block_scan.py` — M4.5: requests one bounded block scan (`blockScan`,
+  controller) around the player or at a given corner and prints each layer as a
+  map with a legend, or the decoded blocks as JSON. Needs the in-repository
+  client; the published 0.1.0a1 alpha has no scan API. Run
+  `python examples/block_scan.py [port] [--size X,Y,Z] [--min X,Y,Z] [--json]`
+  (default size 16,8,16). Over-cap requests print the refusal and its limits.
 - `probe.py` — connect, print observations, hold forward for 0.2 s, release.
 - `walk_square.py` — walk a ~5-block square and report the return error.
   Also the target for the disconnect-safety test: `kill -9` it mid-walk and

@@ -401,4 +401,32 @@ class MessageParserTest {
         subscribed.onFrame("{\"type\":\"hello\",\"versions\":[2],\"role\":\"observer\",\"events\":true}");
         assertTrue(subscribed.events());
     }
+
+    @Test
+    void parsesScanWithAndWithoutMin() {
+        var centred = assertInstanceOf(AgentCommand.Scan.class,
+                MessageParser.parse("{\"type\":\"scan\",\"id\":\"t\",\"size\":{\"x\":16,\"y\":8,\"z\":16}}"));
+        assertNull(centred.min());
+        assertEquals(new AgentCommand.BlockCoord(16, 8, 16), centred.size());
+        assertEquals(new JsonPrimitive("t"), centred.id());
+        var boxed = assertInstanceOf(AgentCommand.Scan.class, MessageParser.parse(
+                "{\"type\":\"scan\",\"min\":{\"x\":-8,\"y\":-62,\"z\":-8},\"size\":{\"x\":1,\"y\":8192,\"z\":1}}"));
+        assertEquals(new AgentCommand.BlockCoord(-8, -62, -8), boxed.min());
+    }
+
+    @Test
+    void rejectsMalformedScans() {
+        for (String frame : List.of(
+                "{\"type\":\"scan\"}",
+                "{\"type\":\"scan\",\"size\":[16,8,16]}",
+                "{\"type\":\"scan\",\"size\":{\"x\":16,\"y\":8}}",
+                "{\"type\":\"scan\",\"size\":{\"x\":0,\"y\":8,\"z\":16}}",
+                "{\"type\":\"scan\",\"size\":{\"x\":8193,\"y\":1,\"z\":1}}",
+                "{\"type\":\"scan\",\"size\":{\"x\":1.5,\"y\":1,\"z\":1}}",
+                "{\"type\":\"scan\",\"min\":5,\"size\":{\"x\":1,\"y\":1,\"z\":1}}",
+                "{\"type\":\"scan\",\"min\":{\"x\":0,\"y\":\"64\",\"z\":0},\"size\":{\"x\":1,\"y\":1,\"z\":1}}")) {
+            assertEquals(ErrorCode.INVALID_FIELD,
+                    assertThrows(ProtocolError.class, () -> MessageParser.parse(frame)).code(), frame);
+        }
+    }
 }

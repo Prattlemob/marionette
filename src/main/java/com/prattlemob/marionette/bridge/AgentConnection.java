@@ -109,6 +109,11 @@ public final class AgentConnection {
         return true;
     }
 
+    /** Whether one reply fits the per-frame reply limit (it would otherwise close the connection). */
+    public static boolean fitsFrame(String json) {
+        return json.length() <= FRAME_BYTES && json.getBytes(StandardCharsets.UTF_8).length + 64 <= FRAME_BYTES;
+    }
+
     /** Includes handshake/protocol errors, so pre-hello output is bounded too. */
     public void sendReliable(String json) {
         if (!closing.get() && !writeText(json)) close(1013, "overloaded");

@@ -40,6 +40,7 @@ public final class Messages {
         capabilities.addProperty("targetState", true);
         capabilities.addProperty("worldState", true);
         capabilities.addProperty("entityState", true);
+        capabilities.addProperty("blockScan", true);
         reply.add("capabilities", capabilities);
         reply.addProperty("mod", modVersion);
         return reply.toString();
@@ -52,6 +53,57 @@ public final class Messages {
         reply.addProperty("op", op);
         reply.add("menu", menu);
         return reply.toString();
+    }
+
+    /**
+     * A block scan result ({@code blockScan}); {@code palette} entries may be
+     * null (no block data). See protocol/v1.md, scan_result.
+     */
+    public static String scanResult(JsonPrimitive id, String dimension, int[] min, int[] size,
+                                    long startTick, long tick, List<String> palette, int[] indices) {
+        JsonObject reply = new JsonObject();
+        reply.addProperty("type", "scan_result");
+        if (id != null) reply.add("id", id);
+        reply.addProperty("dimension", dimension);
+        reply.add("min", coord(min));
+        reply.add("size", coord(size));
+        reply.addProperty("order", "yzx");
+        reply.addProperty("startTick", startTick);
+        reply.addProperty("tick", tick);
+        JsonArray names = new JsonArray(palette.size());
+        palette.forEach(names::add);
+        reply.add("palette", names);
+        // Gson's tree is heavy for thousands of ints; append the array text directly.
+        String head = reply.toString();
+        StringBuilder out = new StringBuilder(head.length() + indices.length * 3 + 16);
+        out.append(head, 0, head.length() - 1).append(",\"indices\":[");
+        for (int i = 0; i < indices.length; i++) {
+            if (i > 0) out.append(',');
+            out.append(indices[i]);
+        }
+        return out.append("]}").toString();
+    }
+
+    /** A scan refusal or cancellation; {@code limits} (radius, maxVolume) only on cap refusals. */
+    public static String scanError(ErrorCode code, String reason, String message, JsonPrimitive id,
+                                   String offendingInput, int[] limits) {
+        JsonObject error = errorObject(code, message, id, offendingInput);
+        error.addProperty("reason", reason);
+        if (limits != null) {
+            JsonObject caps = new JsonObject();
+            caps.addProperty("radius", limits[0]);
+            caps.addProperty("maxVolume", limits[1]);
+            error.add("limits", caps);
+        }
+        return error.toString();
+    }
+
+    private static JsonObject coord(int[] xyz) {
+        JsonObject coord = new JsonObject();
+        coord.addProperty("x", xyz[0]);
+        coord.addProperty("y", xyz[1]);
+        coord.addProperty("z", xyz[2]);
+        return coord;
     }
 
     public static String error(ErrorCode code, String message, JsonPrimitive id, String offendingInput) {

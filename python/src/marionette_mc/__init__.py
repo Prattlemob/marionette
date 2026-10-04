@@ -6,6 +6,8 @@ from .client import (
     RoleError as RoleError, ServerError as ServerError, VersionError as VersionError,
     connect as connect,
 )
-from .messages import menu_ref as menu_ref
+from .messages import (
+    menu_ref as menu_ref, scan_block as scan_block, scan_blocks as scan_blocks,
+)
 
 __version__ = "0.1.0a1"

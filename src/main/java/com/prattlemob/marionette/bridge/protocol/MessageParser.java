@@ -105,6 +105,7 @@ public final class MessageParser {
                     tapArray(json));
             case "inventory" -> parseInventory(json, id, raw);
             case "look" -> parseLook(json, id, raw);
+            case "scan" -> parseScan(json, id, raw);
             case "release" -> new AgentCommand.Release();
             case "configure" -> new AgentCommand.Configure(
                     optionalRangedInt(json, "rateDivisor", 1, 100), sections(json),
@@ -157,6 +158,36 @@ public final class MessageParser {
                 op.equals("swap") ? requiredInt(json, "hotbar", 8) : null,
                 op.equals("drop") && Boolean.TRUE.equals(optionalBoolean(json, "all")),
                 Boolean.TRUE.equals(optionalBoolean(json, "animated")), id, raw);
+    }
+
+    /** Largest per-axis scan extent; the volume cap is checked when the scan is applied. */
+    static final int MAX_SCAN_EXTENT = 8192;
+
+    private static AgentCommand.Scan parseScan(JsonObject json, JsonPrimitive id, String raw) {
+        if (!(json.get("size") instanceof JsonObject size)) {
+            throw new ProtocolError(ErrorCode.INVALID_FIELD, "size must be an object");
+        }
+        AgentCommand.BlockCoord min = null;
+        if (json.has("min")) {
+            if (!(json.get("min") instanceof JsonObject corner)) {
+                throw new ProtocolError(ErrorCode.INVALID_FIELD, "min must be an object");
+            }
+            min = blockCoord(corner, "min", Integer.MIN_VALUE, Integer.MAX_VALUE);
+        }
+        return new AgentCommand.Scan(min, blockCoord(size, "size", 1, MAX_SCAN_EXTENT), id, raw);
+    }
+
+    private static AgentCommand.BlockCoord blockCoord(JsonObject json, String name, int min, int max) {
+        int[] values = new int[3];
+        String[] axes = {"x", "y", "z"};
+        for (int i = 0; i < 3; i++) {
+            Integer value = optionalRangedInt(json, axes[i], min, max);
+            if (value == null) {
+                throw new ProtocolError(ErrorCode.INVALID_FIELD, "missing " + name + "." + axes[i]);
+            }
+            values[i] = value;
+        }
+        return new AgentCommand.BlockCoord(values[0], values[1], values[2]);
     }
 
     private static int requiredInt(JsonObject json, String field, int max) {

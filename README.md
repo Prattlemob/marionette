@@ -21,7 +21,7 @@ Marionette aims to provide:
 
 ## Project status
 
-**Protocol 2, bridge hardening, movement, camera smoothing, attack/use/hotbar control, inventory/container actions (vanilla and generically verified modded storage), player, inventory, crosshair-target, world and nearby-entity observations, and opt-in one-shot events are implemented.** An external script can drive the rendered player over a localhost WebSocket, with read-only observers alongside the controller — see [examples/](examples/) for working clients. Events (damage, death, respawn, item pickup, chat, block breaking, dimension change) the opt-in inventory section (held item, hotbar, inventory, armor, offhand and open-menu contents) and the opt-in target and world sections (crosshair block or entity within vanilla reach; dimension, time, weather and light) and the opt-in entities section (nearby mobs, players and items with hostility classification, nearest first under configured caps) require the in-repository Python client; the published 0.1.0a1 alpha predates them and never receives them. See [ROADMAP.md](ROADMAP.md) for verification status.
+**Protocol 2, bridge hardening, movement, camera smoothing, attack/use/hotbar control, inventory/container actions (vanilla and generically verified modded storage), player, inventory, crosshair-target, world and nearby-entity observations, on-demand bounded block scans, and opt-in one-shot events are implemented.** An external script can drive the rendered player over a localhost WebSocket, with read-only observers alongside the controller — see [examples/](examples/) for working clients. Events (damage, death, respawn, item pickup, chat, block breaking, dimension change) the opt-in inventory section (held item, hotbar, inventory, armor, offhand and open-menu contents) and the opt-in target and world sections (crosshair block or entity within vanilla reach; dimension, time, weather and light) and the opt-in entities section (nearby mobs, players and items with hostility classification, nearest first under configured caps) and block scans (a palette of block ids plus indices for a capped box around the player, read across ticks under a work budget) require the in-repository Python client; the published 0.1.0a1 alpha predates them and never receives them. See [ROADMAP.md](ROADMAP.md) for verification status.
 
 - The implementation plan lives in [ROADMAP.md](ROADMAP.md) — phases, milestones, and definitions of done.
 - Design decisions (settled, experiment-gated, and still open) are recorded in [docs/decisions.md](docs/decisions.md). Highlights: the transport is a localhost WebSocket carrying JSON; the core is client-only with an optional server component later; [Baritone](https://github.com/cabaletta/baritone) is planned as an optional (never bundled) integration for high-level navigation.
@@ -75,17 +75,25 @@ config files); values marked *(restart required)* are read once at startup.
 	# Default: 1
 	# Range: 1 ~ 100
 	rateDivisor = 1
-	#Caps for future observation sections (M4.4 entities, M4.5 block scan).
-	#Defined now so operators see the ceiling; enforced when those ship. (live)
+	#Radius in blocks of the `entities` observation section, for every session. (live)
 	# Default: 32
 	# Range: 4 ~ 64
 	entityRadius = 32
+	#Most entities listed in the `entities` section; the nearest are kept and
+	#the section is flagged truncated. (live)
 	# Default: 64
 	# Range: 1 ~ 256
 	entityMaxCount = 64
+	#Hard cap for `scan` requests: every scanned block must lie within this many
+	#blocks of the player's feet block on each axis; larger requests are refused. (live)
 	# Default: 16
 	# Range: 4 ~ 32
 	blockScanRadius = 16
+	#Most block positions a scan reads per client tick; larger scans continue on
+	#later ticks so a scan never stalls a frame. (live)
+	# Default: 1024
+	# Range: 64 ~ 8192
+	blockScanBlocksPerTick = 1024
 
 [client]
 	#While an agent is connected, suppress the vanilla pause-on-focus-loss so
