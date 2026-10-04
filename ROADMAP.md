@@ -27,9 +27,9 @@ depends on.
 ## Cross-project execution order (2026-10-03)
 
 Keep milestone IDs and completed history. **M2.5 (published client) and M5.1a
-(bridge safety) are complete; M4.6 (one-shot events) and M4.2 (inventory
-observation) are complete.** The remaining implementation order is **M3.5 → M4.3
-→ M4.4 → M4.5 → M3.6 → M3.7 → M5.1 → M5.2**.
+(bridge safety) are complete; M4.6 (one-shot events), M4.2 (inventory
+observation) and M3.5 (modded storage) are complete.** The remaining
+implementation order is **M4.3 → M4.4 → M4.5 → M3.6 → M3.7 → M5.1 → M5.2**.
 Further package publication retains D12/D14 decision gates; a blocked release
 does not prevent independent safety/perception work. M3.3's outstanding visual
 acceptance remains debt and must be reconciled for milestones requiring it.
@@ -453,9 +453,17 @@ server-confirmed chest contents and failure paths. See the
   restricted-slot, full-destination, server-correction, animated-cursor and
   disconnect/cancellation checks in a rendered client.
 
-- [ ] Capability/support descriptors and rejection reasons specified
-- [ ] Generic storage execution verified against slot restrictions
-- [ ] Vanilla and modded compatibility matrix with synchronized contents evidence
+- [x] Capability/support descriptors and rejection reasons specified
+- [x] Generic storage execution verified against slot restrictions
+- [x] Vanilla and modded compatibility matrix with synchronized contents evidence
+
+Implemented as the additive `inventoryStorage` capability (protocol 2; D19):
+a structural storage analysis instead of a class allowlist, per-click
+whole-menu verification, `support` descriptors and rejection `reason`s. The
+test-only modded storage is Iron Chests (GPL-3.0-only, never shipped). See the
+[M3.5 verification record](docs/decisions.md#m35-implementation-and-verification-2026-10-04).
+The published 0.1.0a1 client is unaffected; the new fields are source-only
+until a further publication is authorized (D14).
 
 ### M3.6 — Crafting and processing menus (Core)
 

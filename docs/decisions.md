@@ -828,3 +828,98 @@ Not demonstrated in the rendered run: the `reduced`/`truncated` size fallbacks
 and `cursor_occupied` refusals, bundle and inactive slot refusals, and modded
 menus (M3.5). M3.3's physical alt-tab and human animation acceptance and the
 remaining M5.1 items stay outstanding.
+
+## D19 — Modded storage: structural support analysis, reasons, test-only mod — **Settled** (2026-10-04, M3.5)
+
+Inventory mutation support is decided by a structural **storage analysis** of
+the live menu, never by a menu or slot class name or registry id
+(`protocol/v1.md`, Storage support; capability `inventoryStorage`). A menu is
+storage when (1) of the vanilla menu methods its class hierarchy overrides only
+shift-click transfer, validity, close, pick-all and drag eligibility, none of
+which the mod's PICKUP/SWAP/THROW clicks use; (2) it has no synchronized data
+slots (furnaces, brewing stands, crafters, enchanting tables); (3) every slot
+overrides only placement, pickup, capacity, activity and appearance rules, plus
+vanilla's equipment hook for player-inventory slots, so result slots and
+take/insert side effects are excluded; and (4) no two slots share a container
+position. Under those rules vanilla click code alone determines the outcome
+from the same predicates the preflight evaluates. The player's own inventory
+menu keeps its existing scope by identity. Unit tests run the analysis against
+the real 1.21.8 classes: the previously allow-listed chest, hopper,
+dispenser and shulker menus still qualify, and crafting, anvil, enchanting,
+loom, stonecutter, merchant, lectern and beacon menus and result,
+furnace-result, potion and crafter slots do not.
+
+Prediction is not trusted blindly: every click is checked against the whole
+menu (the involved slots and the cursor hold exactly the predicted stacks, and
+every other slot is unchanged). A deviation stops the sequence with
+`unexpected_click`, leaving any carried stack visible. Server synchronization
+stays authoritative: results remain client predictions, and a correction
+arriving mid-animation cancels with `contents_changed` and the existing safe
+recovery.
+
+Descriptors gain `support` (`scope` `player`/`storage`/`null` and the sorted
+failed rules); `inventory_unavailable`, `inventory_impossible` and
+`inventory_cancelled` errors gain a machine-readable `reason`. Both are
+additive keys on existing message types and the protocol integer stays 2, so
+the published `marionette-mc==0.1.0a1` (which ends its session only on unknown
+message *types*, D17) is unaffected; this was verified live. Rejected:
+class-name or namespace allowlists (unverifiable for unknown mods), per-mod
+adapters (M3.8), widening to processing menus (M3.6), a new message type, and
+recovery operations for a server-corrected cursor (the stack stays visible for
+the human or vanilla close, as before).
+
+**Test-only third-party mod.** Iron Chests by progwml6 (cpw, alexbegt,
+progwml6), version `1.21.7-neoforge-16.5.4`, declared for Minecraft
+1.21.7–1.21.8 and NeoForge 21.7.25+, licensed GPL-3.0-only. Official source:
+the Modrinth project `iron-chests` (https://modrinth.com/mod/iron-chests,
+file https://cdn.modrinth.com/data/P3iIrPH3/versions/gBAj2t9I/ironchest-1.21.7-neoforge-16.5.4.jar),
+resolved through Modrinth's official Maven as
+`maven.modrinth:iron-chests:1.21.7-neoforge-16.5.4`, SHA-256
+`6e9f9add5556ea1357675ebc8b931d59b1fcf01b3e97d76d87200546e7052582`.
+It is only used by the opt-in `installStorageCompatMod` task, which verifies
+that checksum and copies the jar into the ignored `run/mods`
+(`removeStorageCompatMod` deletes it). It is never bundled, published, compiled
+against or required, and the jar is not committed. Its menus use their own
+`AbstractContainerMenu` subclass with plain slots (diamond chest: 108
+container slots, 144 in all) and a restricted dirt-chest slot, so it exercises
+large layouts, a modded restricted slot and a menu class Marionette has never
+named.
+
+### M3.5 implementation and verification (2026-10-04)
+
+`./gradlew build` passed with 276 tests (264 before). In-repository Python
+client tests passed on 3.11 and 3.14 (36 tests, 33 before; mypy strict clean).
+A rendered client in an isolated copy of the test world, with Iron Chests
+installed by the task above and provisioned by a temporary harness outside the
+repository (server-console setup, dumps, screenshots and one client-only slot
+desynchronization), was driven only through the protocol (smooth looks, use
+taps and inventory requests; no movement). At 25 checkpoints, all 191 checks
+passed: the protocol observation, the rendered screen's menu and the integrated
+server's authoritative menu agreed slot for slot, including the cursor, after
+synchronization had settled.
+
+| Case | Vanilla (double chest, 90 slots; shulker box) | Modded (Iron Chests diamond chest, 144 slots; dirt chest) |
+|---|---|---|
+| Support descriptor | `storage` | `storage` (class never named) |
+| Large layout + animated cursor | far slot → player, cursor carried the real stack | slot 107 → player, same |
+| Restricted slot | shulker box into shulker slot: `destination_rejects`; dirt accepted | stone into dirt chest: `destination_rejects`; dirt accepted |
+| Full destination / other item | `destination_full` / `destination_mismatch`, nothing clicked | same |
+| Server correction of a wrong prediction | client copy of a stone slot emptied locally; the move predicted success, the server swapped, cursor corrected to stone on both sides; `cursor_occupied`; vanilla close returned it | same |
+| Server update mid-animation | `inventory_cancelled`/`contents_changed`, stack recovered into its source | same |
+| `release` mid-animation | `released`, stack recovered | same |
+| Controller disconnect mid-animation | release-all, stack recovered into its source | same |
+| Unsupported menu (furnace) | observable; `support` `null` with `menu_data`, `slot_behavior`; move and close refused `unsupported_menu` | — |
+
+Published 0.1.0a1, unmodified, observed the whole run (1169 player-only
+observations, only `hello` and `observation` frames) and, as a controller with
+the diamond chest open, decoded the `support` descriptor and an error carrying
+`reason` before releasing cleanly.
+
+Not demonstrated in the rendered run: human-input and panic cancellation during
+storage actions (no human present; unchanged code paths from D8b), swap, equip
+and drop in modded menus (same verified-click path as move; unit and vanilla
+coverage only), `shared_slots` and `click_behavior` on a live modded menu
+(unit tests only), and multiplayer servers. The 854×480 development window clips
+the top and bottom rows of the 276-pixel-tall diamond chest screen; actions
+address slots by index and were unaffected. M3.3's physical alt-tab and human
+animation acceptance and the remaining M5.1 items stay outstanding.

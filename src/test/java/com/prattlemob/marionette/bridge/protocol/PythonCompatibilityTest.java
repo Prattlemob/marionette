@@ -43,7 +43,10 @@ class PythonCompatibilityTest {
                         expected.get("menu").isJsonNull() ? null : expected.getAsJsonObject("menu"));
                 case "error" -> expected.get("code").getAsString().equals("unsupported_version")
                         ? Messages.unsupportedVersionError(List.of(2), id, expected.get("input").getAsString())
-                        : Messages.error(ErrorCode.INVENTORY_CANCELLED, "cancelled", id, expected.get("input").getAsString());
+                        : Messages.error(java.util.Arrays.stream(ErrorCode.values())
+                                        .filter(c -> c.wire().equals(expected.get("code").getAsString())).findFirst().orElseThrow(),
+                                expected.has("reason") ? expected.get("reason").getAsString() : null,
+                                expected.get("message").getAsString(), id, expected.get("input").getAsString());
                 default -> throw new AssertionError("unknown fixture");
             };
             assertEquals(expected, JsonParser.parseString(actual));

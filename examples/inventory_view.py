@@ -45,8 +45,11 @@ def render(tick, inv):
         lines.append("Menu: none open")
     else:
         ops = ", ".join(menu["operations"]) or f"none ({menu['refusal']})"
+        support = menu.get("support")  # inventoryStorage (M3.5)
+        scope = "" if support is None else (
+            f" support: {support['scope']}" if support["scope"] else f" support: none ({', '.join(support['reasons'])})")
         lines.append(f"Menu {menu['type']} id={menu['containerId']} state={menu['stateId']} "
-                     f"slots={menu['slotCount']}{' (truncated)' if menu.get('truncated') else ''} ops: {ops}")
+                     f"slots={menu['slotCount']}{' (truncated)' if menu.get('truncated') else ''} ops: {ops}{scope}")
         lines.append(f"  carried: {describe(menu['carried'])}")
         lines += [f"  slot {s['slot']}{' ' + s['alias'] if 'alias' in s else ''}: {describe(s)}"
                   + (f" [refused: {s['refused']}]" if "refused" in s else "")
