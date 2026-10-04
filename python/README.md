@@ -111,6 +111,23 @@ ignore environment proxies. Current local trust has no authentication.
   (`scan_cancelled`). A result inconsistent with the request ends the session as
   `InvalidMessage`. Repository source only; the published 0.1.0a1 alpha has no
   scan API.
+- `chat(text)` sends ordinary chat and `chat(command=...)` runs a command (requires
+  `chat`; controller only; exactly one of the two). Commands are refused unless
+  the human enables `chat.allowCommands` in the mod config. The mod also enforces
+  length (256), allowed characters, no leading `/` in text, and a client-wide
+  rate (default 5 per 10 s); refusals raise `ServerError` with code
+  `chat_refused`, a `reason` (`messages.ChatReason`), `error["limits"]` and, when
+  rate limited, `error["retryAfterMs"]`. `respawn()` presses the death screen's
+  Respawn button (requires `respawn`; refusals `respawn_refused`, reasons
+  `not_dead`, `hardcore`, `no_world`). Both return a `messages.ActionResult`
+  meaning the request was sent, not that the server acted on it.
+  `input(tap=["swap_hands"])` swaps the main hand and offhand (requires
+  `swapHands`). With `playerIdentity` the player section carries `uuid`/`name`,
+  player entities `uuid`, `chat` events `senderName` and damage sources
+  `attackerPlayer`; with `playerActivity` the player section carries `swimming`,
+  `fallFlying`, `blocking`, `usingItem` and `vehicle`, and loaded crossbows
+  `charged`. Repository source only; the published 0.1.0a1 alpha has none of
+  these requests.
 - `connect(..., events=True)` subscribes in hello (requires the `events`
   capability); `configure(events=True | False)` changes it later.
   `next_event(timeout=...)` / `events()` consume events in `seq` order from a

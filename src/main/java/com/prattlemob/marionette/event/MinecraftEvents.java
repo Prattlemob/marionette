@@ -13,6 +13,7 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.AbstractArrow;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -41,8 +42,11 @@ public final class MinecraftEvents {
         var level = Minecraft.getInstance().level;
         if (recorder == null || level == null || !isLocalPlayer(packet.entityId())) return;
         DamageSource source = packet.getSource(level);
+        Player attacker = source.getEntity() instanceof Player player ? player : null;
         recorder.damageReported(EventRecorder.source(key(source.typeHolder()),
-                entityType(source.getEntity()), entityType(source.getDirectEntity())));
+                entityType(source.getEntity()), entityType(source.getDirectEntity()),
+                attacker == null ? null : attacker.getUUID().toString(),
+                attacker == null ? null : attacker.getGameProfile().getName()));
     }
 
     public static void health(float health, boolean initial) {
@@ -79,6 +83,13 @@ public final class MinecraftEvents {
             recorder.blockBroken(BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString(),
                     pos.getX(), pos.getY(), pos.getZ());
         }
+    }
+
+    /** The profile name the client's player list shows for {@code sender}, or null. */
+    public static String playerName(java.util.UUID sender) {
+        var connection = Minecraft.getInstance().getConnection();
+        var info = connection == null ? null : connection.getPlayerInfo(sender);
+        return info == null ? null : info.getProfile().getName();
     }
 
     public static String dimension(Level level) {

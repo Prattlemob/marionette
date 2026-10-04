@@ -1326,3 +1326,158 @@ disconnect), `remainder_unsupported` and `result_changed` (unit and contract
 coverage only), the smoker (same base and analysis as the blast furnace), a
 modded workstation, and multiplayer servers. M3.3's physical alt-tab and human
 animation acceptance and the remaining M5.1 items stay outstanding.
+
+## D24 — Gameplay and social controls: vanilla paths, explicit requests, commands off by default — **Settled** (2026-10-04, M3.7)
+
+M3.7 audited the existing primitives against swimming, boats and mounts,
+elytra, shields and charged items before adding anything. Protocol stays 2; all
+additions are additive capabilities (`protocol/v1.md`).
+
+- **Existing primitives cover most gameplay.** Held `forward`/`sprint` swims
+  (sprinting underwater is the swimming pose); held `sneak` sinks and
+  dismounts; a `use` tap boards a boat or mounts a saddled animal; movement
+  holds steer boats and mounts; held `use` raises a shield, draws a bow and
+  charges a crossbow or trident, and a `use` tap fires a loaded crossbow.
+  Vanilla `use` falls through to the offhand, so an offhand shield needs no new
+  input. No new movement or use actuator was added.
+- **Demonstrated gaps, filled:** the swap-offhand key (`swap_hands` tap,
+  `swapHands`), the death screen's Respawn button (`respawn` request), sending
+  chat and commands (`chat` request), and observation of what these controls
+  visibly do (`playerActivity`: `swimming`, `fallFlying`, `blocking`,
+  `usingItem`, `vehicle`, and `charged` on loaded crossbows), plus identity
+  (`playerIdentity`: own `uuid`/`name`, player-entity `uuid`, chat
+  `senderName`, damage `attackerPlayer`). Both requests answer with the new
+  `action_result` type or an error, so only clients that send them receive
+  either; 0.1.0a1 never does (D17).
+- **Chat versus commands.** Separate fields, separate switches:
+  `chat.allowChat` (default on) and `chat.allowCommands` (default **off**, so a
+  command never runs unless the human enables it). Limits are fixed before
+  sending and refuse rather than alter: vanilla chat-screen whitespace
+  normalization only; at most 256 characters; no `§`, control characters or
+  DEL (servers kick for them); no leading `/` in text; at most
+  `chat.maxMessages` (1–8, default 5) accepted requests per 10 seconds for the
+  whole client, so reconnecting cannot reset it and agents stay inside
+  vanilla's server spam limit. Messages go through vanilla's own chat path
+  (signing, NeoForge client chat hooks, client commands) and are not added to
+  the human's chat history. A result means "sent", never "accepted": servers
+  still decide (an un-opped singleplayer player gets "Unknown or incomplete
+  command" as a system `chat` event).
+- **Respawn** is never automatic and is refused while alive and in hardcore
+  worlds (where vanilla offers only spectating, a game-mode decision for the
+  human).
+- **Safety.** Every new actuator is inside the existing release path: the
+  pending `swap_hands` tap is cleared by release-all and by the screen rule,
+  and queued `respawn`/`chat` requests are discarded with the rest of the
+  queue on release, disconnect, watchdog and panic. Releasing `use` is a
+  vanilla release, not a cancellation: a drawn bow fires and a charged trident
+  is thrown when a safety release lets go, exactly as for a human releasing
+  the button. Riding is world state and is not undone by a release.
+
+Rejected: a separate "use offhand" input (vanilla has none; hand selection
+stays vanilla), automatic respawn, truncating or rewriting over-limit chat,
+allowing commands by default or through a per-session flag (the human owns
+that switch), per-session rate windows (reconnect would reset them), and
+social policy of any kind (whom to answer, what to say) in the mod.
+
+### Gameplay coverage matrix (M3.7)
+
+"Live" rows passed named rendered scenarios (see the verification record
+below); "unit" rows rest on headless tests of an existing primitive.
+
+| Control | Primitive | Status |
+|---|---|---|
+| Swim horizontally | held `forward` + `sprint` underwater | live |
+| Swim up / surface | held `jump` | not live-verified (no-jump constraint); existing `jump` primitive, unit |
+| Sink in water | held `sneak` | unit (existing primitive; not staged) |
+| Board a boat | `use` tap on the boat | live |
+| Steer a boat (forward, turn) | held `forward`, `left`/`right` | live |
+| Leave a boat or mount | held `sneak` | live |
+| Mount a saddled horse | `use` tap | live |
+| Ride a horse | held `forward` (+ turn by look) | live |
+| Horse / camel jump or dash | held `jump` | not live-verified (no-jump constraint) |
+| Pig / strider boost item | `use` with the steering item | excluded from live staging (same `use` path; not staged) |
+| Elytra deploy | `jump` tap while falling | not live-verified (no-jump constraint); existing primitive, unit |
+| Elytra glide steering / firework boost | `look` / `use` while gliding | not live-verified (requires deployment, which needs jump); `fallFlying` observed |
+| Shield block (offhand) | held `use`, empty main hand | live |
+| Bow draw and release | held `use`, then `use: false` | live |
+| Crossbow charge, stay loaded, fire | held `use`, then `use` tap; `charged` observed | live |
+| Trident throw | held `use`, then `use: false` | live |
+| Trident riptide | held `use` in water or rain | excluded (launches the player; not staged) |
+| Swap main hand and offhand | `swap_hands` tap | live |
+| Respawn after death | `respawn` | live |
+| Ordinary chat | `chat` `text` | live |
+| Commands | `chat` `command`, `chat.allowCommands` | live (refused by default; executed only when enabled) |
+| Separate "use offhand only" input | — | excluded (vanilla has no such input) |
+
+### M3.7 implementation and verification (2026-10-04)
+
+`./gradlew build` passed with 355 tests (332 before). In-repository Python
+client tests passed on 3.11 and 3.14 (72 tests, 62 before; mypy strict clean).
+A rendered client in an isolated copy of the test world, provisioned by a
+temporary client-side harness outside the repository (server-console setup, a
+per-tick trace of held controls and the merged vanilla input, server dumps,
+screenshots, and synthetic F8/F9 through the registered GLFW key callback),
+was driven only through the protocol by controller sessions in separate
+processes, with a recording event-subscribed observer. **No jump input was
+ever sent or merged** (owner constraint; the per-tick trace never showed the
+vanilla jump input true), and the 6-second held-input safety net never fired.
+The singleplayer test world has cheats off, so the harness granted the player
+operator permission for the command scenarios; without it the server answered
+the agent's command with "Unknown or incomplete command" (a system `chat`
+event), as the contract describes.
+
+All 24 named scenarios passed:
+
+- Chat: ordinary chat delivered and echoed as a `chat` event whose `sender` was
+  the player's own `uuid` and `senderName` `Dev`; a command refused by default
+  (`commands_disabled`); `slash_prefix`, `too_long` (257), `illegal_character`
+  (`§`), `empty`; the sixth request in 10 s refused (`rate_limited`, with
+  `limits` and `retryAfterMs`), still refused after reconnecting, accepted once
+  the window passed; refused requests never reached the server (exactly six
+  chat lines); `allowChat=false` refused text (live config reload).
+- Commands with `allowCommands=true`: the agent's `/kill` and `time set 6000`
+  executed (server day time 6000); refused again after switching it off.
+- Respawn: refused while alive (`not_dead`); after a console `/kill` and after
+  the agent's own `/kill`, `respawn` closed the death screen and restored 20
+  health, with `death` and `respawn` events.
+- `swap_hands` moved a shield main hand → offhand → main hand (server dump and
+  observation agree); offhand shield blocking by held `use` (`blocking`,
+  `usingItem` off_hand) and lowered on release; bow drawn 26 ticks and fired
+  (16 → 15 arrows, one arrow entity); crossbow charged, observed `charged`,
+  fired by a `use` tap; trident charged 20 ticks and thrown.
+- Horizontal swimming (sprint+forward underwater, `swimming` true, 4 blocks in
+  1.5 s); boat boarded by a `use` tap (target and server agree), driven forward
+  and turned, left with sneak; tamed saddled horse mounted by a `use` tap,
+  ridden forward, left with sneak.
+
+Safety release, each actuator engaged and then released by each method
+(milliseconds from the trigger to held controls empty; activity stopped in the
+same or the next tick):
+
+| Actuator | Panic (synthetic F8) | Watchdog (agent SIGSTOP) | Disconnect (agent SIGKILL) |
+|---|---|---|---|
+| Shield (held `use`) | 59.5 | 1589 | 45.2 |
+| Bow draw | 43.3 | 2327 | 30.6 |
+| Crossbow charge | 16.9 | 2397 | 40.0 |
+| Trident charge | 41.7 | 1829 | 15.1 |
+| Swimming (`forward`+`sprint`) | 45.2 (pose 95.6) | 2498 (2548) | 35.5 (85.8) |
+| Boat (`forward`+`left`) | 39.9 | 2439 | 19.8 |
+| Horse (`forward`) | 50.6 | 1532 | 25.8 |
+
+Panic latched every time and was re-armed by synthetic F9. Watchdog releases
+fell within the documented bound (timeout plus one ping interval, 2.5 s).
+Releasing a drawn bow or charged trident fires or throws it, as documented.
+Queued `chat`/`respawn` requests and pending `swap_hands` taps being discarded
+by release, disconnect, watchdog and panic is covered by bridge and control
+unit tests, not staged live (a request is applied within a tick of arrival).
+
+Published 0.1.0a1, unmodified, observed the whole run (2823 observations; only
+`hello` and `observation` frames) and, as a controller, decoded the new
+capabilities and player fields as untyped extras, held and released sneak, and
+inspected the inventory (only `hello`, `observation` and `inventory_result`).
+
+Not demonstrated in the rendered run: anything needing jump (surfacing, elytra,
+horse jump; matrix above), riptide, pig/strider boosting, hardcore and
+`client_restricted` refusals (unit/contract only), multiplayer servers and
+other mods' chat hooks. M3.3's physical alt-tab and human animation acceptance
+and the remaining M5.1 items stay outstanding.

@@ -51,7 +51,10 @@ public final class EntityObservation {
         if (entity instanceof LivingEntity living) {
             EntityJson.addLiving(entry, living.getHealth(), living.getMaxHealth(), targetingMe(living, player));
         }
-        if (entity instanceof Player other) entry.addProperty("name", other.getGameProfile().getName());
+        if (entity instanceof Player other) {
+            entry.addProperty("name", other.getGameProfile().getName());
+            entry.addProperty("uuid", other.getUUID().toString()); // playerIdentity
+        }
         if (entity instanceof ItemEntity item) {
             var stack = item.getItem();
             EntityJson.addItem(entry, BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), stack.getCount());

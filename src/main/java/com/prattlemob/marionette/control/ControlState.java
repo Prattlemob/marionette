@@ -132,15 +132,16 @@ public final class ControlState {
     }
 
     /**
-     * Drop attack/use taps nothing consumed this tick (the one-tick tap
-     * lifetime: a screen kept handleKeybinds from running, and a stale
-     * click must not fire when the menu closes later). Called at tick
-     * post; jump taps are consumed unconditionally by the input mixin
-     * and need no lifetime rule.
+     * Drop attack/use/swap-hands taps nothing consumed this tick (the
+     * one-tick tap lifetime: a screen kept handleKeybinds from running,
+     * and a stale click must not fire when the menu closes later). Called
+     * at tick post; jump taps are consumed unconditionally by the input
+     * mixin and need no lifetime rule.
      */
     public void dropInteractionTaps() {
         pendingTaps.remove(TapControl.ATTACK);
         pendingTaps.remove(TapControl.USE);
+        pendingTaps.remove(TapControl.SWAP_HANDS);
     }
 
     /**

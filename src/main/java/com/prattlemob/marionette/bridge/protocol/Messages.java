@@ -42,6 +42,11 @@ public final class Messages {
         capabilities.addProperty("entityState", true);
         capabilities.addProperty("blockScan", true);
         capabilities.addProperty("crafting", true);
+        capabilities.addProperty("swapHands", true);
+        capabilities.addProperty("respawn", true);
+        capabilities.addProperty("chat", true);
+        capabilities.addProperty("playerIdentity", true);
+        capabilities.addProperty("playerActivity", true);
         reply.add("capabilities", capabilities);
         reply.addProperty("mod", modVersion);
         return reply.toString();
@@ -54,6 +59,32 @@ public final class Messages {
         reply.addProperty("op", op);
         reply.add("menu", menu);
         return reply.toString();
+    }
+
+    /** Reply to an accepted {@code respawn} or {@code chat} request: "respawn", "chat" or "command". */
+    public static String actionResult(String action, JsonPrimitive id) {
+        JsonObject reply = new JsonObject();
+        reply.addProperty("type", "action_result");
+        if (id != null) reply.add("id", id);
+        reply.addProperty("action", action);
+        return reply.toString();
+    }
+
+    /**
+     * A chat refusal ({@code chat}): always the limits in force; {@code retryAfterMs}
+     * only for {@code rate_limited} (null otherwise).
+     */
+    public static String chatError(String reason, String message, JsonPrimitive id, String offendingInput,
+                                   int maxMessages, int windowSeconds, int maxLength, Long retryAfterMs) {
+        JsonObject error = errorObject(ErrorCode.CHAT_REFUSED, message, id, offendingInput);
+        error.addProperty("reason", reason);
+        JsonObject limits = new JsonObject();
+        limits.addProperty("maxMessages", maxMessages);
+        limits.addProperty("windowSeconds", windowSeconds);
+        limits.addProperty("maxLength", maxLength);
+        error.add("limits", limits);
+        if (retryAfterMs != null) error.addProperty("retryAfterMs", retryAfterMs);
+        return error.toString();
     }
 
     /**

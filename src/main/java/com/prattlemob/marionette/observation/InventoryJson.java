@@ -29,9 +29,16 @@ public final class InventoryJson {
     /**
      * Client-visible facts of one stack. {@code maxDamage} is 0 for items
      * without durability; {@code name}, {@code potion} are null when absent.
+     * {@code charged} marks a loaded crossbow ({@code playerActivity}).
      */
     public record Stack(String item, int count, int damage, int maxDamage, String name,
-                        List<Enchantment> enchantments, List<Enchantment> storedEnchantments, String potion) {
+                        List<Enchantment> enchantments, List<Enchantment> storedEnchantments, String potion,
+                        boolean charged) {
+        public Stack(String item, int count, int damage, int maxDamage, String name,
+                     List<Enchantment> enchantments, List<Enchantment> storedEnchantments, String potion) {
+            this(item, count, damage, maxDamage, name, enchantments, storedEnchantments, potion, false);
+        }
+
         public static Stack empty() { return new Stack(AIR, 0, 0, 0, null, List.of(), List.of(), null); }
         public static Stack of(String item, int count) { return new Stack(item, count, 0, 0, null, List.of(), List.of(), null); }
     }
@@ -54,6 +61,7 @@ public final class InventoryJson {
         enchantments(result, "enchantments", stack.enchantments());
         enchantments(result, "storedEnchantments", stack.storedEnchantments());
         if (stack.potion() != null) result.addProperty("potion", stack.potion());
+        if (stack.charged()) result.addProperty("charged", true);
         return result;
     }
 

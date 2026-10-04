@@ -48,6 +48,14 @@ joined a world.
   client; the published 0.1.0a1 alpha has no scan API. Run
   `python examples/block_scan.py [port] [--size X,Y,Z] [--min X,Y,Z] [--json]`
   (default size 16,8,16). Over-cap requests print the refusal and its limits.
+- `gameplay.py` — M3.7: one explicit action per run: `say TEXT` (ordinary chat,
+  `chat`), `command TEXT` (refused unless the human set `chat.allowCommands`),
+  `respawn` (refused unless dead), `swap` (main hand ↔ offhand, `swapHands`) and
+  `hold-use SECONDS` (bow, crossbow, trident or shield; prints `usingItem`,
+  `blocking` and `vehicle` from the player section, `playerActivity`). Refusals
+  print their reason and the chat limits. Needs the in-repository client; the
+  published 0.1.0a1 alpha has none of these requests. Run
+  `python examples/gameplay.py say "hello"`.
 - `probe.py` — connect, print observations, hold forward for 0.2 s, release.
 - `walk_square.py` — walk a ~5-block square and report the return error.
   Also the target for the disconnect-safety test: `kill -9` it mid-walk and

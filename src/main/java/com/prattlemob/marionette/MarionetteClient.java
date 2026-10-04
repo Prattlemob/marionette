@@ -1,6 +1,7 @@
 package com.prattlemob.marionette;
 
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
@@ -14,6 +15,7 @@ import com.prattlemob.marionette.config.Verbosity;
 import com.prattlemob.marionette.control.CameraSmoother;
 import com.prattlemob.marionette.control.InventoryActionApplier;
 import com.prattlemob.marionette.control.CappedRateModel;
+import com.prattlemob.marionette.control.ChatPolicy;
 import com.prattlemob.marionette.control.ControlState;
 import com.prattlemob.marionette.control.ControlStateApplier;
 import com.prattlemob.marionette.control.DemoScript;
@@ -99,6 +101,8 @@ public class MarionetteClient {
     private final BlockScanRunner scans = new BlockScanRunner();
     private LevelBlockSource scanSource;
     private final ControlState controlState = new ControlState();
+    /** Chat limits (M3.7): client-wide, so reconnecting never resets the rate window. */
+    private final ChatPolicy chatPolicy = new ChatPolicy(System::nanoTime);
     private final ControlStateApplier applier = new MixinInputApplier();
     private final CameraSmoother cameraSmoother = new CameraSmoother();
     /** nanoTime of the previous render frame; 0 = no previous frame. */
@@ -175,15 +179,17 @@ public class MarionetteClient {
     private void onChatReceived(ClientChatReceivedEvent event) {
         String kind = "chat";
         String sender = null;
+        String senderName = null;
         if (event instanceof ClientChatReceivedEvent.System system) {
             kind = system.isOverlay() ? "action_bar" : "system";
         } else if (event instanceof ClientChatReceivedEvent.Player player) {
             sender = player.getSender().toString();
+            senderName = MinecraftEvents.playerName(player.getSender());
         }
         var bound = event.getBoundChatType();
         String chatType = bound == null ? null
                 : bound.chatType().unwrapKey().map(key -> key.location().toString()).orElse(null);
-        eventRecorder.chat(kind, event.getMessage().getString(), sender, chatType);
+        eventRecorder.chat(kind, event.getMessage().getString(), sender, senderName, chatType);
     }
 
     private void onInventoryMousePress(ScreenEvent.MouseButtonPressed.Pre event) {
@@ -367,6 +373,8 @@ public class MarionetteClient {
             if (player != null || received.command() instanceof AgentCommand.Configure
                     || received.command() instanceof AgentCommand.InventoryAction
                     || received.command() instanceof AgentCommand.Scan
+                    || received.command() instanceof AgentCommand.Respawn
+                    || received.command() instanceof AgentCommand.Chat
                     || received.command() instanceof AgentCommand.Release) applyCommand(received, player);
         }
     }
@@ -390,6 +398,8 @@ public class MarionetteClient {
                         MarionetteConfig.blockScanRadius, level,
                         level == null ? null : LevelBlockSource.dimension(level));
             }
+            case AgentCommand.Respawn respawn -> applyRespawn(respawn, player, received.from()::sendReliable);
+            case AgentCommand.Chat chat -> applyChat(chat, player, received.from()::sendReliable);
             case AgentCommand.InputUpdate update -> {
                 if (update.forward() != null) controlState.setForward(update.forward());
                 if (update.back() != null) controlState.setBack(update.back());
@@ -442,6 +452,53 @@ public class MarionetteClient {
                 }
             }
         }
+    }
+
+    /** The death screen's Respawn button (protocol/v1.md, respawn); never automatic. */
+    private void applyRespawn(AgentCommand.Respawn respawn, LocalPlayer player, Consumer<String> reply) {
+        Minecraft minecraft = Minecraft.getInstance();
+        String reason = player == null || minecraft.level == null ? "no_world"
+                : !player.isDeadOrDying() ? "not_dead"
+                : minecraft.level.getLevelData().isHardcore() ? "hardcore" : null;
+        if (reason != null) {
+            reply.accept(Messages.error(ErrorCode.RESPAWN_REFUSED, reason, switch (reason) {
+                case "no_world" -> "no world is loaded";
+                case "not_dead" -> "the player is alive";
+                default -> "hardcore worlds offer only spectating";
+            }, respawn.id(), respawn.raw()));
+            return;
+        }
+        player.respawn();
+        logNormal("Agent respawn requested");
+        reply.accept(Messages.actionResult("respawn", respawn.id()));
+    }
+
+    /** Ordinary chat or a command, through vanilla's chat path, within the chat limits. */
+    private void applyChat(AgentCommand.Chat chat, LocalPlayer player, Consumer<String> reply) {
+        Minecraft minecraft = Minecraft.getInstance();
+        int maxMessages = MarionetteConfig.chatMaxMessages;
+        ChatPolicy.Decision decision;
+        if (player == null || minecraft.getConnection() == null) {
+            decision = new ChatPolicy.Decision("no_world", "no world is loaded", null, null, null);
+        } else if (!minecraft.getChatStatus().isChatAllowed(minecraft.isLocalServer())) {
+            decision = new ChatPolicy.Decision("client_restricted", "the game does not allow chat for this client",
+                    null, null, null);
+        } else {
+            decision = chatPolicy.check(chat.text(), chat.command(), MarionetteConfig.allowChat,
+                    MarionetteConfig.allowCommands, maxMessages);
+        }
+        if (!decision.accepted()) {
+            reply.accept(Messages.chatError(decision.reason(), decision.message(), chat.id(), chat.raw(),
+                    maxMessages, ChatPolicy.WINDOW_SECONDS, ChatPolicy.MAX_LENGTH, decision.retryAfterMs()));
+            return;
+        }
+        if (decision.action().equals("command")) {
+            player.connection.sendCommand(decision.content());
+        } else {
+            player.connection.sendChat(decision.content());
+        }
+        logNormal("Agent {} sent ({} characters)", decision.action(), decision.content().length());
+        reply.accept(Messages.actionResult(decision.action(), chat.id()));
     }
 
     /** A fresh per-pan model at config speed × the message's multiplier. */

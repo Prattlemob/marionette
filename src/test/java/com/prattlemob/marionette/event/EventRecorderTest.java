@@ -150,8 +150,8 @@ class EventRecorderTest {
 
     @Test
     void chatPickupAndBlockFieldsWithBasisAndTruncation() {
-        recorder.chat("chat", "<Dev> hi", "00000000-0000-0000-0000-000000000001", "minecraft:chat");
-        recorder.chat("system", "x".repeat(EventRecorder.TEXT_LIMIT + 5), null, null);
+        recorder.chat("chat", "<Dev> hi", "00000000-0000-0000-0000-000000000001", "Dev", "minecraft:chat");
+        recorder.chat("system", "x".repeat(EventRecorder.TEXT_LIMIT + 5), null, null, null);
         recorder.itemPickup("minecraft:diamond", 3);
         recorder.itemPickup(null, 1);
         recorder.blockBroken("minecraft:glass", 0, -59, 3);
@@ -172,14 +172,33 @@ class EventRecorderTest {
         recorder.damageReported(generic());
         recorder.endWorldSession();
         recorder.healthUpdated(10f, false);
-        recorder.chat("system", "x", null, null);
+        recorder.chat("system", "x", null, null, null);
         recorder.tick();
         assertTrue(events.isEmpty(), "an unpaired report is discarded with its world");
         String a = EventRecorder.newWorldSessionId(), b = EventRecorder.newWorldSessionId();
         assertNotEquals(a, b);
         assertEquals(16, a.length());
         recorder.startWorldSession(b);
-        recorder.chat("system", "x", null, null);
+        recorder.chat("system", "x", null, null, null);
         assertEquals(b, events.getFirst().worldSession());
+    }
+
+    @Test
+    void playerIdentityOnChatAndDamage() {
+        recorder.chat("chat", "<Dev> hi", "00000000-0000-0000-0000-000000000001", "Dev", "minecraft:chat");
+        JsonObject chat = events.getFirst().fields();
+        assertEquals("Dev", chat.get("senderName").getAsString());
+        assertEquals("00000000-0000-0000-0000-000000000001", chat.get("sender").getAsString());
+        recorder.chat("system", "x", null, null, null);
+        assertTrue(events.get(1).fields().get("senderName").isJsonNull(), "present as null, never absent");
+        JsonObject byPlayer = EventRecorder.source("minecraft:player_attack", "minecraft:player", "minecraft:player",
+                "00000000-0000-0000-0000-000000000002", "Alex");
+        assertEquals("Alex", byPlayer.getAsJsonObject("attackerPlayer").get("name").getAsString());
+        assertEquals("00000000-0000-0000-0000-000000000002",
+                byPlayer.getAsJsonObject("attackerPlayer").get("uuid").getAsString());
+        assertTrue(EventRecorder.source("minecraft:mob_attack", "minecraft:zombie", "minecraft:zombie")
+                .get("attackerPlayer").isJsonNull());
+        assertTrue(EventRecorder.source("minecraft:player_attack", "minecraft:player", null, "u", null)
+                .get("attackerPlayer").isJsonNull(), "an incomplete identity is unknown");
     }
 }

@@ -29,9 +29,9 @@ depends on.
 Keep milestone IDs and completed history. **M2.5 (published client) and M5.1a
 (bridge safety) are complete; M4.6 (one-shot events), M4.2 (inventory
 observation), M3.5 (modded storage), M4.3 (crosshair target and world
-context), M4.4 (nearby entities), M4.5 (bounded block scan) and M3.6 (crafting
-and processing menus) are complete.** The remaining implementation order is
-**M3.7 → M5.1 → M5.2**.
+context), M4.4 (nearby entities), M4.5 (bounded block scan), M3.6 (crafting
+and processing menus) and M3.7 (gameplay and social controls) are complete.**
+The remaining implementation order is **M5.1 → M5.2**.
 Further package publication retains D12/D14 decision gates; a blocked release
 does not prevent independent safety/perception work. M3.3's outstanding visual
 acceptance remains debt and must be reconciled for milestones requiring it.
@@ -500,9 +500,10 @@ until a further publication is authorized (D14).
   pass in-game; each actuator releases on panic/watchdog/disconnect. Distinguish
   ordinary chat from command execution and define limits before implementation.
 
-- [ ] Missing primitive contract and client support
-- [ ] Gameplay matrix, explicit exclusions, rendered acceptance
-- [ ] All new actuators included in safety checks
+- [x] Missing primitive contract and client support (D24, 2026-10-04)
+- [x] Gameplay matrix, explicit exclusions, rendered acceptance (D24; jump-dependent
+      rows not live-verified under the owner's no-jump constraint)
+- [x] All new actuators included in safety checks
 
 ### M3.8 — Optional mod action extensions and workstations
 

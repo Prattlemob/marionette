@@ -178,13 +178,17 @@ public final class EventRecorder {
         emit("item_pickup", Basis.SERVER, fields);
     }
 
-    /** @param kind "chat", "system" or "action_bar" */
-    public void chat(String kind, String text, String sender, String chatType) {
+    /**
+     * @param kind "chat", "system" or "action_bar"
+     * @param senderName the sender's profile name (playerIdentity), or null
+     */
+    public void chat(String kind, String text, String sender, String senderName, String chatType) {
         if (worldSession == null) return;
         JsonObject fields = new JsonObject();
         fields.addProperty("kind", kind);
         boolean truncated = addText(fields, "text", text);
         fields.addProperty("sender", sender);
+        fields.addProperty("senderName", senderName);
         fields.addProperty("chatType", chatType);
         fields.addProperty("truncated", truncated);
         emit("chat", Basis.SERVER, fields);
@@ -205,10 +209,27 @@ public final class EventRecorder {
 
     /** A damage source object; null ids are unknown or absent. */
     public static JsonObject source(String type, String attacker, String direct) {
+        return source(type, attacker, direct, null, null);
+    }
+
+    /**
+     * A damage source with the responsible player's identity (playerIdentity):
+     * {@code attackerPlayer} is {uuid, name} when both are known, else null.
+     */
+    public static JsonObject source(String type, String attacker, String direct,
+                                    String attackerUuid, String attackerName) {
         JsonObject source = new JsonObject();
         source.addProperty("type", type);
         source.addProperty("attacker", attacker);
         source.addProperty("direct", direct);
+        if (attackerUuid != null && attackerName != null) {
+            JsonObject player = new JsonObject();
+            player.addProperty("uuid", attackerUuid);
+            player.addProperty("name", attackerName);
+            source.add("attackerPlayer", player);
+        } else {
+            source.add("attackerPlayer", JsonNull.INSTANCE);
+        }
         return source;
     }
 

@@ -18,6 +18,8 @@ public enum ErrorCode {
     INVENTORY_IMPOSSIBLE("inventory_impossible"),
     SCAN_REFUSED("scan_refused"),
     SCAN_CANCELLED("scan_cancelled"),
+    RESPAWN_REFUSED("respawn_refused"),
+    CHAT_REFUSED("chat_refused"),
     UNEXPECTED_HELLO("unexpected_hello"),
     HELLO_REQUIRED("hello_required", 1002),
     UNSUPPORTED_VERSION("unsupported_version", 1002),

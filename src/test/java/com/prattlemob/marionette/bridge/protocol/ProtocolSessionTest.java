@@ -135,7 +135,10 @@ class ProtocolSessionTest {
                 "{\"type\": \"input\", \"forward\": true, \"id\": 9}",
                 "{\"type\": \"look\", \"yaw\": 0, \"pitch\": 0}",
                 "{\"type\": \"release\"}",
-                "{\"type\": \"scan\", \"size\": {\"x\": 1, \"y\": 1, \"z\": 1}}")) {
+                "{\"type\": \"scan\", \"size\": {\"x\": 1, \"y\": 1, \"z\": 1}}",
+                "{\"type\": \"respawn\"}",
+                "{\"type\": \"chat\", \"text\": \"hi\"}",
+                "{\"type\": \"input\", \"tap\": [\"swap_hands\"]}")) {
             List<ProtocolSession.Action> actions = session.onFrame(frame);
             assertEquals(1, actions.size(), "non-fatal: error only, no close");
             JsonObject error = json(actions.get(0));

@@ -3,7 +3,10 @@ package com.prattlemob.marionette.observation;
 import java.util.Comparator;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.registries.BuiltInRegistries;
 
@@ -52,6 +55,31 @@ public final class PlayerObservation {
                     effects.add(entry);
                 });
         result.add("effects", effects);
+        // playerIdentity: the local player's profile as this world knows it.
+        result.addProperty("uuid", player.getUUID().toString());
+        result.addProperty("name", player.getGameProfile().getName());
+        // playerActivity: what the gameplay controls (M3.7) visibly do.
+        result.addProperty("swimming", player.isSwimming());
+        result.addProperty("fallFlying", player.isFallFlying());
+        result.addProperty("blocking", player.isBlocking());
+        if (player.isUsingItem()) {
+            JsonObject using = new JsonObject();
+            using.addProperty("hand", player.getUsedItemHand() == InteractionHand.MAIN_HAND ? "main_hand" : "off_hand");
+            using.addProperty("item", BuiltInRegistries.ITEM.getKey(player.getUseItem().getItem()).toString());
+            using.addProperty("ticks", player.getTicksUsingItem());
+            result.add("usingItem", using);
+        } else {
+            result.add("usingItem", JsonNull.INSTANCE);
+        }
+        Entity vehicle = player.getVehicle();
+        if (vehicle != null) {
+            JsonObject ridden = new JsonObject();
+            ridden.addProperty("id", vehicle.getId());
+            ridden.addProperty("type", BuiltInRegistries.ENTITY_TYPE.getKey(vehicle.getType()).toString());
+            result.add("vehicle", ridden);
+        } else {
+            result.add("vehicle", JsonNull.INSTANCE);
+        }
         return result;
     }
 }

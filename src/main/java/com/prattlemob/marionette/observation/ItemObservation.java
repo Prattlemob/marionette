@@ -6,7 +6,9 @@ import java.util.List;
 import com.google.gson.JsonObject;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
 
 /** Client-thread adapter from vanilla stacks to the enumerated wire extras. */
@@ -29,7 +31,8 @@ public final class ItemObservation {
                 name == null ? null : name.getString(),
                 enchantments(stack.get(DataComponents.ENCHANTMENTS)),
                 enchantments(stack.get(DataComponents.STORED_ENCHANTMENTS)),
-                potion == null ? null : potion.potion().map(holder -> holder.getRegisteredName()).orElse(null));
+                potion == null ? null : potion.potion().map(holder -> holder.getRegisteredName()).orElse(null),
+                stack.is(Items.CROSSBOW) && CrossbowItem.isCharged(stack));
     }
 
     private static List<InventoryJson.Enchantment> enchantments(ItemEnchantments enchantments) {

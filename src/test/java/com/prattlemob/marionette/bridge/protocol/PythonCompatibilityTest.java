@@ -15,7 +15,7 @@ class PythonCompatibilityTest {
             var item = entry.getAsJsonObject();
             var command = MessageParser.parse(item.get("wire").toString());
             assertEquals(item.get("javaType").getAsString(), command.getClass().getSimpleName());
-            if (command instanceof AgentCommand.InputUpdate input) {
+            if (command instanceof AgentCommand.InputUpdate input && item.getAsJsonObject("wire").has("forward")) {
                 assertEquals(Boolean.TRUE, input.forward());
                 assertEquals(Boolean.FALSE, input.back());
                 assertEquals(8, input.hotbar());
@@ -24,6 +24,13 @@ class PythonCompatibilityTest {
             if (command instanceof AgentCommand.Scan scan) {
                 assertEquals(item.getAsJsonObject("wire").get("id"), scan.id());
                 assertEquals(16, scan.size().x());
+            }
+            if (command instanceof AgentCommand.Chat chat) {
+                assertEquals(item.getAsJsonObject("wire").get("id"), chat.id());
+                assertEquals(item.getAsJsonObject("wire").has("command"), chat.command() != null);
+            }
+            if (command instanceof AgentCommand.Respawn respawn) {
+                assertEquals(item.getAsJsonObject("wire").get("id"), respawn.id());
             }
             if (command instanceof AgentCommand.InventoryAction inventory) {
                 assertEquals(item.getAsJsonObject("wire").get("op").getAsString(), inventory.op());
@@ -75,6 +82,24 @@ class PythonCompatibilityTest {
             String actual = Messages.scanResult(expected.getAsJsonPrimitive("id"), expected.get("dimension").getAsString(),
                     xyz(expected.getAsJsonObject("min")), xyz(expected.getAsJsonObject("size")),
                     expected.get("startTick").getAsLong(), expected.get("tick").getAsLong(), palette, indices);
+            assertEquals(expected, JsonParser.parseString(actual));
+        }
+        // Replies to respawn/chat (respawn, chat) go only to a client that sent those requests.
+        for (var entry : fixture.getAsJsonArray("actionResults")) {
+            var expected = entry.getAsJsonObject();
+            var id = expected.getAsJsonPrimitive("id");
+            String actual = switch (expected.get("code") == null ? "result" : expected.get("code").getAsString()) {
+                case "result" -> Messages.actionResult(expected.get("action").getAsString(), id);
+                case "chat_refused" -> {
+                    var limits = expected.getAsJsonObject("limits");
+                    yield Messages.chatError(expected.get("reason").getAsString(), expected.get("message").getAsString(), id,
+                            expected.get("input").getAsString(), limits.get("maxMessages").getAsInt(),
+                            limits.get("windowSeconds").getAsInt(), limits.get("maxLength").getAsInt(),
+                            expected.has("retryAfterMs") ? expected.get("retryAfterMs").getAsLong() : null);
+                }
+                default -> Messages.error(ErrorCode.RESPAWN_REFUSED, expected.get("reason").getAsString(),
+                        expected.get("message").getAsString(), id, expected.get("input").getAsString());
+            };
             assertEquals(expected, JsonParser.parseString(actual));
         }
         // Event frames are kept apart from "messages": clients that predate
