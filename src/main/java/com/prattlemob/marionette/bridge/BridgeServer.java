@@ -241,20 +241,10 @@ public final class BridgeServer {
                         channel.pipeline().addLast(
                                 new HttpServerCodec(),
                                 new HttpObjectAggregator(MAX_FRAME_BYTES),
-                                new io.netty.channel.ChannelDuplexHandler() {
-                                    @Override
-                                    public void write(ChannelHandlerContext ctx, Object message,
-                                                      io.netty.channel.ChannelPromise promise) {
-                                        // Netty's automatic pong path must obey backpressure too.
-                                        if ((message instanceof PingWebSocketFrame || message instanceof PongWebSocketFrame)
-                                                && !ctx.channel().isWritable()) {
-                                            io.netty.util.ReferenceCountUtil.release(message);
-                                            promise.tryFailure(new IllegalStateException("control-frame overload"));
-                                            if (handler.connection != null) handler.connection.close(1013, "overloaded");
-                                            else ctx.close();
-                                        } else ctx.write(message, promise);
-                                    }
-                                },
+                                new ControlFrameBackpressure(ctx -> {
+                                    if (handler.connection != null) handler.connection.close(1013, "overloaded");
+                                    else ctx.close();
+                                }),
                                 new io.netty.channel.SimpleChannelInboundHandler<io.netty.handler.codec.http.FullHttpRequest>() {
                                     @Override
                                     protected void channelRead0(ChannelHandlerContext ctx,
@@ -465,6 +455,29 @@ public final class BridgeServer {
             group.shutdownGracefully(0, 2, TimeUnit.SECONDS)
                     .awaitUninterruptibly(3, TimeUnit.SECONDS);
             group = null;
+        }
+    }
+
+    /**
+     * Netty's automatic pong path must obey backpressure too: a ping or pong
+     * written while the channel is unwritable is dropped and the peer is
+     * disconnected instead of growing the outbound buffer.
+     */
+    static final class ControlFrameBackpressure extends io.netty.channel.ChannelDuplexHandler {
+        private final java.util.function.Consumer<ChannelHandlerContext> onOverload;
+
+        ControlFrameBackpressure(java.util.function.Consumer<ChannelHandlerContext> onOverload) {
+            this.onOverload = onOverload;
+        }
+
+        @Override
+        public void write(ChannelHandlerContext ctx, Object message, io.netty.channel.ChannelPromise promise) {
+            if ((message instanceof PingWebSocketFrame || message instanceof PongWebSocketFrame)
+                    && !ctx.channel().isWritable()) {
+                io.netty.util.ReferenceCountUtil.release(message);
+                promise.tryFailure(new IllegalStateException("control-frame overload"));
+                onOverload.accept(ctx);
+            } else ctx.write(message, promise);
         }
     }
 
