@@ -20,6 +20,8 @@ optional first argument (default 24680).
 - **In-repository client** — `python -m pip install -e ./python` from the
   repository root. It supports every current capability. It is unreleased: no
   further publication is authorized yet, so install it from this checkout.
+  It still reports version `0.1.0a1`, although it is ahead of the published
+  package; the version changes only with a release.
 
 The *Client* column below says which you need. Examples marked *0.1.0a1* also
 work with the in-repository client.
