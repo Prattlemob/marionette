@@ -132,7 +132,7 @@ RejectionReason = Literal[
     "not_armor", "armor_occupied", "armor_count", "drop_forbidden", "unexpected_click",
     "count_exceeds_source", "whole_stack_only", "not_crafting", "no_result", "missing_ingredients",
     "remainder_unsupported", "released", "human_input", "menu_changed", "contents_changed",
-    "world_exit", "result_changed"]
+    "world_exit", "result_changed", "human_paused"]
 
 
 class Slot(Stack):
@@ -361,9 +361,9 @@ class ScanResult(Envelope):
 
 
 ActionKind = Literal["respawn", "chat", "command"]
-RespawnReason = Literal["no_world", "not_dead", "hardcore"]
+RespawnReason = Literal["no_world", "not_dead", "hardcore", "human_paused"]
 ChatReason = Literal["no_world", "client_restricted", "chat_disabled", "commands_disabled", "empty",
-                     "too_long", "illegal_character", "slash_prefix", "rate_limited"]
+                     "too_long", "illegal_character", "slash_prefix", "rate_limited", "human_paused"]
 
 
 class ChatLimits(TypedDict):
@@ -501,17 +501,35 @@ class BlockBrokenEvent(EventEnvelope):
     pos: BlockPos
 
 
+ControlMode = Literal["human_priority", "agent_exclusive", "panic"]
+ControlCause = Literal["controller_attached", "human_input", "human_idle", "lockout_engaged",
+                       "lockout_released", "controller_lost", "panic", "rearmed"]
+HumanInputKind = Literal["movement", "jump", "sneak", "sprint", "look", "attack", "use", "hotbar",
+                         "drop", "swap_hands", "pick_block", "pause_menu"]
+
+
+class ControlEvent(EventEnvelope):
+    """Local human precedence changed (``humanPrecedence``). While ``paused`` the mod
+    discards ``input``/``look`` and refuses actuation with reason ``human_paused``.
+    ``cause`` and ``inputs`` are ``ControlCause``/``HumanInputKind`` but stay open."""
+    event: Literal["control"]
+    mode: str
+    paused: bool
+    cause: str
+    inputs: list[str]
+
+
 class OtherEvent(EventEnvelope):
     """A kind this client does not know yet; ignore it but keep its ``seq``."""
     event: str
 
 
 Event = (DamageEvent | DeathEvent | RespawnEvent | DimensionChangeEvent | ItemPickupEvent
-         | ChatEvent | BlockBrokenEvent | OtherEvent)
+         | ChatEvent | BlockBrokenEvent | ControlEvent | OtherEvent)
 EVENT_SCHEMAS: dict[str, object] = {
     "damage": DamageEvent, "death": DeathEvent, "respawn": RespawnEvent,
     "dimension_change": DimensionChangeEvent, "item_pickup": ItemPickupEvent,
-    "chat": ChatEvent, "block_broken": BlockBrokenEvent,
+    "chat": ChatEvent, "block_broken": BlockBrokenEvent, "control": ControlEvent,
 }
 
 

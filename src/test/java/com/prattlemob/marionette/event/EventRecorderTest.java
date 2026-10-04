@@ -201,4 +201,25 @@ class EventRecorderTest {
         assertTrue(EventRecorder.source("minecraft:player_attack", "minecraft:player", null, "u", null)
                 .get("attackerPlayer").isJsonNull(), "an incomplete identity is unknown");
     }
+
+    @Test
+    void controlEventsCarryModePauseCauseAndInputs() {
+        recorder.control("human_priority", true, "human_input", List.of("movement", "look"));
+        GameEvent event = events.getLast();
+        assertEquals("control", event.kind());
+        assertEquals(GameEvent.Basis.CLIENT, event.basis());
+        assertEquals("human_priority", event.fields().get("mode").getAsString());
+        assertTrue(event.fields().get("paused").getAsBoolean());
+        assertEquals("human_input", event.fields().get("cause").getAsString());
+        assertEquals("[\"movement\",\"look\"]", event.fields().get("inputs").toString());
+        recorder.control("agent_exclusive", false, "lockout_engaged", List.of());
+        assertEquals("[]", events.getLast().fields().get("inputs").toString());
+    }
+
+    @Test
+    void controlEventsNeedAWorld() {
+        recorder.endWorldSession();
+        recorder.control("panic", false, "panic", List.of());
+        assertTrue(events.isEmpty());
+    }
 }

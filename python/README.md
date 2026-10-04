@@ -119,7 +119,7 @@ ignore environment proxies. Current local trust has no authentication.
   `chat_refused`, a `reason` (`messages.ChatReason`), `error["limits"]` and, when
   rate limited, `error["retryAfterMs"]`. `respawn()` presses the death screen's
   Respawn button (requires `respawn`; refusals `respawn_refused`, reasons
-  `not_dead`, `hardcore`, `no_world`). Both return a `messages.ActionResult`
+  `not_dead`, `hardcore`, `no_world`, `human_paused`). Both return a `messages.ActionResult`
   meaning the request was sent, not that the server acted on it.
   `input(tap=["swap_hands"])` swaps the main hand and offhand (requires
   `swapHands`). With `playerIdentity` the player section carries `uuid`/`name`,
@@ -136,7 +136,12 @@ ignore environment proxies. Current local trust has no authentication.
   `InvalidMessage`; an overflowing local queue ends it with `CapacityError`.
   `last_event_seq` is the last event received; events already received stay
   readable after closure. Event kinds are typed in `messages` (`DamageEvent`,
-  `ChatEvent`, ...); unknown kinds decode as `OtherEvent`. Message types this
+  `ChatEvent`, ...); unknown kinds decode as `OtherEvent`. With
+  `humanPrecedence`, `ControlEvent` (`event: "control"`) reports the local
+  human precedence mode (`ControlMode`), whether human input has paused the
+  agent, the `ControlCause` and the `HumanInputKind` list. While paused the mod
+  silently discards `input`/`look` and refuses inventory changes, `respawn` and
+  `chat` with reason `human_paused`; nothing is restored when it resumes. Message types this
   client does not know are counted in `unknown_messages` and ignored.
   These event APIs are in the repository source only; the published
   0.1.0a1 alpha has none and ends its session on unknown message types.

@@ -199,7 +199,8 @@ class MessagesTest {
     @Test
     void helloReplyAdvertisesGameplayCapabilities() {
         JsonObject capabilities = parse(Messages.helloReply(2, "0.1.0", null)).getAsJsonObject("capabilities");
-        for (String name : List.of("swapHands", "respawn", "chat", "playerIdentity", "playerActivity")) {
+        for (String name : List.of("swapHands", "respawn", "chat", "playerIdentity", "playerActivity",
+                "humanPrecedence")) {
             assertTrue(capabilities.get(name).getAsBoolean(), name);
         }
     }

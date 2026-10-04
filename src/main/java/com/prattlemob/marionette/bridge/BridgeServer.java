@@ -126,14 +126,33 @@ public final class BridgeServer {
 
     public BridgeServer(InetAddress bindAddress, int port, String modVersion, int maxObservers,
                         long helloTimeoutMillis, long pongTimeoutMillis) {
+        this(bindAddress, port, modVersion, maxObservers, helloTimeoutMillis, pongTimeoutMillis, false);
+    }
+
+    /**
+     * @param allowNonLoopback the human's explicit opt-out of loopback
+     *        enforcement (bridge.iUnderstandNonLoopbackIsUnauthenticated);
+     *        without it a non-loopback address is refused
+     */
+    public BridgeServer(InetAddress bindAddress, int port, String modVersion, int maxObservers,
+                        long helloTimeoutMillis, long pongTimeoutMillis, boolean allowNonLoopback) {
         this(bindAddress, port, modVersion, maxObservers,
                 Math.min(PING_INTERVAL_MILLIS, Math.max(1, pongTimeoutMillis / 4)),
-                helloTimeoutMillis, pongTimeoutMillis);
+                helloTimeoutMillis, pongTimeoutMillis, allowNonLoopback);
     }
 
     private BridgeServer(InetAddress bindAddress, int port, String modVersion, int maxObservers,
                          long pingIntervalMillis, long helloTimeoutMillis, long pongTimeoutMillis) {
-        if (!bindAddress.isLoopbackAddress()) throw new IllegalArgumentException("loopback required");
+        this(bindAddress, port, modVersion, maxObservers, pingIntervalMillis, helloTimeoutMillis,
+                pongTimeoutMillis, false);
+    }
+
+    private BridgeServer(InetAddress bindAddress, int port, String modVersion, int maxObservers,
+                         long pingIntervalMillis, long helloTimeoutMillis, long pongTimeoutMillis,
+                         boolean allowNonLoopback) {
+        if (!bindAddress.isLoopbackAddress() && !allowNonLoopback) {
+            throw new IllegalArgumentException("loopback required");
+        }
         this.bindAddress = bindAddress;
         this.pongTimeoutMillis = pongTimeoutMillis;
         this.requestedPort = port;
@@ -281,8 +300,16 @@ public final class BridgeServer {
 
     /** True while a controller that completed the hello handshake is attached and panic is not latched. */
     public boolean hasController() {
+        return currentController() != null;
+    }
+
+    /**
+     * The attached, hello-completed controller while panic is not latched, or
+     * null. Compared by identity to tell one controller session from the next.
+     */
+    public Object currentController() {
         AgentConnection current = controller.get();
-        return current != null && current.ready() && !panicLatched();
+        return current != null && current.ready() && !panicLatched() ? current : null;
     }
 
     /**

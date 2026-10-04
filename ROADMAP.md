@@ -30,8 +30,9 @@ Keep milestone IDs and completed history. **M2.5 (published client) and M5.1a
 (bridge safety) are complete; M4.6 (one-shot events), M4.2 (inventory
 observation), M3.5 (modded storage), M4.3 (crosshair target and world
 context), M4.4 (nearby entities), M4.5 (bounded block scan), M3.6 (crafting
-and processing menus) and M3.7 (gameplay and social controls) are complete.**
-The remaining implementation order is **M5.1 → M5.2**.
+and processing menus), M3.7 (gameplay and social controls) and M5.1 (human
+precedence and lifecycle safety; details pending owner review, D25) are
+complete.** The remaining implementation order is **M5.2**.
 Further package publication retains D12/D14 decision gates; a blocked release
 does not prevent independent safety/perception work. M3.3's outstanding visual
 acceptance remains debt and must be reconciled for milestones requiring it.
@@ -786,21 +787,28 @@ agent-exclusive and lifecycle coverage across the expanded actuator set.
 
 Items:
 
-- [ ] Ping/pong watchdog with configurable timeout
+- [x] Ping/pong watchdog with configurable timeout (M5.1a; D16a default 2 s)
 - [x] Panic keybinding (registered, rebindable, shown in controls menu); panic
       latches until a separate rebindable re-arm key clears it (D16b, 2026-10-04,
       rendered evidence in the M5.1a safety record)
-- [ ] Human-override policy implemented + documented (three modes per
-      docs/decisions.md: human-priority / agent-exclusive / panic)
-- [ ] Input-lockout keybind (agent-exclusive mode): rebindable, shown in
+- [x] Human-override policy implemented + documented (three modes per
+      docs/decisions.md: human-priority / agent-exclusive / panic; D25)
+- [x] Input-lockout keybind (agent-exclusive mode): rebindable, shown in
       controls menu; lockout + panic keys never suppressed; auto-drops when
       no controller is attached
-- [ ] Focus-loss behavior decided per precedence mode (with the M2.2
+- [x] Focus-loss behavior decided per precedence mode (with the M2.2
       no-pause-while-agent-connected config toggle)
-- [ ] Loopback enforcement + explicit-opt-out config gate + log warning
-- [ ] Edge-case matrix tested: death, respawn, dimension change, GUI open,
+- [x] Loopback enforcement + explicit-opt-out config gate + log warning
+- [x] Edge-case matrix tested: death, respawn, dimension change, GUI open,
       pause menu, world leave
-- [ ] Idle-safe state machine documented in `docs/`
+- [x] Idle-safe state machine documented in `docs/`
+      ([safety-state-machine.md](docs/safety-state-machine.md))
+
+Verification (2026-10-04): D25 in docs/decisions.md records the rendered matrix,
+with human input injected synthetically through the GLFW callbacks. Open: the
+D25 details decided pending owner review, and physical keyboard/mouse
+confirmation pending the owner's availability. M3.3 visual/alt-tab debt remains
+separate and unchecked.
 
 ### M5.2 — Diagnostics & operator visibility
 

@@ -28,6 +28,25 @@ class MarionetteConfigTest {
     }
 
     @Test
+    void explicitOptOutBindsTheResolvedNonLoopbackAddress() {
+        assertEquals("192.168.1.10", MarionetteConfig.resolveBindAddress("192.168.1.10", true).getHostAddress());
+        assertEquals("0.0.0.0", MarionetteConfig.resolveBindAddress("0.0.0.0", true).getHostAddress());
+        assertEquals("127.0.0.1", MarionetteConfig.resolveBindAddress("192.168.1.10", false).getHostAddress());
+    }
+
+    @Test
+    void optOutNeverBindsAnUnresolvableAddressAndKeepsLoopback() {
+        assertEquals("127.0.0.1", MarionetteConfig.resolveBindAddress("not a hostname!", true).getHostAddress());
+        assertEquals("127.0.0.53", MarionetteConfig.resolveBindAddress("127.0.0.53", true).getHostAddress());
+    }
+
+    @Test
+    void precedenceAndOptOutDefaultsAreSafe() {
+        assertFalse(MarionetteConfig.nonLoopbackOptOut);
+        assertEquals(2000, MarionetteConfig.resumeAfterMillis);
+    }
+
+    @Test
     void defaultsAreSafeBeforeConfigLoads() {
         assertEquals(24680, MarionetteConfig.port);
         assertEquals("127.0.0.1", MarionetteConfig.bindAddress);

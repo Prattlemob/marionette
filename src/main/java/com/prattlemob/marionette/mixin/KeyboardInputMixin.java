@@ -1,6 +1,7 @@
 package com.prattlemob.marionette.mixin;
 
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -16,29 +17,38 @@ import net.minecraft.world.phys.Vec2;
 
 /**
  * D4 variant 2: after vanilla populates the semantic input from key state,
- * OR-merge the agent's held controls in and recompute the move vector.
+ * OR-merge the agent's held controls in and recompute the move vector. In
+ * agent-exclusive mode (M5.1) the human's keys are replaced, not merged.
  * Extends ClientInput (the mixin target's superclass) for access to the
  * protected moveVector field.
  */
 @Mixin(KeyboardInput.class)
 public abstract class KeyboardInputMixin extends ClientInput {
+    @Unique
+    private static final ControlState NEUTRAL = new ControlState();
+
     @Inject(method = "tick", at = @At("TAIL"))
     private void marionette$mergeAgentInput(CallbackInfo ci) {
         ControlState state = MixinInputApplier.activeState();
-        if (state == null) {
+        // Agent-exclusive (M5.1): replace instead of merge, so the human's
+        // movement, jump, sneak and sprint keys have no effect.
+        boolean locked = MixinInputApplier.localInputLocked();
+        if (state == null && !locked) {
             return;
         }
+        if (state == null) state = NEUTRAL;
+        Input human = locked ? Input.EMPTY : this.keyPresses;
         // Consume even when jump is already held, so a tap cannot survive
         // short-circuit evaluation and fire after the held key is released.
         boolean jumpTap = state.consumeTap(TapControl.JUMP);
         this.keyPresses = new Input(
-                this.keyPresses.forward() || state.forward(),
-                this.keyPresses.backward() || state.back(),
-                this.keyPresses.left() || state.left(),
-                this.keyPresses.right() || state.right(),
-                this.keyPresses.jump() || state.jump() || jumpTap,
-                this.keyPresses.shift() || state.sneak(),
-                this.keyPresses.sprint() || state.sprint());
+                human.forward() || state.forward(),
+                human.backward() || state.back(),
+                human.left() || state.left(),
+                human.right() || state.right(),
+                human.jump() || state.jump() || jumpTap,
+                human.shift() || state.sneak(),
+                human.sprint() || state.sprint());
         // Mirrors vanilla KeyboardInput.tick()'s impulse derivation —
         // re-verify against it on any Minecraft version bump.
         float forwardImpulse = this.keyPresses.forward() == this.keyPresses.backward()

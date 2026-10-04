@@ -16,7 +16,12 @@ requirement, not an afterthought. The current posture, as specified in
 
 - **Loopback only.** The configured address is resolved once, checked and
   clamped to loopback, then that same address is bound. Remote binding is not
-  supported.
+  supported. A human can opt out explicitly with
+  `bridge.iUnderstandNonLoopbackIsUnauthenticated = true`; the mod then binds
+  the resolved non-loopback address and logs a warning at every start. That
+  exposes unauthenticated, unencrypted control of the game to anyone who can
+  reach the address; it is an operator's acknowledged risk, not a supported
+  remote-access mode (D25).
 - **Native clients only during development.** HTTP requests with any Origin
   header (including `null`) are rejected before WebSocket upgrade. Browser
   dashboards are not currently supported. Native Python clients omit Origin.
@@ -43,6 +48,10 @@ requirement, not an afterthought. The current posture, as specified in
   separate re-arm key (default F9), so a reconnecting agent cannot retake
   control.
   Safety release bypasses queued commands and cancels inventory animation.
+- **The human outranks the agent.** By default any local gameplay input
+  releases and pauses the agent. The agent-exclusive input lockout is a local
+  human choice that never suppresses the lockout, panic or re-arm keys or the
+  interface keys, and it ends the moment no controller is attached (D25).
   A responsive client releases at its next tick or rendered frame; a stalled
   Minecraft client thread cannot execute a wall-clock safety guarantee.
 

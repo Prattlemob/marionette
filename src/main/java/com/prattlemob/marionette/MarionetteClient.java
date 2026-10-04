@@ -1,7 +1,10 @@
 package com.prattlemob.marionette;
 
+import java.util.EnumSet;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
@@ -19,6 +22,8 @@ import com.prattlemob.marionette.control.ChatPolicy;
 import com.prattlemob.marionette.control.ControlState;
 import com.prattlemob.marionette.control.ControlStateApplier;
 import com.prattlemob.marionette.control.DemoScript;
+import com.prattlemob.marionette.control.HumanPrecedence;
+import com.prattlemob.marionette.control.HumanPrecedence.HumanInput;
 import com.prattlemob.marionette.control.MixinInputApplier;
 import com.prattlemob.marionette.control.Rotation;
 import com.prattlemob.marionette.control.SmoothingModel;
@@ -35,6 +40,8 @@ import com.prattlemob.marionette.observation.WorldObservation;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Options;
+import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.client.event.InputEvent;
@@ -93,6 +100,9 @@ public class MarionetteClient {
     /** Separate re-arm key: only clears the panic latch (D16b). */
     private final KeyMapping rearmKey = new KeyMapping("key.marionette.rearm", GLFW.GLFW_KEY_F9,
             "key.categories.marionette");
+    /** Agent-exclusive input lockout toggle (M5.1); never suppressed. */
+    private final KeyMapping lockoutKey = new KeyMapping("key.marionette.lockout", GLFW.GLFW_KEY_F7,
+            "key.categories.marionette");
     /** One replaceable toast slot for agent-control notices. */
     private static final SystemToast.SystemToastId CONTROL_TOAST = new SystemToast.SystemToastId();
 
@@ -101,6 +111,11 @@ public class MarionetteClient {
     private final BlockScanRunner scans = new BlockScanRunner();
     private LevelBlockSource scanSource;
     private final ControlState controlState = new ControlState();
+    /** Human precedence modes, pause and lockout (M5.1); client thread only. */
+    private final HumanPrecedence precedence = new HumanPrecedence(
+            () -> TimeUnit.MILLISECONDS.toNanos(MarionetteConfig.resumeAfterMillis));
+    /** The local player was dead at the last check: death releases agent holds once. */
+    private boolean playerDead;
     /** Chat limits (M3.7): client-wide, so reconnecting never resets the rate window. */
     private final ChatPolicy chatPolicy = new ChatPolicy(System::nanoTime);
     private final ControlStateApplier applier = new MixinInputApplier();
@@ -133,18 +148,33 @@ public class MarionetteClient {
         modBus.addListener((RegisterKeyMappingsEvent event) -> {
             event.register(panicKey);
             event.register(rearmKey);
+            event.register(lockoutKey);
         });
-        // Panic is checked first and wins if both mappings share a key. Re-arm
-        // is deliberate in-game input only: never from a screen or text field.
+        MixinInputApplier.setLocalInputGate(this::localInputLocked);
+        // Panic is checked first and wins if mappings share a key. Re-arm and
+        // engaging the lockout are deliberate in-game input only: never from a
+        // screen or text field. None of these keys is ever suppressed.
         NeoForge.EVENT_BUS.addListener((InputEvent.Key event) -> {
-            if (event.getAction() != GLFW.GLFW_PRESS) return;
-            if (panicKey.matches(event.getKey(), event.getScanCode())) panic();
-            else if (rearmKey.matches(event.getKey(), event.getScanCode())) rearm();
+            if (event.getAction() == GLFW.GLFW_PRESS) {
+                if (panicKey.matches(event.getKey(), event.getScanCode())) panic();
+                else if (rearmKey.matches(event.getKey(), event.getScanCode())) rearm();
+                else if (lockoutKey.matches(event.getKey(), event.getScanCode())) toggleLockout();
+            }
+            if (event.getAction() != GLFW.GLFW_RELEASE) {
+                humanInput(mapping -> mapping.matches(event.getKey(), event.getScanCode()));
+            }
         });
         NeoForge.EVENT_BUS.addListener((InputEvent.MouseButton.Pre event) -> {
             if (event.getAction() != GLFW.GLFW_PRESS) return;
             if (panicKey.matchesMouse(event.getButton())) panic();
             else if (rearmKey.matchesMouse(event.getButton())) rearm();
+            else if (lockoutKey.matchesMouse(event.getButton())) toggleLockout();
+            humanInput(mapping -> mapping.matchesMouse(event.getButton()));
+        });
+        // In game only (vanilla fires it with no screen open): hotbar scrolling.
+        NeoForge.EVENT_BUS.addListener((InputEvent.MouseScrollingEvent event) -> {
+            if (localInputLocked()) event.setCanceled(true);
+            else humanInputs(EnumSet.of(HumanInput.HOTBAR));
         });
         NeoForge.EVENT_BUS.addListener(this::onClientTickPre);
         NeoForge.EVENT_BUS.addListener(this::onClientTickPost);
@@ -174,6 +204,9 @@ public class MarionetteClient {
         eventRecorder.playerReplaced(event.getOldPlayer().isDeadOrDying(),
                 MinecraftEvents.dimension(event.getOldPlayer().level()),
                 MinecraftEvents.dimension(event.getNewPlayer().level()));
+        // Lifecycle rule (M5.1): holds never carry over a respawn or dimension change.
+        if (controlsEngaged) releaseControls("released", "player replaced (respawn or dimension change)", true);
+        playerDead = false;
     }
 
     private void onChatReceived(ClientChatReceivedEvent event) {
@@ -200,6 +233,10 @@ public class MarionetteClient {
         if (panicKey.matches(event.getKeyCode(), event.getScanCode())) {
             panic();
             event.setCanceled(true);
+        } else if (lockoutKey.matches(event.getKeyCode(), event.getScanCode()) && precedence.lockout()) {
+            // Releasing the lockout works everywhere; engaging needs gameplay.
+            toggleLockout();
+            event.setCanceled(true);
         }
         inventoryApplier.cancel("human_input", "human keyboard input");
     }
@@ -219,15 +256,22 @@ public class MarionetteClient {
             return;
         }
         String configured = MarionetteConfig.bindAddress;
-        java.net.InetAddress bind = MarionetteConfig.resolveBindAddress(configured);
+        boolean optOut = MarionetteConfig.nonLoopbackOptOut;
+        // Resolved exactly once; this object is what Netty binds (D16, M5.1).
+        java.net.InetAddress bind = MarionetteConfig.resolveBindAddress(configured, optOut);
         try {
             BridgeServer server = new BridgeServer(bind, MarionetteConfig.port, modVersion,
                     MarionetteConfig.maxObservers,
                     TimeUnit.SECONDS.toMillis(MarionetteConfig.helloTimeoutSeconds),
-                    TimeUnit.SECONDS.toMillis(MarionetteConfig.pongTimeoutSeconds));
+                    TimeUnit.SECONDS.toMillis(MarionetteConfig.pongTimeoutSeconds), optOut);
             server.start();
             bridge = server;
-            logNormal("Bridge listening on {}:{}", bind, server.port());
+            if (bind.isLoopbackAddress()) {
+                logNormal("Bridge listening on {}:{}", bind, server.port());
+            } else {
+                Marionette.LOGGER.warn("Bridge listening on NON-LOOPBACK {}:{} without authentication"
+                        + " (bridge.iUnderstandNonLoopbackIsUnauthenticated)", bind, server.port());
+            }
         } catch (Exception e) {
             bridge = null;
             Marionette.LOGGER.error("Bridge failed to start; running without external control", e);
@@ -259,6 +303,21 @@ public class MarionetteClient {
         return server != null && server.hasController();
     }
 
+    /**
+     * True while agent-exclusive mode suppresses local gameplay input: the
+     * lockout is engaged for the controller attached right now. Read by the
+     * input mixins on the client thread; no controller means no lockout.
+     */
+    public boolean localInputLocked() {
+        BridgeServer server = bridge;
+        return server != null && precedence.suppressLocal(server.currentController());
+    }
+
+    /** Mouse look turned the camera (MouseLookMixin); human input in human-priority mode. */
+    public void humanLook() {
+        humanInputs(EnumSet.of(HumanInput.LOOK));
+    }
+
     public boolean isInWorld() {
         return inWorld;
     }
@@ -277,6 +336,12 @@ public class MarionetteClient {
             if (controlsEngaged) { demo = null; releaseControls(); }
             return;
         }
+        boolean dead = player.isDeadOrDying();
+        if (dead && !playerDead && controlsEngaged) {
+            // Lifecycle rule (M5.1): death releases every agent actuator once.
+            releaseControls("released", "player died", true);
+        }
+        playerDead = dead;
         processCommands(player);
         processSafety();
         inventoryApplier.tick();
@@ -329,6 +394,7 @@ public class MarionetteClient {
         demo = null;
         boolean engaged = bridge != null && bridge.panic("local panic");
         releaseControls();
+        report(precedence.panic());
         if (bridge == null) {
             logNormal("Local panic: controls released (bridge not running)");
         } else if (engaged) {
@@ -343,14 +409,114 @@ public class MarionetteClient {
     /** Clear the panic latch; grants, restores and replays nothing. */
     private void rearm() {
         if (Minecraft.getInstance().screen != null || bridge == null || !bridge.rearm()) return;
+        report(precedence.rearm());
         logNormal("Panic latch re-armed: a controller may connect again");
         notifyControl("marionette.control.enabled", "marionette.control.enabled.detail");
     }
 
     private void notifyControl(String title, String detail) {
+        notifyControl(title, detail, rearmKey);
+    }
+
+    private void notifyControl(String title, String detail, KeyMapping key) {
         Minecraft minecraft = Minecraft.getInstance();
         SystemToast.addOrUpdate(minecraft.getToastManager(), CONTROL_TOAST, Component.translatable(title),
-                Component.translatable(detail, rearmKey.getTranslatedKeyMessage()));
+                Component.translatable(detail, key.getTranslatedKeyMessage()));
+    }
+
+    /** The lockout key (M5.1): release anywhere; engage only in game with an attached controller. */
+    private void toggleLockout() {
+        syncPrecedence();
+        HumanPrecedence.Toggle toggle = precedence.toggleLockout(Minecraft.getInstance().screen != null);
+        switch (toggle.result()) {
+            case ENGAGED -> {
+                logNormal("Input lockout engaged: agent-exclusive, local gameplay input suppressed");
+                notifyControl("marionette.lockout.on", "marionette.lockout.on.detail", lockoutKey);
+            }
+            case RELEASED -> {
+                logNormal("Input lockout released: human-priority");
+                notifyControl("marionette.lockout.off", "marionette.lockout.off.detail", lockoutKey);
+            }
+            case NO_CONTROLLER -> notifyControl("marionette.lockout.unavailable",
+                    "marionette.lockout.unavailable.detail", lockoutKey);
+            case PANIC_LATCHED -> notifyControl("marionette.control.still_disabled",
+                    "marionette.control.disabled.detail");
+            case SCREEN_OPEN -> { }
+        }
+        report(toggle.change());
+    }
+
+    /** Human gameplay input matching {@code matches}, if it happened in game with no screen open. */
+    private void humanInput(Predicate<KeyMapping> matches) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.screen != null || minecraft.player == null) return;
+        EnumSet<HumanInput> inputs = EnumSet.noneOf(HumanInput.class);
+        Options options = minecraft.options;
+        if (matches.test(options.keyUp) || matches.test(options.keyDown) || matches.test(options.keyLeft)
+                || matches.test(options.keyRight)) inputs.add(HumanInput.MOVEMENT);
+        if (matches.test(options.keyJump)) inputs.add(HumanInput.JUMP);
+        if (matches.test(options.keyShift)) inputs.add(HumanInput.SNEAK);
+        if (matches.test(options.keySprint)) inputs.add(HumanInput.SPRINT);
+        if (matches.test(options.keyAttack)) inputs.add(HumanInput.ATTACK);
+        if (matches.test(options.keyUse)) inputs.add(HumanInput.USE);
+        if (matches.test(options.keyPickItem)) inputs.add(HumanInput.PICK_BLOCK);
+        if (matches.test(options.keyDrop)) inputs.add(HumanInput.DROP);
+        if (matches.test(options.keySwapOffhand)) inputs.add(HumanInput.SWAP_HANDS);
+        for (KeyMapping slot : options.keyHotbarSlots) {
+            if (matches.test(slot)) inputs.add(HumanInput.HOTBAR);
+        }
+        humanInputs(inputs);
+    }
+
+    private void humanInputs(EnumSet<HumanInput> inputs) {
+        if (inputs.isEmpty() || !inWorld) return;
+        syncPrecedence();
+        report(precedence.human(inputs, System.nanoTime()));
+    }
+
+    /**
+     * Human gameplay input held right now: non-toggle gameplay keys and
+     * buttons down in game, or the pause menu open. Key state is released by
+     * vanilla whenever a screen opens.
+     */
+    private EnumSet<HumanInput> heldHumanInputs() {
+        EnumSet<HumanInput> held = EnumSet.noneOf(HumanInput.class);
+        Minecraft minecraft = Minecraft.getInstance();
+        if (!inWorld || minecraft.player == null) return held;
+        if (minecraft.screen instanceof PauseScreen) held.add(HumanInput.PAUSE_MENU);
+        if (minecraft.screen != null) return held;
+        Options options = minecraft.options;
+        if (options.keyUp.isDown() || options.keyDown.isDown() || options.keyLeft.isDown()
+                || options.keyRight.isDown()) held.add(HumanInput.MOVEMENT);
+        if (options.keyJump.isDown()) held.add(HumanInput.JUMP);
+        // Toggle mode reports the toggled state, not a held key: presses count instead.
+        if (!options.toggleCrouch().get() && options.keyShift.isDown()) held.add(HumanInput.SNEAK);
+        if (!options.toggleSprint().get() && options.keySprint.isDown()) held.add(HumanInput.SPRINT);
+        if (options.keyAttack.isDown()) held.add(HumanInput.ATTACK);
+        if (options.keyUse.isDown()) held.add(HumanInput.USE);
+        if (options.keyPickItem.isDown()) held.add(HumanInput.PICK_BLOCK);
+        return held;
+    }
+
+    /** Follow the bridge's attached controller: identity changes drop lockout and pause. */
+    private void syncPrecedence() {
+        BridgeServer server = bridge;
+        report(precedence.controller(server == null ? null : server.currentController()));
+    }
+
+    /** Act on and announce one precedence change (control event, log, notices). */
+    private void report(HumanPrecedence.Change change) {
+        if (change == null) return;
+        if (change.releasesAgent()) {
+            releaseControls("human_input", "human input paused agent control", false);
+        }
+        List<String> inputs = change.inputs().stream().map(HumanInput::wire).toList();
+        logNormal("Human precedence: mode {} paused {} cause {}{}", change.mode().wire(), change.paused(),
+                change.cause().wire(), inputs.isEmpty() ? "" : " inputs " + inputs);
+        if (change.cause() == HumanPrecedence.Cause.CONTROLLER_LOST) {
+            notifyControl("marionette.lockout.dropped", "marionette.lockout.dropped.detail", lockoutKey);
+        }
+        eventRecorder.control(change.mode().wire(), change.paused(), change.cause().wire(), inputs);
     }
 
     private void processSafety() {
@@ -359,6 +525,8 @@ public class MarionetteClient {
             demo = null;
             releaseControls();
         }
+        syncPrecedence();
+        report(precedence.tick(heldHumanInputs(), System.nanoTime()));
     }
 
     private void processCommands(LocalPlayer player) {
@@ -380,11 +548,17 @@ public class MarionetteClient {
     }
 
     private void applyCommand(BridgeServer.Received received, LocalPlayer player) {
+        // Human-priority pause (M5.1): actuation is discarded or refused; reads,
+        // release and configure keep working.
+        boolean paused = precedence.agentPaused();
         switch (received.command()) {
             case AgentCommand.InventoryAction inventory -> {
                 if (player == null) {
                     received.from().sendReliable(Messages.error(ErrorCode.INVENTORY_UNAVAILABLE, "no_world",
                             "no world is loaded", inventory.id(), inventory.raw()));
+                } else if (paused && !inventory.op().equals("inspect")) {
+                    received.from().sendReliable(Messages.error(ErrorCode.INVENTORY_UNAVAILABLE, "human_paused",
+                            "human input has paused agent control", inventory.id(), inventory.raw()));
                 } else {
                     inventoryApplier.apply(inventory, received.from()::sendReliable);
                 }
@@ -400,6 +574,11 @@ public class MarionetteClient {
             }
             case AgentCommand.Respawn respawn -> applyRespawn(respawn, player, received.from()::sendReliable);
             case AgentCommand.Chat chat -> applyChat(chat, player, received.from()::sendReliable);
+            case AgentCommand.InputUpdate update when paused -> { }
+            case AgentCommand.Look look when paused -> { }
+            case AgentCommand.LookDelta delta when paused -> { }
+            case AgentCommand.LookSmoothAngles smooth when paused -> { }
+            case AgentCommand.LookSmoothPoint smooth when paused -> { }
             case AgentCommand.InputUpdate update -> {
                 if (update.forward() != null) controlState.setForward(update.forward());
                 if (update.back() != null) controlState.setBack(update.back());
@@ -458,12 +637,14 @@ public class MarionetteClient {
     private void applyRespawn(AgentCommand.Respawn respawn, LocalPlayer player, Consumer<String> reply) {
         Minecraft minecraft = Minecraft.getInstance();
         String reason = player == null || minecraft.level == null ? "no_world"
+                : precedence.agentPaused() ? "human_paused"
                 : !player.isDeadOrDying() ? "not_dead"
                 : minecraft.level.getLevelData().isHardcore() ? "hardcore" : null;
         if (reason != null) {
             reply.accept(Messages.error(ErrorCode.RESPAWN_REFUSED, reason, switch (reason) {
                 case "no_world" -> "no world is loaded";
                 case "not_dead" -> "the player is alive";
+                case "human_paused" -> "human input has paused agent control";
                 default -> "hardcore worlds offer only spectating";
             }, respawn.id(), respawn.raw()));
             return;
@@ -480,6 +661,9 @@ public class MarionetteClient {
         ChatPolicy.Decision decision;
         if (player == null || minecraft.getConnection() == null) {
             decision = new ChatPolicy.Decision("no_world", "no world is loaded", null, null, null);
+        } else if (precedence.agentPaused()) {
+            decision = new ChatPolicy.Decision("human_paused", "human input has paused agent control",
+                    null, null, null);
         } else if (!minecraft.getChatStatus().isChatAllowed(minecraft.isLocalServer())) {
             decision = new ChatPolicy.Decision("client_restricted", "the game does not allow chat for this client",
                     null, null, null);
@@ -534,13 +718,22 @@ public class MarionetteClient {
 
     /** The safety rule: neutral ControlState, applier released, evidence logged. */
     private void releaseControls() {
-        inventoryApplier.cancel("released", "controls released");
-        scans.cancel("released", "controls released");
+        releaseControls("released", "controls released", true);
+    }
+
+    /**
+     * Release every agent actuator. A human-priority pause keeps a running
+     * block scan (it reads, it does not act) and cancels inventory work with
+     * reason human_input.
+     */
+    private void releaseControls(String inventoryReason, String message, boolean cancelScan) {
+        inventoryApplier.cancel(inventoryReason, message);
+        if (cancelScan) scans.cancel("released", message);
         cameraSmoother.cancel();
         controlState.releaseAll();
         applier.release();
         controlsEngaged = false;
-        logNormal("Controls released; vanilla input restored");
+        logNormal("Controls released ({}); vanilla input restored", message);
     }
 
     private void onClientTickPost(ClientTickEvent.Post event) {
@@ -648,6 +841,9 @@ public class MarionetteClient {
     private void onLoggingIn(ClientPlayerNetworkEvent.LoggingIn event) {
         inWorld = true;
         ticksInWorld = 0;
+        playerDead = false;
+        // A controller attached before joining reports its start state on the first sync.
+        precedence.forgetController();
         eventRecorder.startWorldSession(EventRecorder.newWorldSessionId());
         if (Boolean.getBoolean("marionette.demo")) {
             demo = new DemoScript(Boolean.getBoolean("marionette.demo.gui"));
@@ -668,6 +864,7 @@ public class MarionetteClient {
             return;
         }
         if (bridge != null) bridge.disconnectController("left world");
+        syncPrecedence(); // drops an engaged lockout now (local notice; no world left for events)
         inventoryApplier.cancel("world_exit", "left world", false);
         scans.cancel("world_exit", "left world");
         scanSource = null;
