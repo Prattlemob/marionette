@@ -7,7 +7,8 @@ of mod versions). MIT, confirmed by the project owner. The exact reviewed
 Install with `python -m pip install "marionette-mc==0.1.0a1"`; keep the explicit
 pin rather than silently accepting new prereleases. A fresh PyPI installation
 passed rendered observation, brief movement and release acceptance on 2026-10-03.
-For source development only, use `python -m pip install -e ./python`.
+From a checkout, `python -m pip install -e ./python` installs this unreleased
+source client, which the newer capabilities and their examples need.
 
 The owner approved this client-only alpha as a narrow exception to the
 project's authentication release gate. Mod and stable-release gates remain;

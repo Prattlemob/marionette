@@ -43,13 +43,13 @@ async def run(port, action, argument):
                 await asyncio.sleep(0.3)
             else:
                 await client.input(use=True)
-                async with asyncio.timeout(float(argument)):
-                    try:
+                try:  # asyncio.timeout raises TimeoutError when its block exits
+                    async with asyncio.timeout(float(argument)):
                         while True:
                             print(activity(await client.next_observation()), flush=True)
                             await asyncio.sleep(0.25)
-                    except TimeoutError:
-                        pass
+                except TimeoutError:
+                    pass
                 await client.input(use=False)
                 await asyncio.sleep(0.2)
                 print("released:", activity(await client.next_observation()))

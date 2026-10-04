@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 """Marionette M3.1 demo (protocol v2): the complete movement set.
 
-Runs every held control and the marquee combinations, measuring
-horizontal speed from observations so each mode is self-evident:
-walk -> sprint (faster) -> sneak (slower), strafes and back, then a
-single tap-jump vs a held bunny-hop, then a sprint-jump burst. Watch
-the rendered client while it runs; speeds print as blocks/second.
+Runs every held control, measuring horizontal speed from observations
+so each mode is self-evident: walk -> sprint (faster) -> sneak (slower),
+then strafes and back. Every hold is bounded: forward runs about 9 s
+across walk, sprint and sneak, each other leg 1.5 s. With --jumps it also
+runs a single tap-jump vs a held bunny-hop and a sprint-jump burst;
+without it the player never jumps. Watch the rendered client while it
+runs; speeds print as blocks/second. Needs about 35 blocks of open, flat
+ground ahead of the player.
 
 The sneak-to-edge safety check stays manual: stand the player near a
 drop, run with --sneak-edge, and the player must stop at the lip.
 
-Requires:  pip install "marionette-mc==0.1.0a1"
-Usage:     python full_movement.py [port] [--sneak-edge]   (default 24680)
+Works with the published client:  pip install "marionette-mc==0.1.0a1"
+Usage:     python examples/full_movement.py [port] [--jumps] [--sneak-edge]   (default 24680)
 """
 import asyncio
 import math
@@ -19,8 +22,9 @@ import sys
 
 from _common import connect
 
-args = [a for a in sys.argv[1:] if a != "--sneak-edge"]
+args = [a for a in sys.argv[1:] if not a.startswith("--")]
 SNEAK_EDGE = "--sneak-edge" in sys.argv
+JUMPS = "--jumps" in sys.argv
 PORT = int(args[0]) if args else 24680
 
 
@@ -104,6 +108,11 @@ async def main():
             await ws.input(**{key: False for key in fields})
             print(f"{name}: {speed:.2f} b/s")
             await asyncio.sleep(0.5)
+
+        if not JUMPS:
+            await ws.release()
+            print("released (jump legs skipped; pass --jumps to run them)")
+            return
 
         print("tap jump:", end=" ", flush=True)
         await ws.input(tap=["jump"])

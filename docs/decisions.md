@@ -1744,3 +1744,55 @@ Not established: physical (non-synthetic) keys, which need the owner;
 multiplayer servers; HUD legibility at other GUI scales or window sizes than
 the development window (854×480, automatic scale). M3.3's physical alt-tab and
 animation acceptance and the M5.1 owner-review items remain separate debt.
+
+## M9.1 implementation and verification (2026-10-04)
+
+M9.1 is documentation and examples only: no wire, capability or mod-code
+change, and the protocol stays 2. The README gained a quickstart (clone →
+`runClient` → superflat creative world → venv → `probe.py`/`walk_square.py`),
+the safety keys and a configuration summary; the full config listing moved to
+`docs/configuration.md`. New design notes: `docs/threading.md`,
+`docs/safety-model.md` (linking the idle-safe state machine) and
+`docs/protocol-evolution.md`, which carries the protocol finalization checklist.
+The examples form one set: probe, dashboard, walk-square and the scripted
+reference agent (`reference_agent.py`: block scan → choose the longest walkable
+cardinal direction → smoothed turn, bounded walk out and back, look at the
+nearest entity; stops on a human pause or panic `control` event; no AI, no
+jumping), plus labelled feature demos. Fixes: `walk_square.py` bounds each side
+(3 s, stops when blocked); `full_movement.py` jumps only with `--jumps`;
+`gameplay.py hold-use` no longer escapes with `TimeoutError`.
+
+`./gradlew build` passed with 405 tests (unchanged). The in-repository Python
+client passed on 3.11 and 3.14 (86 tests, mypy strict clean); nothing in it
+changed and nothing was published.
+
+**Fresh-environment walkthrough.** Following only the README in a clean
+environment (empty HOME and XDG directories, a new Gradle user home and
+`user.home`, a fresh clone and venv; JDK 21, Python 3.14 and the desktop session
+inherited) on Linux/KDE Wayland. The clone URL was replaced by the local branch,
+and the README's manual steps were performed through a temporary fixture
+outside the repository (widget clicks through the screen's own handlers; F3+P
+through vanilla's F3-combination handler, because vanilla polls the physical F3
+key). Defects found and fixed in the README: the client crashes at startup on
+Wayland in NeoForge's early loading window (`GLFW error 65548`; fixed by
+`earlyWindowControl = false` in `run/config/fml.toml`, the setting the
+project's own runtime already used), Minecraft's first-start accessibility
+screen, and Singleplayer opening Create New World directly when no world exists.
+The final pass from a fresh clone of the fixed README reached a completed
+square in 2 min 50 s (first run downloads 1.2 GB): four 5.1-block sides,
+finished 0.0 blocks from the start, longest hold 1.2 s, no jump input, the HUD
+showing `connected` and `Held: forward`; F8 latched and F9 re-armed.
+
+**Examples.** Every example ran against the locally built mod in a rendered
+client on an isolated copy of the test world: the in-repository client for all,
+and the published 0.1.0a1 for each example labelled for it (probe, dashboard,
+walk-square with observer, full movement without jumps, look points, interact,
+inventory with a chest). `events.py` logged damage, death, respawn, item
+pickup, chat, blocks broken, dimension changes and `control` changes; the
+published client rejects `events.py`'s subscription as documented. Not run: the
+`--jumps` legs (owner objection to jumping) and the manual `--sneak-edge` check.
+
+Gated and not done: tagging `protocol/` (needs the owner's authorization; the
+checklist is prepared) and verification against a released jar (no release is
+authorized; the locally built jar was used). Still open: M3.3 visual/alt-tab
+acceptance and the D25 owner-review and physical-input items.

@@ -3,7 +3,7 @@
 
 Needs the in-repository client (pip install -e ./python); the published
 0.1.0a1 alpha cannot select the inventory section.
-Usage: python examples/inventory_view.py [port] [--once]
+Usage: python examples/inventory_view.py [port] [--once] [--json]
 Pick up, eat, move items or open a chest to watch the view change.
 """
 import asyncio

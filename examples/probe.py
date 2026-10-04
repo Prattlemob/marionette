@@ -5,8 +5,8 @@ Connects, performs the hello handshake, watches observations for a second,
 holds `forward` for 0.2 seconds and releases it, then demonstrates the
 `configure` message by slowing the observation stream to every 10th tick.
 
-Requires:  pip install "marionette-mc==0.1.0a1"
-Usage:     python probe.py [port]     (default 24680)
+Works with the published client:  pip install "marionette-mc==0.1.0a1"
+Usage:     python examples/probe.py [port]     (default 24680)
 """
 import asyncio
 import sys

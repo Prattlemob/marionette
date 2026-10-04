@@ -997,10 +997,26 @@ Items:
 
 Items:
 
-- [ ] README quickstart (install → config → run example)
-- [ ] `docs/`: threading, safety, protocol-evolution notes
-- [ ] `protocol/` finalized as v1 and tagged
-- [ ] Examples verified against the released jar
+- [x] README quickstart (install → config → run example)
+- [x] `docs/`: threading, safety, protocol-evolution notes
+      ([threading](docs/threading.md), [safety model](docs/safety-model.md),
+      [protocol evolution](docs/protocol-evolution.md))
+- [ ] `protocol/` finalized as v1 and tagged — **gated**: tags need the owner's
+      authorization; the [finalization checklist](docs/protocol-evolution.md#finalization-checklist-not-yet-authorized)
+      is prepared (the release protocol is the integer 2)
+- [ ] Examples verified against the released jar — **gated**: no mod release is
+      authorized; every example was verified against the locally built jar instead
+
+Verification (2026-10-04): a fresh-environment walkthrough following only the
+README (clean HOME, Gradle home and venv, fresh clone) reached the scripted
+square walk in a rendered superflat world in under three minutes, after fixing
+the README defects it found; every example ran against the locally built mod.
+See the [M9.1 record](docs/decisions.md#m91-implementation-and-verification-2026-10-04).
+Examples are coherent and labelled by client: probe, dashboard, walk-square and
+the movement, camera, interaction and inventory demos work with the published
+0.1.0a1; the reference agent and newer-capability demos need the in-repository
+client, which is not published. M3.3 visual/alt-tab debt and the M5.1
+owner-review items remain open.
 
 ### M9.2 — Packaging & publication
 
