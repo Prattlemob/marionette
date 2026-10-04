@@ -173,6 +173,58 @@ dependencies {
     }
 }
 
+// M3.5 compatibility testing only (D19): a third-party storage mod for the
+// development client. Never bundled, published, compiled against or required.
+// `./gradlew installStorageCompatMod` copies the pinned, checksum-verified jar
+// into the ignored run/mods; `removeStorageCompatMod` deletes it again.
+repositories {
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'Modrinth'
+                url = 'https://api.modrinth.com/maven'
+            }
+        }
+        filter { includeGroup 'maven.modrinth' }
+    }
+}
+
+configurations {
+    storageCompatMod {
+        canBeConsumed = false
+        transitive = false
+    }
+}
+
+dependencies {
+    // Iron Chests (GPL-3.0-only) by progwml6, from the official Modrinth project.
+    storageCompatMod 'maven.modrinth:iron-chests:1.21.7-neoforge-16.5.4'
+}
+
+def storageCompatSha256 = '6e9f9add5556ea1357675ebc8b931d59b1fcf01b3e97d76d87200546e7052582'
+
+tasks.register('installStorageCompatMod', Copy) {
+    group = 'verification'
+    description = 'Installs the pinned M3.5 test-only storage mod into run/mods (never shipped).'
+    def jars = configurations.storageCompatMod
+    from jars
+    into layout.projectDirectory.dir('run/mods')
+    doFirst {
+        jars.each { jar ->
+            def actual = java.security.MessageDigest.getInstance('SHA-256').digest(jar.bytes).encodeHex().toString()
+            if (actual != storageCompatSha256) {
+                throw new GradleException("${jar.name}: SHA-256 ${actual} does not match the pinned ${storageCompatSha256}")
+            }
+        }
+    }
+}
+
+tasks.register('removeStorageCompatMod', Delete) {
+    group = 'verification'
+    description = 'Removes the M3.5 test-only storage mod from run/mods.'
+    delete fileTree(layout.projectDirectory.dir('run/mods')) { include 'iron-chests-*.jar' }
+}
+
 tasks.named('test', Test) {
     useJUnitPlatform()
     testLogging {

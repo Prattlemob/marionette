@@ -41,7 +41,17 @@ class CapacityError(ClientError):
 class ServerError(ClientError):
     def __init__(self, error: Error):
         self.error = error
-        super().__init__(f"{error['code']}: {error['message']}")
+        reason = error.get("reason")
+        super().__init__(f"{error['code']}{f' ({reason})' if reason else ''}: {error['message']}")
+
+    @property
+    def code(self) -> str:
+        return self.error["code"]
+
+    @property
+    def reason(self) -> str | None:
+        """Machine-readable inventory rejection reason (``inventoryStorage``), if sent."""
+        return self.error.get("reason")
 
 
 @dataclass(frozen=True)

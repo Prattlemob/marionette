@@ -3,10 +3,10 @@ import json
 from pathlib import Path
 import unittest
 
-from marionette_mc import CapabilityError, connect
+from marionette_mc import CapabilityError, ServerError, connect
 from marionette_mc.messages import InvalidMessage, decode
 
-from test_client import HELLO, endpoint, idle
+from test_client import HELLO, endpoint, idle, send
 
 FIXTURE = json.loads((Path(__file__).parent / 'fixtures/protocol2.json').read_text())
 
@@ -38,6 +38,26 @@ class InventoryDecodeTests(unittest.TestCase):
         future['menu']['slots'][0]['futureDetail'] = {'x': 1}
         self.assertEqual(decode(json.dumps(future))['menu']['slots'][0]['futureDetail'], {'x': 1})
 
+    def test_storage_support_and_future_support_values(self):
+        furnace = next(m for m in FIXTURE['messages'] if m.get('id') == 'furnace')['menu']
+        self.assertEqual(furnace['support'], {'scope': None, 'reasons': ['menu_data', 'slot_behavior']})
+        self.assertEqual(fixture_observation()['inventory']['menu']['support']['scope'], 'storage')
+        future = json.loads(json.dumps(furnace))
+        future['support'] = {'scope': None, 'reasons': ['future_rule'], 'detail': 1}
+        frame = {'type': 'inventory_result', 'op': 'inspect', 'menu': future}
+        self.assertEqual(decode(json.dumps(frame))['menu']['support']['reasons'], ['future_rule'])
+        for bad in ({'scope': 1, 'reasons': []}, {'scope': 'storage'}, {'scope': None, 'reasons': 'x'}):
+            frame['menu']['support'] = bad
+            with self.subTest(support=bad), self.assertRaises(InvalidMessage):
+                decode(json.dumps(frame))
+
+    def test_rejection_reasons_decode_and_are_optional(self):
+        errors = [m for m in FIXTURE['messages'] if m['type'] == 'error']
+        self.assertEqual([e.get('reason') for e in errors],
+                         ['released', 'destination_rejects', 'unsupported_menu', None])
+        with self.assertRaises(InvalidMessage):
+            decode(json.dumps({**errors[1], 'reason': 3}))
+
     def test_minimal_descriptors_from_older_mods_still_decode(self):
         old = {'type': 'inventory_result', 'op': 'inspect', 'menu': {
             'type': 'minecraft:inventory', 'containerId': 0, 'stateId': 1,
@@ -57,6 +77,24 @@ class InventoryDecodeTests(unittest.TestCase):
 
 
 class InventoryCapabilityTests(unittest.IsolatedAsyncioTestCase):
+    async def test_server_error_exposes_rejection_reason(self):
+        async def handler(ws, request):
+            for code, reason in (('inventory_impossible', 'destination_full'), ('inventory_busy', None)):
+                command = json.loads(await ws.recv())
+                await send(ws, type='error', code=code, message='no', id=command['id'],
+                           **({'reason': reason} if reason else {}))
+            await ws.wait_closed()
+        async with endpoint(handler) as uri:
+            async with connect(uri) as client:
+                with self.assertRaises(ServerError) as full:
+                    await client.inventory('inspect')
+                self.assertEqual((full.exception.code, full.exception.reason), ('inventory_impossible', 'destination_full'))
+                self.assertIn('(destination_full)', str(full.exception))
+                with self.assertRaises(ServerError) as busy:
+                    await client.inventory('inspect')
+                self.assertIsNone(busy.exception.reason)
+
+
     async def test_inventory_section_requires_inventory_state(self):
         old = {**HELLO, 'capabilities': {k: v for k, v in HELLO['capabilities'].items() if k != 'inventoryState'}}
         async with endpoint(idle, old) as uri:

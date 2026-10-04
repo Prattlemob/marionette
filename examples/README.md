@@ -13,7 +13,8 @@ joined a world.
   published 0.1.0a1 alpha has no event support. Run `python examples/events.py [port]`.
 - `inventory_view.py` — M4.2: read-only held item, hotbar, main inventory,
   armor, offhand and the open menu (type, D8 slot addresses, carried stack,
-  supported operations or refusal) from the `inventory` section. Needs the
+  supported operations or refusal, and with `inventoryStorage` the menu's
+  storage support or the rules it failed) from the `inventory` section. Needs the
   in-repository client; the published 0.1.0a1 alpha cannot select that section.
   Run `python examples/inventory_view.py [port]`; `--once` prints one frame and
   `--json` prints raw frames.
@@ -67,8 +68,11 @@ With cheats enabled, `/clear @s` followed by these commands sets up the items
 
 For `--chest`, point at a reachable, closed chest with an empty slot before
 starting. After the inventory sequence the example taps normal use, waits for
-the chest menu, and moves the remaining dirt into its first empty container
-slot using the same generic move command. A dropped item may be picked up
+a storage menu, and moves the remaining dirt into its first empty container
+slot using the same generic move command. With a mod advertising
+`inventoryStorage`, any menu reported as `support.scope == "storage"` counts,
+including modded storage; a refusal prints its rejection `reason` (for
+example `destination_rejects` for a restricted slot). A dropped item may be picked up
 again if the player stands on it. The script reports errors rather than blindly
 retrying mutations. Responses reflect client prediction; server synchronization
 can still correct them. Full wire rules: [protocol/v1.md](../protocol/v1.md#inventory--menu-addressed-inventory-actions).

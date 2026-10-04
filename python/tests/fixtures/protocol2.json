@@ -232,7 +232,8 @@
         "inventory": true,
         "inventoryAnimation": true,
         "events": true,
-        "inventoryState": true
+        "inventoryState": true,
+        "inventoryStorage": true
       },
       "mod": "0.1.0",
       "id": "hello-fixture"
@@ -532,7 +533,11 @@
             "drop",
             "close"
           ],
-          "refusal": null
+          "refusal": null,
+          "support": {
+            "scope": "storage",
+            "reasons": []
+          }
         }
       }
     },
@@ -595,7 +600,14 @@
           "count": 4
         },
         "operations": [],
-        "refusal": "unsupported_menu"
+        "refusal": "unsupported_menu",
+        "support": {
+          "scope": null,
+          "reasons": [
+            "menu_data",
+            "slot_behavior"
+          ]
+        }
       }
     },
     {
@@ -634,7 +646,11 @@
           "close"
         ],
         "refusal": null,
-        "reduced": true
+        "reduced": true,
+        "support": {
+          "scope": "player",
+          "reasons": []
+        }
       }
     },
     {
@@ -648,7 +664,24 @@
       "code": "inventory_cancelled",
       "message": "cancelled",
       "id": "late",
-      "input": "{\"type\":\"release\"}"
+      "input": "{\"type\":\"release\"}",
+      "reason": "released"
+    },
+    {
+      "type": "error",
+      "code": "inventory_impossible",
+      "message": "destination forbids this item",
+      "id": "dirt",
+      "input": "{\"type\":\"inventory\",\"id\":\"dirt\",\"op\":\"move\"}",
+      "reason": "destination_rejects"
+    },
+    {
+      "type": "error",
+      "code": "inventory_unavailable",
+      "message": "menu failed the storage analysis: [menu_data, slot_behavior]",
+      "id": "furnace-move",
+      "input": "{\"type\":\"inventory\",\"id\":\"furnace-move\",\"op\":\"move\"}",
+      "reason": "unsupported_menu"
     },
     {
       "type": "error",

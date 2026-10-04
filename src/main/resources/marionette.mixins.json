@@ -9,6 +9,7 @@
     "MinecraftInteractionMixin",
     "InventoryCursorMixin",
     "InventoryHoverAccess",
+    "MenuDataAccess",
     "ClientPacketListenerEventsMixin",
     "LocalPlayerHealthMixin",
     "MultiPlayerGameModeEventsMixin"

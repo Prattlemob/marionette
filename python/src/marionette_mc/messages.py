@@ -93,12 +93,29 @@ class Stack(TypedDict):
 SlotRefusal = Literal["crafting", "inactive", "bundle"]
 MenuRefusal = Literal["player_unavailable", "unsupported_menu", "busy", "cursor_occupied"]
 MutatingOperation = Literal["move", "swap", "equip", "drop", "close"]
+SupportScope = Literal["player", "storage"]
+SupportReason = Literal["click_behavior", "menu_data", "slot_behavior", "shared_slots"]
+RejectionReason = Literal[
+    "no_world", "player_unavailable", "screen_open", "no_menu", "unsupported_menu",
+    "cursor_occupied", "slot_out_of_range", "alias_absent", "same_slot", "slot_refused",
+    "source_empty", "source_locked", "destination_mismatch", "destination_locked",
+    "destination_rejects", "destination_full", "source_rejects", "source_full",
+    "not_armor", "armor_occupied", "armor_count", "drop_forbidden", "unexpected_click",
+    "released", "human_input", "menu_changed", "contents_changed", "world_exit"]
 
 
 class Slot(Stack):
     slot: int
     alias: NotRequired[str]
     refused: NotRequired[str]
+
+
+class MenuSupport(TypedDict):
+    """Mutation support (``inventoryStorage``). ``scope`` is ``SupportScope`` or ``None``
+    (never mutated); ``reasons`` lists failed rules, known values ``SupportReason``.
+    Both are open strings so a future value does not end the session."""
+    scope: str | None
+    reasons: list[str]
 
 
 class MenuRef(TypedDict):
@@ -119,6 +136,7 @@ class Menu(MenuRef):
     slotCount: NotRequired[int]
     operations: NotRequired[list[str]]
     refusal: NotRequired[str | None]
+    support: NotRequired[MenuSupport]
     reduced: NotRequired[bool]
     truncated: NotRequired[bool]
 
@@ -161,6 +179,7 @@ class Error(Envelope):
     message: str
     input: NotRequired[str]
     supported: NotRequired[list[int]]
+    reason: NotRequired[str]  # inventory rejection reason (inventoryStorage); see RejectionReason
 
 
 class InputFields(TypedDict, total=False):

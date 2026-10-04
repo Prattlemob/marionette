@@ -176,7 +176,7 @@ public class MarionetteClient {
     }
 
     private void onInventoryMousePress(ScreenEvent.MouseButtonPressed.Pre event) {
-        inventoryApplier.cancel("human mouse input");
+        inventoryApplier.cancel("human_input", "human mouse input");
     }
 
     private void onInventoryKeyPress(ScreenEvent.KeyPressed.Pre event) {
@@ -184,11 +184,11 @@ public class MarionetteClient {
             panic();
             event.setCanceled(true);
         }
-        inventoryApplier.cancel("human keyboard input");
+        inventoryApplier.cancel("human_input", "human keyboard input");
     }
 
     private void onInventoryScroll(ScreenEvent.MouseScrolled.Pre event) {
-        inventoryApplier.cancel("human scroll input");
+        inventoryApplier.cancel("human_input", "human scroll input");
     }
 
     /** Configs are loaded by client setup; start the bridge on the main thread. */
@@ -218,7 +218,7 @@ public class MarionetteClient {
     }
 
     private void onGameShuttingDown(GameShuttingDownEvent event) {
-        inventoryApplier.cancel("game shutting down", false);
+        inventoryApplier.cancel("world_exit", "game shutting down", false);
         // Ordering rule (docs/decisions.md, M2.3): controls release before the
         // bridge stops. Inert in practice (ticks have stopped) but explicit.
         if (controlsEngaged) {
@@ -362,7 +362,7 @@ public class MarionetteClient {
         switch (received.command()) {
             case AgentCommand.InventoryAction inventory -> {
                 if (player == null) {
-                    received.from().sendReliable(Messages.error(ErrorCode.INVENTORY_UNAVAILABLE,
+                    received.from().sendReliable(Messages.error(ErrorCode.INVENTORY_UNAVAILABLE, "no_world",
                             "no world is loaded", inventory.id(), inventory.raw()));
                 } else {
                     inventoryApplier.apply(inventory, received.from()::sendReliable);
@@ -455,7 +455,7 @@ public class MarionetteClient {
 
     /** The safety rule: neutral ControlState, applier released, evidence logged. */
     private void releaseControls() {
-        inventoryApplier.cancel("controls released");
+        inventoryApplier.cancel("released", "controls released");
         cameraSmoother.cancel();
         controlState.releaseAll();
         applier.release();
@@ -568,7 +568,7 @@ public class MarionetteClient {
             return;
         }
         if (bridge != null) bridge.disconnectController("left world");
-        inventoryApplier.cancel("left world", false);
+        inventoryApplier.cancel("world_exit", "left world", false);
         eventRecorder.endWorldSession();
         inWorld = false;
         demo = null;

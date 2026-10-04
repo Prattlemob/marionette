@@ -34,6 +34,7 @@ public final class Messages {
         capabilities.addProperty("inventoryAnimation", true);
         capabilities.addProperty("events", true);
         capabilities.addProperty("inventoryState", true);
+        capabilities.addProperty("inventoryStorage", true);
         reply.add("capabilities", capabilities);
         reply.addProperty("mod", modVersion);
         return reply.toString();
@@ -50,6 +51,13 @@ public final class Messages {
 
     public static String error(ErrorCode code, String message, JsonPrimitive id, String offendingInput) {
         return errorObject(code, message, id, offendingInput).toString();
+    }
+
+    /** An inventory error carrying a machine-readable {@code reason} ({@code inventoryStorage}). */
+    public static String error(ErrorCode code, String reason, String message, JsonPrimitive id, String offendingInput) {
+        JsonObject error = errorObject(code, message, id, offendingInput);
+        if (reason != null) error.addProperty("reason", reason);
+        return error.toString();
     }
 
     public static String unsupportedVersionError(List<Integer> supported, JsonPrimitive id, String offendingInput) {

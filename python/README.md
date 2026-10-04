@@ -67,6 +67,12 @@ ignore environment proxies. Current local trust has no authentication.
   animated=False, timeout=...)` supports open/inspect/move/swap/equip/drop/close.
   Obtain `menu_ref(result["menu"])` from a recent inspect before mutations.
   Results describe client prediction, not authoritative server acknowledgment.
+  With `inventoryStorage`, menu descriptors carry `support` (`messages.MenuSupport`:
+  scope `"player"`, `"storage"` or `None` with the failed rules), so modded
+  storage that passes the mod's storage analysis is mutable, and refusals carry
+  a machine-readable `ServerError.reason` (`messages.RejectionReason`, for example
+  `destination_full` or `destination_rejects`). Both are in the repository
+  source only; the published 0.1.0a1 alpha keeps the new fields undecoded.
 - `connect(..., events=True)` subscribes in hello (requires the `events`
   capability); `configure(events=True | False)` changes it later.
   `next_event(timeout=...)` / `events()` consume events in `seq` order from a

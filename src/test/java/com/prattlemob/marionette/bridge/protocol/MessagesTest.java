@@ -92,6 +92,23 @@ class MessagesTest {
     }
 
     @Test
+    void helloReplyAdvertisesInventoryStorageCapability() {
+        assertTrue(parse(Messages.helloReply(2, "0.1.0", null)).getAsJsonObject("capabilities")
+                .get("inventoryStorage").getAsBoolean());
+    }
+
+    @Test
+    void inventoryErrorsCarryAnAdditiveReason() {
+        JsonObject error = parse(Messages.error(ErrorCode.INVENTORY_IMPOSSIBLE, "destination_rejects",
+                "destination forbids this item", new JsonPrimitive("m"), "{}"));
+        assertEquals("inventory_impossible", error.get("code").getAsString());
+        assertEquals("destination_rejects", error.get("reason").getAsString());
+        assertEquals("m", error.get("id").getAsString());
+        assertFalse(parse(Messages.error(ErrorCode.INVENTORY_BUSY, null, "busy", null, null)).has("reason"));
+        assertFalse(parse(Messages.error(ErrorCode.INVALID_JSON, "malformed JSON", null, null)).has("reason"));
+    }
+
+    @Test
     void helloReplyAdvertisesCameraCapability() {
         JsonObject reply = JsonParser.parseString(
                 Messages.helloReply(1, "0.1.0", null)).getAsJsonObject();
