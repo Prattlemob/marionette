@@ -986,6 +986,45 @@ class BridgeServerTest {
         assertTrue(observer.awaitMessage().contains("7"));
     }
 
+    /**
+     * A flooding peer still has input in flight when it is closed. Closing that
+     * socket outright resets it, and a client whose next write then fails (the
+     * JDK client, for one) drops the error and close frames it already holds.
+     * The peer must be able to keep writing until it has read the close.
+     */
+    @Test
+    void floodingPeerIsNotResetBeforeItReadsTheClose() throws Exception {
+        try (var socket = silentClient(server.port(), HELLO)) {
+            assertEquals(0x1, answerFrame(socket)); // hello reply
+            byte[] frame = "{\"type\":\"input\",\"forward\":true}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            var flood = new java.io.ByteArrayOutputStream();
+            for (int i = 0; i < 200; i++) {
+                flood.write(0x81); flood.write(0x80 | frame.length); flood.write(new byte[4]); flood.write(frame);
+            }
+            var closeRead = new java.util.concurrent.atomic.AtomicBoolean();
+            var resetFirst = new CompletableFuture<Exception>();
+            Thread writer = new Thread(() -> {
+                try {
+                    while (!closeRead.get()) { socket.getOutputStream().write(flood.toByteArray()); Thread.sleep(1); }
+                } catch (Exception reset) { if (!closeRead.get()) resetFirst.complete(reset); }
+            });
+            writer.start();
+            await(() -> !server.hasController());
+            Thread.sleep(50); // a slow reader: the frames are already written
+            var in = new java.io.DataInputStream(socket.getInputStream());
+            assertEquals(0x81, in.readUnsignedByte());
+            byte[] error = in.readNBytes(in.readUnsignedByte() & 0x7F);
+            assertEquals("overloaded", JsonParser.parseString(new String(error, java.nio.charset.StandardCharsets.UTF_8))
+                    .getAsJsonObject().get("code").getAsString());
+            assertEquals(0x88, in.readUnsignedByte());
+            in.readUnsignedByte();
+            assertEquals(1013, in.readUnsignedShort());
+            closeRead.set(true);
+            writer.join(5000);
+            assertFalse(resetFirst.isDone(), () -> "reset before the close was read: " + resetFirst.join());
+        }
+    }
+
     @Test
     void releaseInvalidatesAlreadyPolledWorkAndBypassesFullQueue() throws Exception {
         TestClient client = connectAndHello();

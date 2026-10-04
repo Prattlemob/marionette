@@ -549,6 +549,7 @@ public final class BridgeServer {
             if (connection == null) {
                 return; // frame raced the handshake-complete event; nothing to do
             }
+            if (connection.closing()) return; // drained only so the close is not a reset
             if (frame instanceof PongWebSocketFrame) {
                 connection.recordPong();
                 Role pongRole = connection.role();
