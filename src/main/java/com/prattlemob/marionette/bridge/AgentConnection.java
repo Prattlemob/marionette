@@ -19,7 +19,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.socket.DuplexChannel;
 import io.netty.handler.codec.http.websocketx.CloseWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import java.util.concurrent.TimeUnit;
@@ -114,19 +114,30 @@ public final class AgentConnection {
         if (!closing.get() && !writeText(json)) close(1013, "overloaded");
     }
 
-    /** Invalidate immediately; flushing a courtesy close must never delay safety. */
+    /**
+     * Invalidate immediately; flushing a courtesy close must never delay safety.
+     * After the close frame, only the output is shut down and later input is
+     * discarded until the peer closes or the 250 ms flush bound expires. Closing
+     * a socket that still receives input (a flooding peer) resets it, and a
+     * client whose next write fails may drop the error and close frames it holds.
+     */
     void close(int code, String reason) {
         if (!closing.compareAndSet(false, true)) return;
         invalidate();
         channel.eventLoop().execute(() -> {
             session.close();
             if (channel.isWritable()) {
-                channel.writeAndFlush(new CloseWebSocketFrame(code, reason))
-                        .addListener(ChannelFutureListener.CLOSE);
+                channel.writeAndFlush(new CloseWebSocketFrame(code, reason)).addListener(future -> {
+                    if (future.isSuccess() && channel instanceof DuplexChannel duplex) duplex.shutdownOutput();
+                    else channel.close();
+                });
                 channel.eventLoop().schedule(() -> { channel.close(); }, 250, TimeUnit.MILLISECONDS);
             } else channel.close();
         });
     }
+
+    /** Whether this connection is closing; its remaining input is discarded. */
+    boolean closing() { return closing.get(); }
 
     synchronized void invalidate() {
         ready = false;
