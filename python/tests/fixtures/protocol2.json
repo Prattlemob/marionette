@@ -20,6 +20,19 @@
         "versions": [
           2
         ],
+        "role": "observer",
+        "sections": [
+          "inventory"
+        ]
+      }
+    },
+    {
+      "javaType": "Hello",
+      "wire": {
+        "type": "hello",
+        "versions": [
+          2
+        ],
         "role": "controller",
         "events": true
       }
@@ -80,6 +93,16 @@
         "y": 64.0,
         "z": -2.0,
         "id": "point"
+      }
+    },
+    {
+      "javaType": "Configure",
+      "wire": {
+        "type": "configure",
+        "sections": [
+          "player",
+          "inventory"
+        ]
       }
     },
     {
@@ -208,7 +231,8 @@
         "interact": true,
         "inventory": true,
         "inventoryAnimation": true,
-        "events": true
+        "events": true,
+        "inventoryState": true
       },
       "mod": "0.1.0",
       "id": "hello-fixture"
@@ -258,6 +282,261 @@
       "tick": 1235
     },
     {
+      "type": "observation",
+      "tick": 1300,
+      "inventory": {
+        "selected": 0,
+        "mainHand": {
+          "item": "minecraft:diamond_sword",
+          "count": 1,
+          "damage": 12,
+          "maxDamage": 1561,
+          "name": "Edge",
+          "enchantments": [
+            {
+              "id": "minecraft:sharpness",
+              "level": 3
+            },
+            {
+              "id": "minecraft:unbreaking",
+              "level": 2
+            }
+          ]
+        },
+        "hotbar": [
+          {
+            "item": "minecraft:diamond_sword",
+            "count": 1,
+            "damage": 12,
+            "maxDamage": 1561,
+            "name": "Edge",
+            "enchantments": [
+              {
+                "id": "minecraft:sharpness",
+                "level": 3
+              },
+              {
+                "id": "minecraft:unbreaking",
+                "level": 2
+              }
+            ]
+          },
+          {
+            "item": "minecraft:bread",
+            "count": 5
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          }
+        ],
+        "main": [
+          {
+            "item": "minecraft:enchanted_book",
+            "count": 1,
+            "storedEnchantments": [
+              {
+                "id": "minecraft:mending",
+                "level": 1
+              }
+            ]
+          },
+          {
+            "item": "minecraft:potion",
+            "count": 1,
+            "potion": "minecraft:healing"
+          },
+          {
+            "item": "minecraft:name_tag",
+            "count": 1,
+            "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "nameTruncated": true
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0
+          }
+        ],
+        "armor": {
+          "head": {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          "chest": {
+            "item": "minecraft:iron_chestplate",
+            "count": 1,
+            "damage": 0,
+            "maxDamage": 240
+          },
+          "legs": {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          "feet": {
+            "item": "minecraft:air",
+            "count": 0
+          }
+        },
+        "offhand": {
+          "item": "minecraft:shield",
+          "count": 1,
+          "damage": 3,
+          "maxDamage": 336
+        },
+        "menu": {
+          "type": "minecraft:generic_9x3",
+          "containerId": 4,
+          "stateId": 7,
+          "slotCount": 63,
+          "slots": [
+            {
+              "item": "minecraft:cobblestone",
+              "count": 32,
+              "slot": 0
+            },
+            {
+              "item": "minecraft:air",
+              "count": 0,
+              "slot": 1
+            },
+            {
+              "item": "minecraft:bread",
+              "count": 5,
+              "slot": 28,
+              "alias": "hotbar.1"
+            }
+          ],
+          "carried": {
+            "item": "minecraft:air",
+            "count": 0
+          },
+          "operations": [
+            "move",
+            "swap",
+            "drop",
+            "close"
+          ],
+          "refusal": null
+        }
+      }
+    },
+    {
       "type": "inventory_result",
       "id": "inspect",
       "op": "inspect",
@@ -277,6 +556,85 @@
           "item": "minecraft:air",
           "count": 0
         }
+      }
+    },
+    {
+      "type": "inventory_result",
+      "id": "furnace",
+      "op": "inspect",
+      "menu": {
+        "type": "minecraft:furnace",
+        "containerId": 5,
+        "stateId": 2,
+        "slotCount": 39,
+        "slots": [
+          {
+            "item": "minecraft:raw_iron",
+            "count": 3,
+            "slot": 0
+          },
+          {
+            "item": "minecraft:coal",
+            "count": 8,
+            "slot": 1
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0,
+            "slot": 2
+          },
+          {
+            "item": "minecraft:dirt",
+            "count": 16,
+            "slot": 3,
+            "alias": "main.0"
+          }
+        ],
+        "carried": {
+          "item": "minecraft:torch",
+          "count": 4
+        },
+        "operations": [],
+        "refusal": "unsupported_menu"
+      }
+    },
+    {
+      "type": "inventory_result",
+      "id": "inv",
+      "op": "inspect",
+      "menu": {
+        "type": "minecraft:inventory",
+        "containerId": 0,
+        "stateId": 3,
+        "slotCount": 46,
+        "slots": [
+          {
+            "item": "minecraft:air",
+            "count": 0,
+            "slot": 0,
+            "refused": "crafting"
+          },
+          {
+            "item": "minecraft:bundle",
+            "count": 1,
+            "slot": 36,
+            "alias": "hotbar.0",
+            "refused": "bundle"
+          }
+        ],
+        "carried": {
+          "item": "minecraft:air",
+          "count": 0
+        },
+        "operations": [
+          "move",
+          "swap",
+          "equip",
+          "drop",
+          "close"
+        ],
+        "refusal": null,
+        "reduced": true
       }
     },
     {
@@ -316,6 +674,16 @@
         "type": "configure",
         "sections": [
           "world"
+        ]
+      },
+      "code": "invalid_field"
+    },
+    {
+      "wire": {
+        "type": "configure",
+        "sections": [
+          "inventory",
+          "target"
         ]
       },
       "code": "invalid_field"

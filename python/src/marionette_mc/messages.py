@@ -6,7 +6,7 @@ from typing import Literal, NotRequired, TypedDict, Union, cast, get_args, get_o
 
 PROTOCOL_VERSION = 2
 Role = Literal["controller", "observer"]
-Section = Literal["player"]
+Section = Literal["player", "inventory"]
 Tap = Literal["jump", "attack", "use"]
 Operation = Literal["open", "inspect", "move", "swap", "equip", "drop", "close"]
 RequestId = str | int | float
@@ -70,20 +70,35 @@ class Player(Vector):
     effects: list[Effect]
 
 
-class Observation(TypedDict):
-    type: Literal["observation"]
-    tick: int
-    player: NotRequired[Player]
+class Enchantment(TypedDict):
+    id: str
+    level: int
 
 
 class Stack(TypedDict):
+    """``item``/``count`` always; the enumerated extras only when present (``inventoryState``)."""
     item: str
     count: int
+    damage: NotRequired[int]
+    maxDamage: NotRequired[int]
+    name: NotRequired[str]
+    nameTruncated: NotRequired[bool]
+    enchantments: NotRequired[list[Enchantment]]
+    enchantmentsTruncated: NotRequired[bool]
+    storedEnchantments: NotRequired[list[Enchantment]]
+    storedEnchantmentsTruncated: NotRequired[bool]
+    potion: NotRequired[str]
+
+
+SlotRefusal = Literal["crafting", "inactive", "bundle"]
+MenuRefusal = Literal["player_unavailable", "unsupported_menu", "busy", "cursor_occupied"]
+MutatingOperation = Literal["move", "swap", "equip", "drop", "close"]
 
 
 class Slot(Stack):
     slot: int
     alias: NotRequired[str]
+    refused: NotRequired[str]
 
 
 class MenuRef(TypedDict):
@@ -93,8 +108,45 @@ class MenuRef(TypedDict):
 
 
 class Menu(MenuRef):
+    """Menu descriptor. Fields after ``carried`` require ``inventoryState``.
+
+    ``refusal`` and ``refused`` are strings rather than closed literals so a
+    future reason does not end the session; known values are ``MenuRefusal``
+    and ``SlotRefusal``.
+    """
     slots: list[Slot]
     carried: Stack
+    slotCount: NotRequired[int]
+    operations: NotRequired[list[str]]
+    refusal: NotRequired[str | None]
+    reduced: NotRequired[bool]
+    truncated: NotRequired[bool]
+
+
+class Armor(TypedDict):
+    head: Stack
+    chest: Stack
+    legs: Stack
+    feet: Stack
+
+
+class Inventory(TypedDict):
+    """The ``inventory`` observation section (``inventoryState``)."""
+    selected: int
+    mainHand: Stack
+    hotbar: list[Stack]
+    main: list[Stack]
+    armor: Armor
+    offhand: Stack
+    menu: Menu | None
+    reduced: NotRequired[bool]
+
+
+class Observation(TypedDict):
+    type: Literal["observation"]
+    tick: int
+    player: NotRequired[Player]
+    inventory: NotRequired[Inventory]
 
 
 class InventoryResult(Envelope):

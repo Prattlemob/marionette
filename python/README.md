@@ -56,6 +56,13 @@ ignore environment proxies. Current local trust has no authentication.
   Success is silent; use observations for convergence. No completion event exists.
 - `configure(rate_divisor=1, sections=["player"])` selects this session's stream.
   `sections=[]` requests cadence-only frames. Omitted arguments leave settings unchanged.
+  `sections=["player", "inventory"]` (in hello via `connect(sections=...)` or in
+  configure) adds the typed `inventory` section (`messages.Inventory`: held item,
+  hotbar, main, armor, offhand and the open menu descriptor) and requires the
+  `inventoryState` capability. Stacks carry the bounded item extras
+  (`messages.Stack`), and menu descriptors list `operations` or a `refusal`.
+  The inventory section is in the repository source only; the published 0.1.0a1
+  alpha cannot select it and ignores the new descriptor fields.
 - `inventory(op, menu=..., source=..., destination=..., hotbar=..., all=False,
   animated=False, timeout=...)` supports open/inspect/move/swap/equip/drop/close.
   Obtain `menu_ref(result["menu"])` from a recent inspect before mutations.

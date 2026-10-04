@@ -181,6 +181,39 @@ class BridgeServerTest {
         assertEquals(3, samples.get(), "empty-only recipients must not sample game state");
     }
 
+    @Test
+    void inventorySectionIsSampledOnlyForSessionsThatSelectIt() throws Exception {
+        var players = new java.util.concurrent.atomic.AtomicInteger();
+        var inventories = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.function.Supplier<JsonObject> player = () -> { players.incrementAndGet(); return new JsonObject(); };
+        java.util.function.Supplier<JsonObject> inventory = () -> {
+            inventories.incrementAndGet();
+            JsonObject section = new JsonObject();
+            section.addProperty("selected", 2);
+            return section;
+        };
+        TestClient controller = connectAndHello(); // default ["player"], e.g. a published 0.1.0a1 client
+        TestClient observer = TestClient.connect(server.port());
+        observer.send("""
+                {"type":"hello","versions":[2],"role":"observer","sections":["player","inventory"]}
+                """);
+        observer.awaitMessage();
+        await(() -> server.observerCount() == 1);
+        server.sendSectionObservation(1, 1, player, inventory);
+        JsonObject plain = JsonParser.parseString(controller.awaitMessage()).getAsJsonObject();
+        JsonObject full = JsonParser.parseString(observer.awaitMessage()).getAsJsonObject();
+        assertTrue(plain.has("player"));
+        assertFalse(plain.has("inventory"), "sessions that never select inventory see unchanged frames");
+        assertEquals(2, full.getAsJsonObject("inventory").get("selected").getAsInt());
+        assertEquals(1, players.get());
+        assertEquals(1, inventories.get());
+        observer.ws.abort();
+        await(() -> server.observerCount() == 0);
+        server.sendSectionObservation(2, 1, player, inventory);
+        controller.awaitMessage();
+        assertEquals(1, inventories.get(), "unselected sections must not sample game state");
+    }
+
     private static final String OBSERVER_HELLO =
             "{\"type\": \"hello\", \"versions\": [2], \"role\": \"observer\"}";
 
@@ -362,6 +395,57 @@ class BridgeServerTest {
         TestClient client = connectAndHello();
         server.stop();
         assertEquals(1001, (int) client.closeCode.get(5, TimeUnit.SECONDS));
+    }
+
+    @Test
+    void clientInitiatedCloseIsEchoedAndIsControllerLoss() throws Exception {
+        TestClient client = connectAndHello();
+        client.ws.sendClose(WebSocket.NORMAL_CLOSURE, "bye").join();
+        assertEquals(1000, (int) client.closeCode.get(5, TimeUnit.SECONDS), "the close handshake completes");
+        await(server::pollDisconnected);
+    }
+
+    @Test
+    void anAbruptCloseAddsNoNormalClosureFrame() {
+        var defaults = new io.netty.channel.embedded.EmbeddedChannel(
+                new io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler(
+                        io.netty.handler.codec.http.websocketx.WebSocketServerProtocolConfig.newBuilder().build()));
+        defaults.close();
+        var added = (io.netty.handler.codec.http.websocketx.CloseWebSocketFrame) defaults.readOutbound();
+        assertEquals(1000, added.statusCode(), "Netty's default would report a normal closure");
+        added.release();
+        defaults.finishAndReleaseAll();
+
+        var channel = new io.netty.channel.embedded.EmbeddedChannel(
+                new io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler(BridgeServer.protocolConfig()));
+        channel.close();
+        assertEquals(null, (Object) channel.readOutbound(), "no frame is added to an abrupt close");
+        channel.finishAndReleaseAll();
+    }
+
+    @Test
+    void overflowCloseOfASaturatedConnectionNeverReportsNormalClosure() {
+        var channel = new io.netty.channel.embedded.EmbeddedChannel(
+                new io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler(BridgeServer.protocolConfig()));
+        var connection = new AgentConnection(channel,
+                new com.prattlemob.marionette.bridge.protocol.ProtocolSession("test", role -> null), () -> {});
+        connection.setReady(true);
+        try {
+            channel.unsafe().outboundBuffer().setUserDefinedWritability(1, false);
+            connection.close(1013, "event overflow");
+            channel.runPendingTasks();
+            assertFalse(channel.isOpen());
+            for (Object frame; (frame = channel.readOutbound()) != null; ) {
+                try {
+                    assertFalse(frame instanceof io.netty.handler.codec.http.websocketx.CloseWebSocketFrame,
+                            "a saturated connection closes without a frame: " + frame);
+                } finally {
+                    io.netty.util.ReferenceCountUtil.release(frame);
+                }
+            }
+        } finally {
+            channel.finishAndReleaseAll();
+        }
     }
 
     @Test

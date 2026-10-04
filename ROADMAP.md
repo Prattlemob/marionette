@@ -27,9 +27,9 @@ depends on.
 ## Cross-project execution order (2026-10-03)
 
 Keep milestone IDs and completed history. **M2.5 (published client) and M5.1a
-(bridge safety) are complete; M4.6 (one-shot events) is complete.** The remaining
-implementation order is **M4.2 → M3.5 → M4.3 → M4.4 → M4.5 → M3.6 → M3.7 → M5.1
-→ M5.2**.
+(bridge safety) are complete; M4.6 (one-shot events) and M4.2 (inventory
+observation) are complete.** The remaining implementation order is **M3.5 → M4.3
+→ M4.4 → M4.5 → M3.6 → M3.7 → M5.1 → M5.2**.
 Further package publication retains D12/D14 decision gates; a blocked release
 does not prevent independent safety/perception work. M3.3's outstanding visual
 acceptance remains debt and must be reconciled for milestones requiring it.
@@ -553,16 +553,23 @@ Build and rendered-client checks passed; see the
   inventory screen exactly, updating on pickup/consume/move; opening a chest
   surfaces its type and contents.
 - **Tier:** Core.
-- **Decision (minor, open):** how much item-component detail (enchantments,
-  custom names) to serialize — cap it deliberately.
+- **Decision (minor, resolved in D18):** enumerated, capped item extras
+  (durability, 64-character custom name, at most 8 enchantments/stored
+  enchantments, base potion) within a 96 KiB section bound.
 
 Items:
 
-- [ ] Item serialization schema (id, count, durability, enumerated extras)
-- [ ] Hotbar + main inventory + armor + offhand in the frame
-- [ ] Open-menu observation (menu-type id + slots, D8 addressing)
-- [ ] Unsupported mutation menus remain observable; carried stack and supported
+- [x] Item serialization schema (id, count, durability, enumerated extras)
+- [x] Hotbar + main inventory + armor + offhand in the frame
+- [x] Open-menu observation (menu-type id + slots, D8 addressing)
+- [x] Unsupported mutation menus remain observable; carried stack and supported
       operations/rejection reasons exposed with bounded component detail
+
+Implemented as the additive, opt-in `inventory` section (`inventoryState`,
+protocol 2; D18). Build, Python client and rendered-client checks passed; see the
+[M4.2 verification record](docs/decisions.md#m42-implementation-and-verification-2026-10-04).
+The published 0.1.0a1 client is unaffected; selecting the section is
+source-only until a further publication is authorized (D14).
 
 ### M4.3 — Crosshair target & world context
 

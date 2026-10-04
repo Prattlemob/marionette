@@ -209,6 +209,21 @@ public final class BridgeServer {
         return current != null ? current.lastPongNanos() : 0;
     }
 
+    /**
+     * Every intentional close writes its own coded frame first, so Netty must
+     * not add one: its default 1000 "normal closure" would otherwise reach an
+     * agent whose connection was dropped for being saturated.
+     */
+    static WebSocketServerProtocolConfig protocolConfig() {
+        return WebSocketServerProtocolConfig.newBuilder()
+                .websocketPath("/")
+                .allowExtensions(true)
+                .maxFramePayloadLength(MAX_FRAME_BYTES)
+                .dropPongFrames(false)
+                .sendCloseFrame(null)
+                .build();
+    }
+
     /** Bind to the configured address. Blocks briefly; call once. Throws on bind failure. */
     public void start() {
         group = new NioEventLoopGroup(1, new DefaultThreadFactory("marionette-bridge", true));
@@ -261,12 +276,7 @@ public final class BridgeServer {
                                         ctx.fireChannelRead(message);
                                     }
                                 },
-                                new WebSocketServerProtocolHandler(WebSocketServerProtocolConfig.newBuilder()
-                                        .websocketPath("/")
-                                        .allowExtensions(true)
-                                        .maxFramePayloadLength(MAX_FRAME_BYTES)
-                                        .dropPongFrames(false)
-                                        .build()),
+                                new WebSocketServerProtocolHandler(protocolConfig()),
                                 new WebSocketFrameAggregator(MAX_FRAME_BYTES),
                                 handler);
                     }
@@ -357,16 +367,23 @@ public final class BridgeServer {
     /** Serialize once per due mask; sample player data at most once per tick. */
     public void sendPlayerObservation(long tick, int defaultDivisor,
                                      Supplier<JsonObject> player) {
+        sendSectionObservation(tick, defaultDivisor, player, () -> null);
+    }
+
+    /** Serialize once per due mask; sample each section at most once per tick, only when selected. */
+    public void sendSectionObservation(long tick, int defaultDivisor,
+                                       Supplier<JsonObject> player, Supplier<JsonObject> inventory) {
         Map<Set<String>, String> frames = new HashMap<>();
-        JsonObject snapshot = null;
+        JsonObject playerSnapshot = null, inventorySnapshot = null;
         for (AgentConnection connection : (Iterable<AgentConnection>) connections()::iterator) {
             if (!connection.ready() || tick % connection.effectiveDivisor(defaultDivisor) != 0) continue;
             var mask = connection.sections();
             String json = frames.get(mask);
             if (json == null) {
-                if (mask.contains("player") && snapshot == null) snapshot = player.get();
-                json = Messages.observation(
-                        tick, mask.contains("player") ? snapshot : null);
+                if (mask.contains("player") && playerSnapshot == null) playerSnapshot = player.get();
+                if (mask.contains("inventory") && inventorySnapshot == null) inventorySnapshot = inventory.get();
+                json = Messages.observation(tick, mask.contains("player") ? playerSnapshot : null,
+                        mask.contains("inventory") ? inventorySnapshot : null);
                 frames.put(mask, json);
             }
             connection.sendObservation(json);
@@ -380,6 +397,11 @@ public final class BridgeServer {
      */
     public void sendEvent(GameEvent event) {
         connections().forEach(connection -> connection.sendEvent(event));
+    }
+
+    /** Ready observer sessions; for headless tests. */
+    int observerCount() {
+        return (int) observers.stream().filter(AgentConnection::ready).count();
     }
 
     /** Observation frames deferred/dropped across all connections since they attached. */
@@ -513,7 +535,16 @@ public final class BridgeServer {
                 connection.close(1003, "text frames only");
                 return;
             }
-            for (ProtocolSession.Action action : connection.session().onFrame(text.text())) {
+            List<ProtocolSession.Action> actions = connection.session().onFrame(text.text());
+            // Become ready before the hello reply is written: an agent that has
+            // read the reply must receive every later broadcast. This inline
+            // write still precedes any client-thread write, which Netty queues.
+            if (!connection.ready() && connection.session().isActive()) {
+                connection.setSections(connection.session().sections());
+                connection.setEvents(connection.session().events());
+            }
+            connection.setReady(connection.session().isActive());
+            for (ProtocolSession.Action action : actions) {
                 switch (action) {
                     case ProtocolSession.Action.Send send ->
                             connection.sendReliable(send.json());
@@ -528,11 +559,6 @@ public final class BridgeServer {
                             connection.close(close.code(), close.reason());
                 }
             }
-            if (!connection.ready() && connection.session().isActive()) {
-                connection.setSections(connection.session().sections());
-                connection.setEvents(connection.session().events());
-            }
-            connection.setReady(connection.session().isActive());
         }
 
         @Override

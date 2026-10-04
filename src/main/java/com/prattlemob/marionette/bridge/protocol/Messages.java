@@ -33,6 +33,7 @@ public final class Messages {
         capabilities.addProperty("inventory", true);
         capabilities.addProperty("inventoryAnimation", true);
         capabilities.addProperty("events", true);
+        capabilities.addProperty("inventoryState", true);
         reply.add("capabilities", capabilities);
         reply.addProperty("mod", modVersion);
         return reply.toString();
@@ -61,10 +62,16 @@ public final class Messages {
     }
 
     public static String observation(long tick, JsonObject player) {
+        return observation(tick, player, null);
+    }
+
+    /** Null sections are omitted (unselected); sections appear in protocol order. */
+    public static String observation(long tick, JsonObject player, JsonObject inventory) {
         JsonObject frame = new JsonObject();
         frame.addProperty("type", "observation");
         frame.addProperty("tick", tick);
         if (player != null) frame.add("player", player);
+        if (inventory != null) frame.add("inventory", inventory);
         return frame.toString();
     }
 

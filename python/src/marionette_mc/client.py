@@ -64,6 +64,11 @@ class RequestTimeout(TimeoutError):
         super().__init__(f"request {request_id} timed out; outcome unknown, inspect late replies; do not replay")
 
 
+def section_capabilities(sections: Iterable[str]) -> list[str]:
+    """Selecting any mask needs ``playerState``; the inventory section also ``inventoryState``."""
+    return ["playerState"] + (["inventoryState"] if "inventory" in sections else [])
+
+
 def positive(value: float, name: str) -> None:
     if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
         raise ValueError(f"{name} must be positive and finite")
@@ -284,7 +289,7 @@ class Client:
                 raise ValueError("rate_divisor must be an integer 1–100")
             message["rateDivisor"] = rate_divisor
         if sections is not None:
-            self.require("playerState")
+            self.require(*section_capabilities(sections))
             message["sections"] = sections
         validate(message, Configure)
         await self._send(message)
@@ -403,7 +408,7 @@ async def connect(uri: str = "ws://127.0.0.1:24680/", *, role: Role = "controlle
     if sections is not None:
         validate(sections, list[Section])
         request["sections"] = sections
-        required.add("playerState")
+        required.update(section_capabilities(sections))
     if type(events) is not bool:
         raise ValueError("events must be a boolean")
     if events:
