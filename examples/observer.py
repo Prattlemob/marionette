@@ -7,8 +7,8 @@ prints observation frames, and demonstrates that actuation is refused:
 attempting input raises a local RoleError while
 the frames keep flowing. Run it alongside any controller example.
 
-Requires:  pip install "marionette-mc==0.1.0a1"
-Usage:     python observer.py [port]     (default 24680)
+Works with the published client:  pip install "marionette-mc==0.1.0a1"
+Usage:     python examples/observer.py [port]     (default 24680)
 """
 import asyncio
 import sys

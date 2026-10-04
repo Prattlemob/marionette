@@ -6,11 +6,11 @@ slot, look down at the block in front, hold attack until it breaks,
 select the block slot and one-shot-use to place, then select the food
 slot and hold use to eat. Provision the hotbar first (see
 examples/README.md): slot 0 iron pickaxe, slot 1 dirt, slot 2 cooked
-beef (eat needs missing hunger — spend some by sprint-jumping or take
-fall damage, or run /effect give @p minecraft:hunger).
+beef (eat needs missing hunger: run /effect give @p minecraft:hunger 5 50
+or take some fall damage).
 
-Requires:  pip install "marionette-mc==0.1.0a1"
-Usage:     python interact.py [port]   (default 24680)
+Works with the published client:  pip install "marionette-mc==0.1.0a1"
+Usage:     python examples/interact.py [port]   (default 24680)
 """
 import asyncio
 import sys

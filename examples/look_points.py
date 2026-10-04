@@ -10,8 +10,8 @@ changing); wall-clock pan times print as evidence.
 Run with the mod's logging verbosity at VERBOSE to also produce the
 per-frame pan log that scripts/analyze_pan.py checks.
 
-Requires:  pip install "marionette-mc==0.1.0a1"
-Usage:     python look_points.py [port]   (default 24680)
+Works with the published client:  pip install "marionette-mc==0.1.0a1"
+Usage:     python examples/look_points.py [port]   (default 24680)
 """
 import asyncio
 import math

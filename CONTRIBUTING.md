@@ -1,9 +1,11 @@
 # Contributing to Marionette
 
-Marionette implements protocol v1, controller and observer connections,
-configuration, movement, and camera smoothing. See [ROADMAP.md](ROADMAP.md)
-for completed milestones and upcoming work, and [docs/decisions.md](docs/decisions.md)
-for the design rationale.
+Marionette implements protocol 2: controller and observer connections,
+the full movement, camera, interaction, inventory and gameplay control set,
+observations, events, human precedence and diagnostics. See
+[ROADMAP.md](ROADMAP.md) for completed milestones and upcoming work,
+[docs/](docs/README.md) for the design notes, and
+[docs/decisions.md](docs/decisions.md) for the design rationale.
 
 ## Development
 
@@ -13,7 +15,7 @@ for the design rationale.
 4. Use the reference clients in [examples/](examples/) to exercise the bridge.
 
 The source layout, threading boundaries, and verification guidance are in
-[AGENTS.md](AGENTS.md). No AI tool or workflow plugin is required.
+[AGENTS.md](AGENTS.md) and [docs/threading.md](docs/threading.md). No AI tool or workflow plugin is required.
 
 ## Changes and pull requests
 

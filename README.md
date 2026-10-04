@@ -8,190 +8,180 @@ Marionette is a [NeoForge](https://neoforged.net/) mod that turns a real, render
 
 - **Infrastructure, not an AI.** Marionette ships no models and makes no gameplay decisions. It is the strings, not the puppeteer: you supply whatever intelligence pulls them.
 - **A real client, not a headless bot.** Unlike protocol-level bots, Marionette drives an actual game client. The world renders normally, so you can watch, record, or stream a session (for example through OBS) with no special viewer.
-- **Agent-agnostic.** Marionette does not care what connects to it or what language it is written in. The contract between mod and agent will be a documented, language-neutral protocol, not a library you must import.
+- **Agent-agnostic.** Marionette does not care what connects to it or what language it is written in. The contract between mod and agent is a documented, language-neutral [protocol](protocol/v1.md), not a library you must import.
 
-## What it will do
+## What it does
 
-Marionette aims to provide:
+- **Perception out.** Player state every tick, plus opt-in inventory and open-menu contents, the crosshair target, world context (dimension, time, weather, light), nearby entities, bounded block scans, and one-shot events (damage, death, respawn, item pickup, chat, blocks broken, dimension changes).
+- **Action in.** Movement, smoothed or instant camera control, attack/use/hotbar, inventory and container actions (including modded storage, crafting and furnaces), chat, respawn and swapping hands.
+- **Safety for the human at the keyboard.** Loopback-only binding, one controller at a time with read-only observers, a 2-second liveness watchdog, a latched panic key, human input that always outranks the agent, and a status HUD that shows what the agent is doing.
+- **A stable, documented contract.** Protocol 2 over a localhost WebSocket carrying JSON; new features arrive as capability flags, so existing agents keep working.
 
-- **Perception out.** The agent receives what the player would perceive.
-- **Action in.** The agent sends back actions a player could take, and Marionette performs them in the client.
-- **A spectator-friendly window.** Because the client renders normally, humans can watch the agent play — live or recorded.
-- **A stable, documented contract.** The protocol is the product: anyone should be able to build an agent against it without touching the mod's internals.
+## Quickstart
 
-## Project status
+From nothing to an external script walking the player in a square. This uses
+the development client built from this repository; there is no released mod
+jar yet.
 
-**Protocol 2, bridge hardening, movement, camera smoothing, attack/use/hotbar control, inventory/container actions (vanilla and generically verified modded storage), player, inventory, crosshair-target, world and nearby-entity observations, on-demand bounded block scans, opt-in one-shot events, human precedence and a status HUD with a `status` diagnostics query are implemented.** An external script can drive the rendered player over a localhost WebSocket, with read-only observers alongside the controller — see [examples/](examples/) for working clients. Events (damage, death, respawn, item pickup, chat, block breaking, dimension change) the opt-in inventory section (held item, hotbar, inventory, armor, offhand and open-menu contents) and the opt-in target and world sections (crosshair block or entity within vanilla reach; dimension, time, weather and light) and the opt-in entities section (nearby mobs, players and items with hostility classification, nearest first under configured caps) and block scans (a palette of block ids plus indices for a capped box around the player, read across ticks under a work budget) require the in-repository Python client; the published 0.1.0a1 alpha predates them and never receives them. See [ROADMAP.md](ROADMAP.md) for verification status.
+**You need:** a Java 21 JDK, Git, Python 3.11 or newer, and a desktop session
+(the game opens a window). The first build downloads Minecraft and NeoForge,
+about 1 GB, which takes a few minutes. The development client starts as an
+offline player named `Dev`; no login is involved.
 
-- The implementation plan lives in [ROADMAP.md](ROADMAP.md) — phases, milestones, and definitions of done.
-- Design decisions (settled, experiment-gated, and still open) are recorded in [docs/decisions.md](docs/decisions.md). Highlights: the transport is a localhost WebSocket carrying JSON; the core is client-only with an optional server component later; [Baritone](https://github.com/cabaletta/baritone) is planned as an optional (never bundled) integration for high-level navigation.
+**1. Get the code.**
 
-Design discussion happens in [issues](https://github.com/Prattlemob/marionette/issues) — see [CONTRIBUTING.md](CONTRIBUTING.md).
+```sh
+git clone https://github.com/Prattlemob/marionette.git
+cd marionette
+```
 
-Repository layout and coding-agent guidance live in [AGENTS.md](AGENTS.md).
-The [documentation index](docs/README.md) links the protocol, decisions, and
-historical milestone designs and plans.
+**2. Start Minecraft with Marionette.**
 
-## Installation
+```sh
+./gradlew runClient
+```
 
-*Coming soon.* There is nothing to install yet.
+(On Windows use `gradlew.bat runClient`.) Leave this terminal running; the
+game window opens on the title screen once the build finishes.
 
-## Usage
+**3. Open a test world.** Click **Singleplayer → Create New World**. Set
+**Game Mode** to **Creative**, open the **World** tab and set **World Type** to
+**Superflat**, then click **Create New World**. A flat creative world gives the
+agent room to walk and keeps your real worlds out of the way. Once you are in
+the world, the top-left corner shows `Marionette: idle`: the mod is loaded and
+waiting for an agent. Press **F3+P** once (hold F3, tap P); chat confirms
+`Pause on lost focus: disabled`. Otherwise the game opens its pause menu when
+you switch to a terminal, and an open pause menu pauses the agent.
 
-Connect an agent over the localhost WebSocket bridge; see [examples/](examples/) for reference agents (`probe.py`, `walk_square.py`).
+**4. Install the Python client** in a second terminal, from the repository
+root:
+
+```sh
+python3 -m venv .venv
+. .venv/bin/activate            # Windows: .venv\Scripts\activate
+python -m pip install -e ./python
+```
+
+This installs the client from your checkout, which supports every example.
+The published alpha, `python -m pip install "marionette-mc==0.1.0a1"`, is
+enough for the probe, the dashboard and the square walk; see the
+[examples](examples/README.md#choosing-a-client-package) for which needs what.
+
+**5. Run the examples** from the second terminal, with the game still
+running:
+
+```sh
+python examples/probe.py
+python examples/walk_square.py
+```
+
+`probe.py` prints the handshake and a few observations and nudges the player
+forward for 0.2 seconds. `walk_square.py` walks four sides of about five blocks
+each, turning 90° between them, and prints how far from the start it finished.
+While it runs the HUD shows `Marionette: connected` and the held controls.
+Every hold is bounded and the player is released when the script exits.
+
+**6. Stop.** Agents stop by themselves; Ctrl-C a running script to end it.
+Press **F8** in the game at any time to cut an agent off (press **F9** to
+allow agents again). Close the game window to end `runClient`.
+
+Next, try the [scripted reference agent](examples/reference_agent.py) and
+the [other examples](examples/README.md), or read the [protocol](protocol/v1.md)
+to write an agent in another language.
+
+### Using your own Minecraft installation
+
+Build the jar with `./gradlew build` and copy `build/libs/marionette-0.1.0.jar`
+into the `mods` folder of a **Minecraft 1.21.8** instance with **NeoForge
+21.8.53** or a later 21.8 release (for example a NeoForge profile in the
+official launcher, Prism Launcher or MultiMC). Marionette is client-only;
+multiplayer servers do not need it, but many forbid automated play.
 
 ## Configuration
 
-Marionette generates `config/marionette-client.toml` on first launch. Values
-marked *(live)* are picked up as soon as the file is saved (NeoForge watches
-config files); values marked *(restart required)* are read once at startup.
+Marionette writes `config/marionette-client.toml` on first launch (in `run/`
+for the development client). The defaults suit local use: the bridge listens
+on `127.0.0.1:24680`, allows two observers, disconnects an agent that stops
+answering pings for 2 seconds, allows ordinary chat but not commands, and
+shows the status HUD. Commonly changed settings:
 
-```toml
-[bridge]
-	#Master switch: when false, the WebSocket bridge never starts. (restart required)
-	enabled = true
-	#TCP port for the bridge listener. (restart required)
-	# Default: 24680
-	# Range: 1 ~ 65535
-	port = 24680
-	#Bind address, resolved once at start. Non-loopback or unresolvable values are
-	#clamped to 127.0.0.1 with a warning unless the opt-out below is set. (restart required)
-	bindAddress = "127.0.0.1"
-	#Explicit opt-out of loopback enforcement. Only when true is a non-loopback
-	#bindAddress bound as configured, with a warning at every start. The bridge has
-	#NO authentication or encryption: anyone who can reach the port can control your
-	#game. Remote access is unsupported; leave false. (restart required)
-	iUnderstandNonLoopbackIsUnauthenticated = false
-	#Maximum simultaneous read-only observer connections (role "observer");
-	#0 disables the observer role entirely. (restart required)
-	# Default: 2
-	# Range: 0 ~ 8
-	maxObservers = 2
-	#Seconds a new connection may take to complete the hello handshake
-	#before it is closed. (restart required)
-	# Default: 10
-	# Range: 1 ~ 60
-	helloTimeoutSeconds = 10
-	#Maximum seconds without a pong before disconnect and release.
-	#Agents must keep answering pings; a stall longer than about three
-	#quarters of this value can disconnect a healthy agent. (restart required)
-	# Default: 2
-	# Range: 1 ~ 60
-	pongTimeoutSeconds = 2
+| Setting | Default | Meaning |
+|---|---|---|
+| `[bridge] port` | `24680` | Bridge TCP port (restart required); pass the same port to the examples |
+| `[bridge] maxObservers` | `2` | Read-only connections allowed besides the controller; 0 disables them |
+| `[observation] rateDivisor` | `1` | Default observation cadence: one frame every N ticks (live) |
+| `[chat] allowCommands` | `false` | Whether agents may run commands through `chat` (live) |
+| `[precedence] resumeAfterMillis` | `2000` | How long the agent stays paused after your last input (live) |
+| `[hud] enabled` | `true` | Status overlay; F6 toggles and saves it (live) |
+| `[logging] verbosity` | `NORMAL` | `QUIET`, `NORMAL` or `VERBOSE`, with per-category overrides (live) |
 
-[observation]
-	#Send one observation frame every N client ticks. (live)
-	#Agents can override this per session with the `configure` protocol
-	#message; this config value is the default and is restored on disconnect.
-	# Default: 1
-	# Range: 1 ~ 100
-	rateDivisor = 1
-	#Radius in blocks of the `entities` observation section, for every session. (live)
-	# Default: 32
-	# Range: 4 ~ 64
-	entityRadius = 32
-	#Most entities listed in the `entities` section; the nearest are kept and
-	#the section is flagged truncated. (live)
-	# Default: 64
-	# Range: 1 ~ 256
-	entityMaxCount = 64
-	#Hard cap for `scan` requests: every scanned block must lie within this many
-	#blocks of the player's feet block on each axis; larger requests are refused. (live)
-	# Default: 16
-	# Range: 4 ~ 32
-	blockScanRadius = 16
-	#Most block positions a scan reads per client tick; larger scans continue on
-	#later ticks so a scan never stalls a frame. (live)
-	# Default: 1024
-	# Range: 64 ~ 8192
-	blockScanBlocksPerTick = 1024
+Every setting, its range and notes are in
+[docs/configuration.md](docs/configuration.md).
 
-[client]
-	#While an agent is connected, suppress the vanilla pause-on-focus-loss so
-	#the session keeps running and streaming when unfocused. (live)
-	suppressPauseOnLostFocus = true
+## Staying in control
 
-[precedence]
-	#Human-priority mode: milliseconds after the last human gameplay input before
-	#a paused agent may drive again. Held keys and an open pause menu keep the pause. (live)
-	# Default: 2000
-	# Range: 250 ~ 60000
-	resumeAfterMillis = 2000
+Your own input always outranks the agent. The keys below are defaults; all
+are rebindable under **Options → Controls → Key Binds → Marionette**.
 
-[chat]
-	#Allow the controller to send ordinary chat messages with the `chat` request. (live)
-	allowChat = true
-	#Allow the controller to execute commands with the `chat` request's `command`
-	#field, as if typed after '/'. Off by default: commands can change the world,
-	#game rules and other players. (live)
-	allowCommands = false
-	#Most accepted chat messages and commands together in any 10-second window,
-	#for the whole client (reconnecting does not reset it). (live)
-	# Default: 5
-	# Range: 1 ~ 8
-	maxMessages = 5
+| Key | Action |
+|---|---|
+| any gameplay input | In the default *human priority* mode, moving, looking, attacking, using, hotbar keys or the pause menu release everything the agent holds and pause it. It may drive again 2 seconds after your last input; nothing it held is restored. |
+| **F7** | Toggle *agent exclusive* mode while an agent is attached: your gameplay input is ignored so only the agent drives. Escape, chat, inventory, F1–F3/F5/F11, F7, F8 and F9 keep working, and the mode ends by itself when the agent goes away. |
+| **F8** | Panic: release the agent and disconnect it at once. Panic **latches**: every agent that tries to take control is refused until you press F9. Observers stay attached. |
+| **F9** | Allow agent control again after panic. It resumes nothing; an agent must connect afresh. |
+| **F6** | Show or hide the status HUD. |
 
-[camera]
-	#Characteristic speed of smoothed camera pans, in degrees/second. (live)
-	#Agents scale it per pan with the `speed` multiplier on look mode "smooth".
-	# Default: 180.0
-	# Range: 10.0 ~ 1080.0
-	smoothingSpeed = 180.0
+The status HUD in the top-left corner shows `Marionette: idle` with no agent;
+`Marionette: connected` with the agent's name, the observer count, the mode
+(`Human priority`, `PAUSED by your input` or `AGENT EXCLUSIVE: input
+locked`), the controls the agent holds and live counters while one is
+attached; and `Marionette: PANIC` while panic is latched. Agents can read the
+same data with the `status` query ([examples/status.py](examples/status.py)).
 
-[logging]
-	#QUIET: warnings/errors only. NORMAL: lifecycle + connection events.
-	#VERBOSE: adds per-tick heartbeat and puppet-position evidence logs. (live)
-	#The default for every category below.
-	#Allowed Values: QUIET, NORMAL, VERBOSE
-	verbosity = "NORMAL"
-	#Verbosity of the 'bridge' category (logger marionette.bridge); INHERIT uses verbosity above. (live)
-	#Allowed Values: INHERIT, QUIET, NORMAL, VERBOSE
-	bridge = "INHERIT"
-	#Verbosity of the 'control' category (logger marionette.control); INHERIT uses verbosity above. (live)
-	#Allowed Values: INHERIT, QUIET, NORMAL, VERBOSE
-	control = "INHERIT"
-	#Verbosity of the 'precedence' category (logger marionette.precedence); INHERIT uses verbosity above. (live)
-	#Allowed Values: INHERIT, QUIET, NORMAL, VERBOSE
-	precedence = "INHERIT"
-	#Verbosity of the 'observation' category (logger marionette.observation); INHERIT uses verbosity above. (live)
-	#Allowed Values: INHERIT, QUIET, NORMAL, VERBOSE
-	observation = "INHERIT"
-	#Verbosity of the 'events' category (logger marionette.events); INHERIT uses verbosity above. (live)
-	#Allowed Values: INHERIT, QUIET, NORMAL, VERBOSE
-	events = "INHERIT"
-	#Verbosity of the 'client' category (logger marionette.client); INHERIT uses verbosity above. (live)
-	#Allowed Values: INHERIT, QUIET, NORMAL, VERBOSE
-	client = "INHERIT"
+The bridge only listens on loopback, admits one controlling agent at a time,
+and trusts every native process on this computer without authentication;
+browser pages are refused. An agent that stops answering pings is
+disconnected after 2 seconds, and losing the agent for any reason releases
+every control. The [safety model](docs/safety-model.md) explains how these
+layers fit together, and [SECURITY.md](SECURITY.md) states the trust policy.
 
-[hud]
-	#Show the Marionette status overlay (connection, precedence mode, held agent
-	#controls, counters). The rebindable HUD key toggles it and saves this value. (live)
-	enabled = true
-```
+## Protocol and clients
 
-Notes:
+The current wire contract is [protocol 2](protocol/v1.md) (the canonical
+document keeps its `v1.md` path). The protocol integer changes only for
+breaking changes; everything else is an additive capability flag in the
+`hello` reply, which agents feature-detect. See
+[protocol/README.md](protocol/README.md) for the versioning rules and
+[docs/protocol-evolution.md](docs/protocol-evolution.md) for the rationale
+and history.
 
-- `bindAddress` is resolved once at start. A non-loopback or unresolvable
-  value is clamped to `127.0.0.1` with a loud warning. Only the explicit
-  opt-out `iUnderstandNonLoopbackIsUnauthenticated = true` binds a resolvable
-  non-loopback address as configured, with a warning at every start; the
-  bridge has no authentication or encryption, and remote access remains
-  unsupported (D16, D25).
-- `allowCommands` is the human's switch: agents can never enable command
-  execution themselves (D24).
-- `suppressPauseOnLostFocus` only takes effect while an agent is connected
-  and panic is not latched; otherwise the game pauses on focus loss exactly
-  as vanilla. With it off, the focus-loss pause menu pauses a human-priority
-  agent like any other human input (D25).
-- `[precedence] resumeAfterMillis` is how long a human-priority agent stays
-  paused after your last gameplay input (see Human precedence below).
-- The `[observation]` radius/count caps are defined ahead of the features
-  that consume them (Phase 4) so operators can see the ceilings; they have
-  no effect yet.
+The typed asyncio Python client lives in [python/](python/README.md)
+(distribution `marionette-mc`, Python 3.11+). The development alpha
+`marionette-mc==0.1.0a1` is published on
+[PyPI](https://pypi.org/project/marionette-mc/0.1.0a1/); it passed
+clean-environment installation and rendered acceptance, works with the current
+mod, and covers movement, camera, interaction, observers and inventory
+actions. Events, the extra observation sections, block scans, crafting,
+chat/respawn and `status` need the in-repository client
+(`pip install -e ./python`) until a further release is authorized.
 
-## Protocol
+## Project status
 
-The current wire contract is [protocol 2](protocol/v1.md) (canonical document path retained). Protocol 1 clients must offer version 2 and read position/rotation from `observation.player`. See [examples/dashboard.py](examples/dashboard.py) for a live read-only player dashboard.
+All core milestones through Phase 5 are implemented: protocol 2 and bridge
+hardening, the full movement and camera set, interaction, inventory,
+containers, modded storage and crafting, gameplay controls, every perception
+section, one-shot events, human precedence and lifecycle safety, and
+diagnostics. Outstanding verification is tracked in [ROADMAP.md](ROADMAP.md):
+physical-keyboard confirmation of the human-precedence checks (performed with
+synthetic input) and the camera's alt-tab acceptance remain open. Optional
+integrations (Baritone navigation, a server companion, pixel streaming) and
+release packaging come next. Design decisions, settled and open, are recorded
+in [docs/decisions.md](docs/decisions.md).
+
+Design discussion happens in [issues](https://github.com/Prattlemob/marionette/issues) — see [CONTRIBUTING.md](CONTRIBUTING.md).
+Repository layout and coding-agent guidance live in [AGENTS.md](AGENTS.md);
+the [documentation index](docs/README.md) links the design notes, protocol,
+decisions, and historical milestone designs and plans.
 
 ## License
 
@@ -204,100 +194,3 @@ Marionette is not an official Minecraft product and is not affiliated with, or e
 ---
 
 A [Prattlemob](https://github.com/Prattlemob) project — [prattlemob.com](https://prattlemob.com)
-
-### Human precedence
-
-Your own input always outranks the agent (D25, protocol/v1.md, Human
-precedence). There are three modes:
-
-- **Human priority** (default). Any gameplay input of yours in game — moving,
-  jumping, sneaking, sprinting, turning the camera with the mouse, attacking,
-  using, picking a block, the hotbar keys or scroll wheel, drop, swap hands, or
-  opening the pause menu — immediately releases everything the agent holds and
-  pauses it. While paused the agent's movement and camera commands are
-  discarded and its inventory changes, chat and respawn requests are refused.
-  The agent may drive again `resumeAfterMillis` (default 2 s) after your last
-  input; nothing it held is restored.
-- **Agent exclusive.** Press the rebindable **F7** "Toggle agent input
-  lockout" key (Controls → Marionette) in game while an agent is attached. Your
-  movement, jump, sneak, sprint, mouse look, attack/use, pick-block, drop,
-  swap-hands and hotbar input are then ignored, so only the agent drives.
-  Escape and the pause menu, F1–F3/F5/F11, chat, inventory and every other
-  interface key keep working, and so do F7 (press again to take control back,
-  even from a screen), panic and re-arm. The lockout ends by itself the moment
-  no agent is attached: disconnect, watchdog, panic or leaving the world.
-- **Panic** (below).
-
-Toasts report lockout changes. Agents that subscribe to events receive a
-`control` event for each mode or pause change.
-
-### Status HUD and diagnostics
-
-A small overlay in the top-left corner shows what Marionette is doing (M5.2).
-It is on by default, because the precedence mode must always be visible (D25).
-Toggle it with the rebindable **F6** "Toggle Marionette status HUD" key
-(Controls → Marionette); the choice is saved as `[hud] enabled`. F1 and the F3
-debug screen hide it too. It shows:
-
-- `Marionette: idle`, one dim line, while no controller is attached;
-- `Marionette: connected`, then the agent's name and the observer count, the
-  precedence mode (`Human priority`, `PAUSED by your input` or `AGENT
-  EXCLUSIVE: input locked`), the controls the agent holds right now, and the
-  controller's observation rate, frames sent and dropped, ping round trip and
-  command latency;
-- `Marionette: PANIC` in red, naming the re-arm key, while panic is latched.
-
-Lines are kept short so toasts in the top-right corner never cover them.
-Agents name themselves with the optional hello `agent` field. Any connection
-can request the same data with the `status` query (`status` capability,
-[protocol](protocol/v1.md#status--diagnostics-query-status)); see
-[examples/status.py](examples/status.py).
-
-Logging is per category: `[logging] verbosity` sets the default, and `bridge`,
-`control`, `precedence`, `observation`, `events` and `client` override it
-(`INHERIT`, `QUIET`, `NORMAL` or `VERBOSE`, live). Each category logs through
-its own logger, `marionette.<category>`; connection lines carry `key=value` fields.
-Warnings and errors are never silenced.
-
-### Emergency control and development trust
-
-The rebindable **F8** panic key (Controls → Marionette) releases the agent and
-severs its controller connection, including during inventory animation or a
-paused screen, and ends any input lockout. Panic then **latches**: every reconnecting controller is refused
-(`panic_latched`, close 1008) until you press the separate, rebindable
-**F9** "Allow agent control" key in game. Pressing F8 again never re-enables
-anything, and re-arming resumes nothing; an agent must connect afresh. The
-latch survives leaving and rejoining worlds and resets when Minecraft
-restarts. A small toast shows when agent control is disabled or re-enabled.
-Read-only observers remain attached and may still connect. The pong watchdog uses
-`bridge.pongTimeoutSeconds` (default 2, range 1–60, restart required).
-WebSocket libraries must continue reading and answering pings even when the
-agent has no new command to send; an agent event loop that blocks for more
-than about 1.5 seconds at the default can be disconnected. A frozen controller
-is disconnected after the timeout plus at most one ping interval (0.5 seconds
-at the default), then released on the next client tick or rendered frame. A
-frozen Minecraft process cannot execute release until resumed.
-
-The `bridgeSafety` capability advertises bounded inbound/outbound queues,
-32-command/2 ms per-tick scheduling, priority release, and pending-connection
-limits. Overload disconnects the offending connection (1013); outstanding
-inventory outcomes may be unknown, so inspect state before retrying. See
-[the wire limits](protocol/v1.md#transport).
-
-Development access trusts native local processes. Browser Origin headers are
-rejected, including `null`; native clients must omit Origin. This is not local
-process authentication. Authentication remains a release gate; see
-[the security policy](SECURITY.md).
-
-## Python client
-
-Install the published development alpha with
-`python -m pip install "marionette-mc==0.1.0a1"`, then run
-`python examples/probe.py` from this checkout. The typed asyncio client supports
-Python 3.11+ and protocol 2; see [the API](python/README.md) and
-[PyPI release](https://pypi.org/project/marionette-mc/0.1.0a1/).
-
-The exact published pin passed clean-environment installation and rendered
-observation/movement/release acceptance. The owner approved this client-only
-alpha exception; mod and stable-release authentication gates remain in force.
-M2.5 completion does not establish separate consumer integration acceptance.

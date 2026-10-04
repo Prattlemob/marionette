@@ -1,97 +1,80 @@
 # Marionette examples
 
-Reference agents speaking protocol 2
-([`protocol/v1.md`](../protocol/v1.md)). All need Python 3.11+
-and the `marionette-mc==0.1.0a1` published development-alpha package, plus a running Marionette client that has
-joined a world.
+Reference agents in Python speaking protocol 2
+([`protocol/v1.md`](../protocol/v1.md)). Each one is a short, standalone
+script; together they are the protocol's conformance spot-check. New to
+Marionette? Follow the [quickstart](../README.md#quickstart) first.
 
-- `dashboard.py` — M4.1: read-only live player state, effects, and movement flags.
-  Run `python examples/dashboard.py [port]`; Ctrl-C exits without changing controls.
-- `events.py` — M4.6: read-only one-shot event log (damage, death, respawn,
-  item pickup, chat, block broken, dimension change and, M5.1, human precedence
-  `control` changes), one line per event in
-  `seq` order. Needs the in-repository client (`pip install -e ./python`); the
-  published 0.1.0a1 alpha has no event support. Run `python examples/events.py [port]`.
-- `status.py` — M5.2: read-only status query (`status`): connection state,
-  the controller's agent name, precedence mode and pause, the agent's held
-  controls, and observation/drop/latency counters, as the local status HUD shows
-  them. Connects as an observer named `status-example`. Needs the in-repository
-  client; the published 0.1.0a1 alpha has no `status` support. Run
-  `python examples/status.py [port]`; `--once` prints one reply and `--json` raw replies.
-- `inventory_view.py` — M4.2: read-only held item, hotbar, main inventory,
-  armor, offhand and the open menu (type, D8 slot addresses, carried stack,
-  supported operations or refusal, and with `inventoryStorage` the menu's
-  storage support or the rules it failed; with `crafting` the crafting grid and
-  furnace burn/cook progress) from the `inventory` section. Needs the
-  in-repository client; the published 0.1.0a1 alpha cannot select that section.
-  Run `python examples/inventory_view.py [port]`; `--once` prints one frame and
-  `--json` prints raw frames.
-- `target_view.py` — M4.3: read-only crosshair target (block position, id and
-  face; entity id and type; or none, within vanilla reach) and world context
-  (dimension, time of day, weather, light at the feet) from the `target` and
-  `world` sections, for comparison with the F3 debug screen. Needs the
-  in-repository client; the published 0.1.0a1 alpha cannot select those sections.
-  Run `python examples/target_view.py [port]`; `--once` prints one frame and
-  `--json` prints raw frames.
-- `entity_view.py` — M4.4: read-only nearby entities from the `entities`
-  section, nearest first: type, hostility (hostile/neutral/passive/player/item/
-  other), position, speed, health and "targeting me" (`yes`/`no` only where the
-  client knows, otherwise `unknown`), with the radius, count cap and truncation
-  flag. Needs the in-repository client; the published 0.1.0a1 alpha cannot
-  select that section. Run `python examples/entity_view.py [port]`; `--once`
-  prints one frame and `--json` prints raw frames.
-- `crafting.py` — M3.6: places an ingredient layout chosen on the command line
-  into the open crafting grid (the survival inventory's 2×2 grid, or a crafting
-  table opened beforehand) with counted moves, waits until the server offers a
-  result, and crafts a given number of times into a given slot (`crafting`,
-  controller). The mod never chooses recipes, ingredients or destinations. Needs
-  the in-repository client; the published 0.1.0a1 alpha has no crafting API. Run
-  `python examples/crafting.py --place 1=main.0:2 --to hotbar.0 --crafts 2`
-  (one log stack in `main.0` → 8 planks); `inventory_view.py` shows the grid,
-  the offered result and furnace progress while it runs.
-- `block_scan.py` — M4.5: requests one bounded block scan (`blockScan`,
-  controller) around the player or at a given corner and prints each layer as a
-  map with a legend, or the decoded blocks as JSON. Needs the in-repository
-  client; the published 0.1.0a1 alpha has no scan API. Run
-  `python examples/block_scan.py [port] [--size X,Y,Z] [--min X,Y,Z] [--json]`
-  (default size 16,8,16). Over-cap requests print the refusal and its limits.
-- `gameplay.py` — M3.7: one explicit action per run: `say TEXT` (ordinary chat,
-  `chat`), `command TEXT` (refused unless the human set `chat.allowCommands`),
-  `respawn` (refused unless dead), `swap` (main hand ↔ offhand, `swapHands`) and
-  `hold-use SECONDS` (bow, crossbow, trident or shield; prints `usingItem`,
-  `blocking` and `vehicle` from the player section, `playerActivity`). Refusals
-  print their reason and the chat limits. Needs the in-repository client; the
-  published 0.1.0a1 alpha has none of these requests. Run
-  `python examples/gameplay.py say "hello"`.
-- `probe.py` — connect, print observations, hold forward for 0.2 s, release.
-- `walk_square.py` — walk a ~5-block square and report the return error.
-  Also the target for the disconnect-safety test: `kill -9` it mid-walk and
-  the player must stop within one tick.
-- `full_movement.py` — M3.1: every held control plus tap-jump vs held
-  jump and a sprint-jump, with measured speeds; `--sneak-edge` runs the
-  manual sneak-to-a-drop safety check.
-- `observer.py` — M2.4: read-only second connection (`role: "observer"`).
-  Run it *alongside* a controller example: it slows its own stream with
-  `configure` (the controller's cadence is untouched) and shows actuation
-  being refused locally with `RoleError`. `kill -9`-ing it must not disturb
-  the player or the controller.
-- `look_points.py` — M3.2: five smoothed look-at pans around the player,
-  then contrast cases (double-speed pan, instant snap, delta burst); the
-  D5 experiment driver and demo.
-- `interact.py` — M3.3: attack/use/hotbar. Provision the hotbar first
-  (slot 0 iron pickaxe, slot 1 dirt, slot 2 cooked beef, hunger not
-  full): mines a block to completion, places a block, eats — no
-  keyboard. Watch the rendered client.
+Every example needs Python 3.11+, the `marionette-mc` client and a running
+Marionette client that has joined a world. Run them from the repository root,
+for example `python examples/probe.py`. Each takes the bridge port as an
+optional first argument (default 24680).
 
-### Inventory and containers (M3.4)
+## Choosing a client package
 
-`python inventory.py [--port 24680] [--chest] [--instant]` exercises whole-stack move,
-number-key hotbar swap, equip, and dropping one item. It uses the additive
-`inventory` capability and the menu descriptor returned by `inspect`, without
-assuming menu slot offsets. The example animates a visible cursor by default
-(`inventoryAnimation` capability); `--instant` keeps same-tick execution.
-Move/equip show real pickup and placement; swap/drop show a cursor approach
-and click cue. Each action awaits its result before continuing. Requires Python 3.11+ and the package installed.
+- **Published alpha** — `python -m pip install "marionette-mc==0.1.0a1"`
+  ([PyPI](https://pypi.org/project/marionette-mc/0.1.0a1/)). It speaks protocol
+  2 with movement, camera, interaction, observers and inventory actions, and
+  keeps working against the current mod, but it predates events, the extra
+  observation sections, block scans, crafting, chat/respawn and `status`.
+- **In-repository client** — `python -m pip install -e ./python` from the
+  repository root. It supports every current capability. It is unreleased: no
+  further publication is authorized yet, so install it from this checkout.
+
+The *Client* column below says which you need. Examples marked *0.1.0a1* also
+work with the in-repository client.
+
+## Start here
+
+| Example | What it does | Role | Moves the player | Client |
+|---|---|---|---|---|
+| [`probe.py`](probe.py) | Connects, prints the handshake and observations, holds forward for 0.2 s, then shows `configure` slowing the stream | controller | 0.2 s forward | 0.1.0a1 |
+| [`dashboard.py`](dashboard.py) | Live read-only player dashboard: position, rotation, velocity, health, hunger, XP, flags and effects | observer | no | 0.1.0a1 |
+| [`walk_square.py`](walk_square.py) | Walks a ~5-block square with bounded holds (at most 3 s a side, stops when blocked, never jumps) and reports how far from the start it ended | controller | yes | 0.1.0a1 |
+| [`reference_agent.py`](reference_agent.py) | The end-to-end scripted reference agent (no AI): scans the terrain, chooses the direction with the most walkable ground, walks out with a bounded hold, looks at the nearest entity, walks back, stops if the human takes over, and reports its events | controller | yes | in-repo |
+
+`walk_square.py` is also the disconnect-safety check: `kill -9` it mid-walk
+and the player stops within one tick. `reference_agent.py` shows the parts a
+real agent needs: capability checks, a display name for the status HUD, a
+perceive–decide–act loop, an event watcher that stops the plan when a
+`control` event reports a human pause or panic, bounded holds, and release on
+every exit path.
+
+## Feature demos
+
+Read-only (observers; they never change the controls, and Ctrl-C exits):
+
+| Example | Shows | Client |
+|---|---|---|
+| [`observer.py`](observer.py) | A second, read-only connection (`observer`): slows its own stream with `configure` and shows actuation refused locally with `RoleError`. Run it alongside a controller example. | 0.1.0a1 |
+| [`events.py`](events.py) | One-shot events in `seq` order (`events`): damage, death, respawn, item pickup, chat, block broken, dimension change, and human precedence `control` changes | in-repo |
+| [`status.py`](status.py) | The `status` query: connection state, agent name, precedence mode, held controls and observation/drop/latency counters, as the HUD shows them. `--once`, `--json` | in-repo |
+| [`inventory_view.py`](inventory_view.py) | The `inventory` section: held item, hotbar, main inventory, armor, offhand and the open menu with its slot addresses, operations, storage support and crafting/furnace progress. `--once`, `--json` | in-repo |
+| [`target_view.py`](target_view.py) | The `target` and `world` sections: crosshair block or entity within vanilla reach; dimension, time, weather and light. `--once`, `--json` | in-repo |
+| [`entity_view.py`](entity_view.py) | The `entities` section: nearby entities nearest first with hostility, speed, health and "targeting me". `--once`, `--json` | in-repo |
+
+Controller demos (each holds controls only briefly and releases on exit):
+
+| Example | Shows | Setup | Client |
+|---|---|---|---|
+| [`full_movement.py`](full_movement.py) | Every held control with measured speeds: walk, sprint, sneak, strafes, back. `--jumps` adds tap vs held jump and a sprint-jump; `--sneak-edge` is the manual sneak-at-a-drop check | ~35 blocks of flat ground ahead | 0.1.0a1 |
+| [`look_points.py`](look_points.py) | Smoothed camera pans to five points, a double-speed pan, an instant snap and delta turns (`camera`) | none | 0.1.0a1 |
+| [`interact.py`](interact.py) | Attack, use and hotbar (`interact`): mines the block in front, places dirt, eats | hotbar 0 iron pickaxe, 1 dirt, 2 cooked beef; hunger not full | 0.1.0a1 |
+| [`inventory.py`](inventory.py) | Inventory actions (`inventory`): move, hotbar swap, equip, drop with a visible cursor; `--chest` deposits into the storage under the crosshair; `--instant` skips the animation | see [below](#inventory-and-containers) | 0.1.0a1 |
+| [`crafting.py`](crafting.py) | Places an ingredient layout chosen on the command line and crafts (`crafting`), e.g. `--place 1=main.0:2 --to hotbar.0 --crafts 2` turns two logs into 8 planks | logs in `main.0` | in-repo |
+| [`block_scan.py`](block_scan.py) | One bounded block scan (`blockScan`) printed as layer maps or JSON; `--size X,Y,Z`, `--min X,Y,Z`, `--json`. Over-cap requests print the refusal and its limits | none | in-repo |
+| [`gameplay.py`](gameplay.py) | One explicit action per run: `say TEXT`, `command TEXT` (refused unless the human set `chat.allowCommands`), `respawn` (refused unless dead), `swap` (hands), `hold-use SECONDS` (bow, shield, crossbow) | item in hand for `hold-use` | in-repo |
+
+The mod never decides anything in these demos: recipes, destinations, chat
+text and targets all come from the command line or from the script's own
+rules.
+
+## Inventory and containers
+
+`python examples/inventory.py [--port 24680] [--chest] [--instant]` exercises
+whole-stack move, number-key hotbar swap, equip, and dropping one item, using
+the menu descriptor returned by `inspect` rather than assumed slot offsets.
+Each action awaits its result before continuing.
 
 Use a survival/adventure test world. Close all screens, empty the cursor,
 leave hotbar slot 0 and the head armor slot empty, and provision:
@@ -112,46 +95,40 @@ With cheats enabled, `/clear @s` followed by these commands sets up the items
 ```
 
 For `--chest`, point at a reachable, closed chest with an empty slot before
-starting. After the inventory sequence the example taps normal use, waits for
-a storage menu, and moves the remaining dirt into its first empty container
-slot using the same generic move command. With a mod advertising
-`inventoryStorage`, any menu reported as `support.scope == "storage"` counts,
-including modded storage; a refusal prints its rejection `reason` (for
-example `destination_rejects` for a restricted slot). A dropped item may be picked up
-again if the player stands on it. The script reports errors rather than blindly
-retrying mutations. Responses reflect client prediction; server synchronization
-can still correct them. Full wire rules: [protocol/v1.md](../protocol/v1.md#inventory--menu-addressed-inventory-actions).
+starting. After the inventory sequence the example taps use, waits for a
+storage menu, and moves the remaining dirt into its first empty container slot.
+With `inventoryStorage`, any menu reported as `support.scope == "storage"`
+counts, including modded storage; a refusal prints its `reason` (for example
+`destination_rejects` for a restricted slot). A dropped item may be picked up
+again if the player stands on it. Responses reflect client prediction; server
+synchronization can still correct them. Full wire rules:
+[protocol/v1.md](../protocol/v1.md#inventory--menu-addressed-inventory-actions).
 
-## Bridge safety
+## Writing your own agent
 
-Current protocol-2 servers advertise `bridgeSafety`. Keep the WebSocket read
-loop running so the library answers pings; a frozen reader is disconnected by
-the configurable pong watchdog (2 seconds by default, so avoid blocking the
-event loop for more than about 1.5 seconds). Do not set an Origin header on
-native clients. Browser clients are rejected under the development trust
-policy. Close 1013 means overload: stop sending and treat pending request
-outcomes as unknown.
-Reconnect explicitly and inspect inventory before retrying mutations. F8 in the
-Minecraft client is the local panic control: it severs the controller (close
-1008 `local panic`) and latches controller admission off. While latched, a
-controller hello fails with error `panic_latched` (close 1008); with
-`marionette-mc` this raises `ServerError` whose `error["code"]` is
-`panic_latched`. Do not retry in a loop: wait for the player to re-arm with F9
-and surface the state to your operator. Observers are unaffected. See [the wire limits](../protocol/v1.md#transport).
+- Keep the WebSocket read loop running so the library answers pings. The pong
+  watchdog disconnects a frozen reader after 2 seconds by default, so never
+  block the event loop for more than about 1.5 seconds; move blocking work to a
+  thread.
+- Bound every hold and release on every exit path. Closing the session also
+  releases everything, but an explicit `release()` makes intent clear.
+- Feature-detect with `required_capabilities` or `client.require(...)`; never
+  compare version numbers.
+- Do not set an Origin header: native clients only. Browser clients are
+  rejected under the development trust policy.
+- Close 1013 means overload: stop sending and treat pending request outcomes
+  as unknown. Reconnect explicitly and inspect inventory before retrying
+  mutations; the client never reconnects or replays by itself.
+- F8 in Minecraft is the local panic control: it severs the controller (close
+  1008 `local panic`) and latches controller admission off. While latched, a
+  controller hello raises `ServerError` with `error["code"] == "panic_latched"`.
+  Do not retry in a loop: the player re-arms with F9. Observers are unaffected.
+- Human input pauses an agent in the default human-priority mode: its
+  movement and camera commands are discarded and other actions refused with
+  `human_paused`. Subscribe to events to see `control` changes.
 
-## Package setup
-
-Install the explicit published pin with
-`python -m pip install "marionette-mc==0.1.0a1"`.
-For source development only, use `python -m pip install -e ./python` from the
-repository root. The published pin has passed M2.5's clean-environment and
-rendered smoke acceptance; local installation is not a substitute for separate
-consumer integration verification. See [the API and bounds](../python/README.md).
-
-All examples use typed client methods. `_common.py` demonstrates an application
-policy that monitors reliable errors, interrupts the demo on error, and closes
-the session. Gameplay demos have a 120-second outer deadline; observation waits
-are bounded and the short probe only moves for 0.2 seconds. The package keeps
-reading and coalescing observations during sleeps. There is no automatic replay
-or reconnect. Inventory errors and late replies cannot be discarded by an
-example-specific receive loop.
+`_common.py` holds the examples' shared policy: it watches the reliable reply
+stream, interrupts the demo on a server error and closes the session. Gameplay
+demos have a 120-second outer deadline. See
+[the wire limits](../protocol/v1.md#transport) and
+[the client API and bounds](../python/README.md).

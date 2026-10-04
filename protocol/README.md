@@ -39,4 +39,6 @@ language target that document, not the mod's source.
   the Phase 1 walking skeleton spoke.
 
 Security posture (loopback-only binding, single controller) is part of
-the contract — see [SECURITY.md](../SECURITY.md).
+the contract — see [SECURITY.md](../SECURITY.md). The design rationale, the
+capability timeline and the finalization checklist are in
+[docs/protocol-evolution.md](../docs/protocol-evolution.md).

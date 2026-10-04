@@ -9,7 +9,7 @@ controller's inputs are unaffected.
 
 Requires the in-repository client (pip install -e ./python); the published
 0.1.0a1 alpha has no ``status`` support.
-Usage:     python status.py [port] [--once] [--json]     (default 24680)
+Usage:     python examples/status.py [port] [--once] [--json]     (default 24680)
 """
 import asyncio
 import json

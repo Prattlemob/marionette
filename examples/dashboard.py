@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Read-only live player dashboard (protocol 2).
 
-Requires: pip install "marionette-mc==0.1.0a1"
-Usage: python examples/dashboard.py [port] (default 24680)
+Works with the published client:  pip install "marionette-mc==0.1.0a1"
+Usage:     python examples/dashboard.py [port]     (default 24680)
 Take fall damage, sprint, swim, or gain an effect to watch the state change.
 """
 import asyncio
