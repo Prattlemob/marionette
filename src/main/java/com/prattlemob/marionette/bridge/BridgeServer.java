@@ -525,7 +525,16 @@ public final class BridgeServer {
                 connection.close(1003, "text frames only");
                 return;
             }
-            for (ProtocolSession.Action action : connection.session().onFrame(text.text())) {
+            List<ProtocolSession.Action> actions = connection.session().onFrame(text.text());
+            // Become ready before the hello reply is written: an agent that has
+            // read the reply must receive every later broadcast. This inline
+            // write still precedes any client-thread write, which Netty queues.
+            if (!connection.ready() && connection.session().isActive()) {
+                connection.setSections(connection.session().sections());
+                connection.setEvents(connection.session().events());
+            }
+            connection.setReady(connection.session().isActive());
+            for (ProtocolSession.Action action : actions) {
                 switch (action) {
                     case ProtocolSession.Action.Send send ->
                             connection.sendReliable(send.json());
@@ -540,11 +549,6 @@ public final class BridgeServer {
                             connection.close(close.code(), close.reason());
                 }
             }
-            if (!connection.ready() && connection.session().isActive()) {
-                connection.setSections(connection.session().sections());
-                connection.setEvents(connection.session().events());
-            }
-            connection.setReady(connection.session().isActive());
         }
 
         @Override
