@@ -53,6 +53,20 @@
       }
     },
     {
+      "javaType": "Hello",
+      "wire": {
+        "type": "hello",
+        "versions": [
+          2
+        ],
+        "role": "observer",
+        "sections": [
+          "player",
+          "entities"
+        ]
+      }
+    },
+    {
       "javaType": "InputUpdate",
       "wire": {
         "type": "input",
@@ -239,6 +253,16 @@
           "target"
         ]
       }
+    },
+    {
+      "javaType": "Configure",
+      "wire": {
+        "type": "configure",
+        "sections": [
+          "entities",
+          "world"
+        ]
+      }
     }
   ],
   "messages": [
@@ -260,7 +284,8 @@
         "inventoryState": true,
         "inventoryStorage": true,
         "targetState": true,
-        "worldState": true
+        "worldState": true,
+        "entityState": true
       },
       "mod": "0.1.0",
       "id": "hello-fixture"
@@ -667,6 +692,164 @@
       }
     },
     {
+      "type": "observation",
+      "tick": 1700,
+      "entities": {
+        "radius": 32,
+        "maxCount": 64,
+        "total": 3,
+        "truncated": false,
+        "nearby": [
+          {
+            "id": 212,
+            "type": "minecraft:zombie",
+            "hostility": "hostile",
+            "x": 3.5,
+            "y": -60.0,
+            "z": 1.5,
+            "velocity": {
+              "x": -0.021,
+              "y": 0.0,
+              "z": 0.034
+            },
+            "distance": 3.808,
+            "health": 20.0,
+            "maxHealth": 20.0,
+            "targetingMe": "unknown"
+          },
+          {
+            "id": 215,
+            "type": "minecraft:item",
+            "hostility": "item",
+            "x": -1.2,
+            "y": -60.0,
+            "z": 5.1,
+            "velocity": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "distance": 5.239,
+            "item": {
+              "item": "minecraft:diamond",
+              "count": 3
+            }
+          },
+          {
+            "id": 213,
+            "type": "minecraft:cow",
+            "hostility": "passive",
+            "x": -6.5,
+            "y": -60.0,
+            "z": -3.5,
+            "velocity": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "distance": 7.382,
+            "health": 10.0,
+            "maxHealth": 10.0,
+            "targetingMe": "unknown"
+          }
+        ]
+      }
+    },
+    {
+      "type": "observation",
+      "tick": 1760,
+      "player": {
+        "x": 0.5,
+        "y": -60.0,
+        "z": 0.5,
+        "yaw": 0.0,
+        "pitch": 0.0,
+        "velocity": {
+          "x": 0.0,
+          "y": -0.0784,
+          "z": 0.0
+        },
+        "health": 20.0,
+        "maxHealth": 20.0,
+        "hunger": 20,
+        "saturation": 5.0,
+        "air": 300,
+        "maxAir": 300,
+        "xp": {
+          "level": 0,
+          "progress": 0.0,
+          "total": 0
+        },
+        "onGround": true,
+        "inWater": false,
+        "sneaking": false,
+        "sprinting": false,
+        "sleeping": false,
+        "onFire": false,
+        "effects": []
+      },
+      "entities": {
+        "radius": 16,
+        "maxCount": 3,
+        "total": 41,
+        "truncated": true,
+        "nearby": [
+          {
+            "id": 301,
+            "type": "minecraft:guardian",
+            "hostility": "hostile",
+            "x": 2.5,
+            "y": -61.0,
+            "z": 0.5,
+            "velocity": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "distance": 2.236,
+            "health": 30.0,
+            "maxHealth": 30.0,
+            "targetingMe": "yes"
+          },
+          {
+            "id": 7,
+            "type": "minecraft:player",
+            "hostility": "player",
+            "x": -2.0,
+            "y": -60.0,
+            "z": 2.0,
+            "velocity": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "distance": 2.915,
+            "health": 20.0,
+            "maxHealth": 20.0,
+            "targetingMe": "unknown",
+            "name": "Steve"
+          },
+          {
+            "id": 302,
+            "type": "minecraft:elder_guardian",
+            "hostility": "hostile",
+            "x": 0.5,
+            "y": -61.0,
+            "z": 4.0,
+            "velocity": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "distance": 3.64,
+            "health": 80.0,
+            "maxHealth": 80.0,
+            "targetingMe": "no"
+          }
+        ]
+      }
+    },
+    {
       "type": "inventory_result",
       "id": "inspect",
       "op": "inspect",
@@ -831,7 +1014,7 @@
       "wire": {
         "type": "configure",
         "sections": [
-          "entities"
+          "entity"
         ]
       },
       "code": "invalid_field"
@@ -840,8 +1023,8 @@
       "wire": {
         "type": "configure",
         "sections": [
-          "target",
-          "entities"
+          "entities",
+          "Entities"
         ]
       },
       "code": "invalid_field"

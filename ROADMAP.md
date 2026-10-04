@@ -28,9 +28,9 @@ depends on.
 
 Keep milestone IDs and completed history. **M2.5 (published client) and M5.1a
 (bridge safety) are complete; M4.6 (one-shot events), M4.2 (inventory
-observation), M3.5 (modded storage) and M4.3 (crosshair target and world
-context) are complete.** The remaining implementation order is
-**M4.4 → M4.5 → M3.6 → M3.7 → M5.1 → M5.2**.
+observation), M3.5 (modded storage), M4.3 (crosshair target and world
+context) and M4.4 (nearby entities) are complete.** The remaining implementation
+order is **M4.5 → M3.6 → M3.7 → M5.1 → M5.2**.
 Further package publication retains D12/D14 decision gates; a blocked release
 does not prevent independent safety/perception work. M3.3's outstanding visual
 acceptance remains debt and must be reconciled for milestones requiring it.
@@ -618,15 +618,22 @@ until a further publication is authorized (D14).
   positions; entity count in a busy area stays under the configured cap with
   nearest-first priority.
 - **Tier:** Core.
-- **Decision (minor, open):** hostility classification source (type tables vs.
-  tags); how much client-side aggro inference to attempt.
+- **Decision (minor, resolved 2026-10-04, D21):** a vanilla type table over
+  class markers, not tags; no aggro inference, `targetingMe` only from
+  synchronized attack targets, otherwise `"unknown"`.
 
 Items:
 
-- [ ] Entity schema in `protocol/`; radius + max-count caps
-- [ ] Nearest-first truncation, truncation flagged in the message
-- [ ] Hostility classification table
-- [ ] Live demo verification
+- [x] Entity schema in `protocol/`; radius + max-count caps
+- [x] Nearest-first truncation, truncation flagged in the message
+- [x] Hostility classification table
+- [x] Live demo verification
+
+Implemented as the additive `entityState` capability (protocol 2; D21): the
+opt-in `entities` section. See the
+[M4.4 verification record](docs/decisions.md#m44-implementation-and-verification-2026-10-04).
+The published 0.1.0a1 client is unaffected; the new section is source-only
+until a further publication is authorized (D14).
 
 ### M4.5 — Bounded block scan
 

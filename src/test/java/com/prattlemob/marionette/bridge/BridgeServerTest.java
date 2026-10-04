@@ -215,10 +215,10 @@ class BridgeServerTest {
     }
 
     @Test
-    void targetAndWorldSectionsAreSampledOnceAndOnlyWhenSelected() throws Exception {
+    void optInSectionsAreSampledOnceAndOnlyWhenSelected() throws Exception {
         var counts = new java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger>();
         java.util.Map<String, java.util.function.Supplier<JsonObject>> samplers = new java.util.HashMap<>();
-        for (String name : List.of("player", "inventory", "target", "world")) {
+        for (String name : List.of("player", "inventory", "target", "world", "entities")) {
             samplers.put(name, () -> {
                 counts.computeIfAbsent(name, k -> new java.util.concurrent.atomic.AtomicInteger()).incrementAndGet();
                 JsonObject section = new JsonObject();
@@ -231,7 +231,7 @@ class BridgeServerTest {
         first.send("{\"type\":\"hello\",\"versions\":[2],\"role\":\"observer\",\"sections\":[\"target\",\"world\"]}");
         first.awaitMessage();
         TestClient second = TestClient.connect(server.port());
-        second.send("{\"type\":\"hello\",\"versions\":[2],\"role\":\"observer\",\"sections\":[\"player\",\"target\"]}");
+        second.send("{\"type\":\"hello\",\"versions\":[2],\"role\":\"observer\",\"sections\":[\"entities\",\"player\",\"target\"]}");
         second.awaitMessage();
         await(() -> server.observerCount() == 2);
         server.sendSectionObservation(1, 1, samplers);
@@ -241,10 +241,11 @@ class BridgeServerTest {
         assertEquals(List.of("type", "tick", "player"), List.copyOf(plain.keySet()),
                 "default-mask sessions see unchanged frames");
         assertEquals(List.of("type", "tick", "target", "world"), List.copyOf(both.keySet()));
-        assertEquals(List.of("type", "tick", "player", "target"), List.copyOf(mixed.keySet()));
+        assertEquals(List.of("type", "tick", "player", "target", "entities"), List.copyOf(mixed.keySet()));
         assertEquals(1, counts.get("player").get());
         assertEquals(1, counts.get("target").get(), "shared sections are sampled once per tick");
         assertEquals(1, counts.get("world").get());
+        assertEquals(1, counts.get("entities").get());
         assertFalse(counts.containsKey("inventory"), "unselected sections must not sample game state");
     }
 

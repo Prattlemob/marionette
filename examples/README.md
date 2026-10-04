@@ -25,6 +25,13 @@ joined a world.
   in-repository client; the published 0.1.0a1 alpha cannot select those sections.
   Run `python examples/target_view.py [port]`; `--once` prints one frame and
   `--json` prints raw frames.
+- `entity_view.py` — M4.4: read-only nearby entities from the `entities`
+  section, nearest first: type, hostility (hostile/neutral/passive/player/item/
+  other), position, speed, health and "targeting me" (`yes`/`no` only where the
+  client knows, otherwise `unknown`), with the radius, count cap and truncation
+  flag. Needs the in-repository client; the published 0.1.0a1 alpha cannot
+  select that section. Run `python examples/entity_view.py [port]`; `--once`
+  prints one frame and `--json` prints raw frames.
 - `probe.py` — connect, print observations, hold forward for 0.2 s, release.
 - `walk_square.py` — walk a ~5-block square and report the return error.
   Also the target for the disconnect-safety test: `kill -9` it mid-walk and

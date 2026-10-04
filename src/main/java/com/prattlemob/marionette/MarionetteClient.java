@@ -23,6 +23,7 @@ import com.prattlemob.marionette.control.SmoothingModel;
 import com.prattlemob.marionette.event.EventRecorder;
 import com.prattlemob.marionette.event.MinecraftEvents;
 
+import com.prattlemob.marionette.observation.EntityObservation;
 import com.prattlemob.marionette.observation.InventoryObservation;
 import com.prattlemob.marionette.observation.PlayerObservation;
 import com.prattlemob.marionette.observation.TargetObservation;
@@ -510,7 +511,9 @@ public class MarionetteClient {
                     "player", () -> PlayerObservation.capture(player),
                     "inventory", () -> InventoryObservation.capture(player, inventoryApplier),
                     "target", () -> TargetObservation.capture(minecraft, player),
-                    "world", () -> minecraft.level == null ? null : WorldObservation.capture(minecraft.level, player)));
+                    "world", () -> minecraft.level == null ? null : WorldObservation.capture(minecraft.level, player),
+                    "entities", () -> minecraft.level == null ? null : EntityObservation.capture(minecraft.level, player,
+                            MarionetteConfig.entityRadius, MarionetteConfig.entityMaxCount)));
         }
     }
 
