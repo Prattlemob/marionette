@@ -98,4 +98,31 @@ class MessagesTest {
         JsonObject reply = parse(Messages.helloReply(1, "0.1.0", null));
         assertTrue(reply.get("capabilities").getAsJsonObject().get("interact").getAsBoolean());
     }
+
+    @Test
+    void eventEnvelopeComesFirstAndNeverCarriesAnId() {
+        JsonObject fields = new JsonObject();
+        fields.addProperty("id", "spoofed");          // a kind's fields cannot answer a request
+        fields.addProperty("seq", 99);                 // nor override the envelope
+        fields.addProperty("item", "minecraft:diamond");
+        fields.add("count", JsonParser.parseString("3"));
+        String json = Messages.event(new GameEvent("item_pickup", "w1", 42, GameEvent.Basis.SERVER, fields), 7);
+        assertTrue(json.startsWith("{\"type\":\"event\",\"event\":\"item_pickup\",\"seq\":7,"
+                + "\"worldSession\":\"w1\",\"tick\":42,\"basis\":\"server\""), json);
+        JsonObject event = parse(json);
+        assertFalse(event.has("id"));
+        assertEquals(7, event.get("seq").getAsLong());
+        assertEquals("minecraft:diamond", event.get("item").getAsString());
+        assertTrue(parse(Messages.helloReply(2, "0.1.0", null)).getAsJsonObject("capabilities")
+                .get("events").getAsBoolean());
+    }
+
+    @Test
+    void unknownFieldValuesStayExplicitNulls() {
+        JsonObject fields = new JsonObject();
+        fields.addProperty("item", (String) null);
+        JsonObject event = parse(Messages.event(new GameEvent("item_pickup", "w", 1, GameEvent.Basis.CLIENT, fields), 1));
+        assertTrue(event.has("item") && event.get("item").isJsonNull());
+        assertEquals("client", event.get("basis").getAsString());
+    }
 }

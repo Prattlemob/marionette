@@ -21,6 +21,7 @@ import com.google.gson.JsonObject;
 import com.prattlemob.marionette.bridge.protocol.AgentCommand;
 import com.prattlemob.marionette.bridge.protocol.Messages;
 import com.prattlemob.marionette.bridge.protocol.ErrorCode;
+import com.prattlemob.marionette.bridge.protocol.GameEvent;
 import com.prattlemob.marionette.bridge.protocol.ProtocolSession;
 import com.prattlemob.marionette.bridge.protocol.Role;
 
@@ -372,6 +373,15 @@ public final class BridgeServer {
         }
     }
 
+    /**
+     * Deliver one event to every subscribed, ready connection, each with its
+     * own sequence and bound (protocol/v1.md, Events). Client thread only, so
+     * events, observations and tick-side replies share one write order.
+     */
+    public void sendEvent(GameEvent event) {
+        connections().forEach(connection -> connection.sendEvent(event));
+    }
+
     /** Observation frames deferred/dropped across all connections since they attached. */
     public long coalescedObservations() {
         return connections().mapToLong(AgentConnection::coalescedObservations).sum();
@@ -520,6 +530,7 @@ public final class BridgeServer {
             }
             if (!connection.ready() && connection.session().isActive()) {
                 connection.setSections(connection.session().sections());
+                connection.setEvents(connection.session().events());
             }
             connection.setReady(connection.session().isActive());
         }

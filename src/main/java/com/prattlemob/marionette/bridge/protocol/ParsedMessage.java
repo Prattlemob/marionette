@@ -12,5 +12,6 @@ public sealed interface ParsedMessage permits ParsedMessage.Hello, AgentCommand 
      * {@code role} is already defaulted to "controller" when absent;
      * {@code id} is the envelope id or null.
      */
-    record Hello(List<Integer> versions, String role, JsonPrimitive id, Set<String> sections) implements ParsedMessage {}
+    record Hello(List<Integer> versions, String role, JsonPrimitive id, Set<String> sections,
+                 Boolean events) implements ParsedMessage {}
 }

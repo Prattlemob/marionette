@@ -89,7 +89,8 @@ public final class MessageParser {
             throw new ProtocolError(ErrorCode.INVALID_FIELD, "missing \"type\"");
         }
         return switch (type) {
-            case "hello" -> new ParsedMessage.Hello(versions(json), role(json), id, sections(json));
+            case "hello" -> new ParsedMessage.Hello(versions(json), role(json), id, sections(json),
+                    optionalBoolean(json, "events"));
             case "input" -> new AgentCommand.InputUpdate(
                     optionalBoolean(json, "forward"),
                     optionalBoolean(json, "back"),
@@ -106,7 +107,8 @@ public final class MessageParser {
             case "look" -> parseLook(json, id, raw);
             case "release" -> new AgentCommand.Release();
             case "configure" -> new AgentCommand.Configure(
-                    optionalRangedInt(json, "rateDivisor", 1, 100), sections(json));
+                    optionalRangedInt(json, "rateDivisor", 1, 100), sections(json),
+                    optionalBoolean(json, "events"));
             default -> throw new ProtocolError(ErrorCode.UNKNOWN_TYPE, "unknown type: " + type);
         };
     }

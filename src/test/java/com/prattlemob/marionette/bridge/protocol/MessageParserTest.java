@@ -1,6 +1,7 @@
 package com.prattlemob.marionette.bridge.protocol;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -368,5 +369,36 @@ class MessageParserTest {
     void nonBooleanAttackIsInvalidField() {
         assertEquals(ErrorCode.INVALID_FIELD, assertThrows(ProtocolError.class,
                 () -> MessageParser.parse("{\"type\": \"input\", \"attack\": 1}")).code());
+    }
+
+    @Test
+    void helloAndConfigureCarryTheOptionalEventsSubscription() {
+        var hello = assertInstanceOf(ParsedMessage.Hello.class,
+                MessageParser.parse("{\"type\":\"hello\",\"versions\":[2],\"events\":true}"));
+        assertEquals(Boolean.TRUE, hello.events());
+        assertNull(assertInstanceOf(ParsedMessage.Hello.class,
+                MessageParser.parse("{\"type\":\"hello\",\"versions\":[2]}")).events());
+        var configure = assertInstanceOf(AgentCommand.Configure.class,
+                MessageParser.parse("{\"type\":\"configure\",\"events\":false}"));
+        assertEquals(Boolean.FALSE, configure.events());
+        assertNull(configure.rateDivisor());
+        assertNull(assertInstanceOf(AgentCommand.Configure.class,
+                MessageParser.parse("{\"type\":\"configure\"}")).events());
+        for (String bad : new String[] {"1", "\"true\"", "null", "[]"}) {
+            assertEquals(ErrorCode.INVALID_FIELD, assertThrows(ProtocolError.class,
+                    () -> MessageParser.parse("{\"type\":\"configure\",\"events\":" + bad + "}")).code());
+            assertEquals(ErrorCode.INVALID_FIELD, assertThrows(ProtocolError.class,
+                    () -> MessageParser.parse("{\"type\":\"hello\",\"versions\":[2],\"events\":" + bad + "}")).code());
+        }
+    }
+
+    @Test
+    void sessionSubscribesOnlyWhenHelloAsks() {
+        var plain = new ProtocolSession("test");
+        plain.onFrame("{\"type\":\"hello\",\"versions\":[2]}");
+        assertFalse(plain.events());
+        var subscribed = new ProtocolSession("test");
+        subscribed.onFrame("{\"type\":\"hello\",\"versions\":[2],\"role\":\"observer\",\"events\":true}");
+        assertTrue(subscribed.events());
     }
 }

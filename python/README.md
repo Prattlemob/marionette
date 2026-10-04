@@ -60,6 +60,18 @@ ignore environment proxies. Current local trust has no authentication.
   animated=False, timeout=...)` supports open/inspect/move/swap/equip/drop/close.
   Obtain `menu_ref(result["menu"])` from a recent inspect before mutations.
   Results describe client prediction, not authoritative server acknowledgment.
+- `connect(..., events=True)` subscribes in hello (requires the `events`
+  capability); `configure(events=True | False)` changes it later.
+  `next_event(timeout=...)` / `events()` consume events in `seq` order from a
+  separate bounded queue (`event_limit`, default 1024). Events never answer
+  requests. A sequence gap or a frame claiming an `id` ends the session as
+  `InvalidMessage`; an overflowing local queue ends it with `CapacityError`.
+  `last_event_seq` is the last event received; events already received stay
+  readable after closure. Event kinds are typed in `messages` (`DamageEvent`,
+  `ChatEvent`, ...); unknown kinds decode as `OtherEvent`. Message types this
+  client does not know are counted in `unknown_messages` and ignored.
+  These event APIs are in the repository source only; the published
+  0.1.0a1 alpha has none and ends its session on unknown message types.
 - `next_observation(timeout=...)` / `observations()` consume latest observations.
   A slow consumer skips frames; `observations_coalesced` counts replacements.
 - `next_reply(timeout=...)` / `replies()` consume uncorrelated errors and late or
@@ -73,7 +85,7 @@ ignore environment proxies. Current local trust has no authentication.
   cannot be read as live state after disconnect.
 
 TypedDict wire models (including nested player, effects, inventory menus/slots,
-commands and all four incoming types) live in `marionette_mc.messages`. Decoding
+commands, events and all incoming types) live in `marionette_mc.messages`. Decoding
 checks required fields/types and retains unknown additive fields. `ServerError`,
 `VersionError`, `CapabilityError`, `RoleError`, `CapacityError` and `InvalidMessage`
 (the latter in `messages`) distinguish failure causes. Opening failures preserve
@@ -94,7 +106,7 @@ in a separately chosen new session before deciding what to do. To stop current
 controller work, use release or close, understanding already-completed world
 changes cannot be undone. An unmatched reply is not proof that it is safe to retry.
 
-Default bounds: 64 reliable replies, 32 pending requests, one latest observation,
+Default bounds: 64 reliable replies, 32 pending requests, 1024 events, one latest observation,
 128 KiB incoming frames, 16 transport frames, 32 KiB write high-water mark,
 64 KiB outgoing commands, 5-second connect/hello timeout, 10-second request/write
 timeout and 1-second close timeout. Queue limits are configurable integers 1–1024.

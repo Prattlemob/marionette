@@ -22,6 +22,7 @@ class HelloRequest(Envelope):
     versions: list[int]
     role: NotRequired[Role]
     sections: NotRequired[list[Section]]
+    events: NotRequired[bool]
 
 
 class Hello(Envelope):
@@ -150,6 +151,90 @@ class Configure(Envelope):
     type: Literal["configure"]
     rateDivisor: NotRequired[int]
     sections: NotRequired[list[Section]]
+    events: NotRequired[bool]
+
+
+Basis = Literal["server", "client"]
+
+
+class EventEnvelope(TypedDict):
+    """Fields on every event. Events never carry ``id`` and never answer requests."""
+    type: Literal["event"]
+    seq: int
+    worldSession: str
+    tick: int
+    basis: Basis
+
+
+class DamageSource(TypedDict):
+    type: str | None
+    attacker: str | None
+    direct: str | None
+
+
+class DamageEvent(EventEnvelope):
+    event: Literal["damage"]
+    source: DamageSource | None
+    amount: float | None
+    health: float | None
+
+
+class DeathEvent(EventEnvelope):
+    event: Literal["death"]
+    message: str | None
+    truncated: bool
+
+
+class RespawnEvent(EventEnvelope):
+    event: Literal["respawn"]
+    dimension: str | None
+
+
+DimensionChangeEvent = TypedDict("DimensionChangeEvent", {
+    "type": Literal["event"], "seq": int, "worldSession": str, "tick": int, "basis": Basis,
+    "event": Literal["dimension_change"], "from": str | None, "to": str | None,
+})
+
+
+class ItemPickupEvent(EventEnvelope):
+    event: Literal["item_pickup"]
+    item: str | None
+    count: int
+
+
+class ChatEvent(EventEnvelope):
+    event: Literal["chat"]
+    kind: Literal["chat", "system", "action_bar"]
+    text: str | None
+    sender: str | None
+    chatType: str | None
+    truncated: bool
+
+
+class BlockPos(TypedDict):
+    x: int
+    y: int
+    z: int
+
+
+class BlockBrokenEvent(EventEnvelope):
+    event: Literal["block_broken"]
+    block: str | None
+    pos: BlockPos
+
+
+class OtherEvent(EventEnvelope):
+    """A kind this client does not know yet; ignore it but keep its ``seq``."""
+    event: str
+
+
+Event = (DamageEvent | DeathEvent | RespawnEvent | DimensionChangeEvent | ItemPickupEvent
+         | ChatEvent | BlockBrokenEvent | OtherEvent)
+EVENT_SCHEMAS: dict[str, object] = {
+    "damage": DamageEvent, "death": DeathEvent, "respawn": RespawnEvent,
+    "dimension_change": DimensionChangeEvent, "item_pickup": ItemPickupEvent,
+    "chat": ChatEvent, "block_broken": BlockBrokenEvent,
+}
 
 
 InventoryRequest = TypedDict("InventoryRequest", {
@@ -159,12 +244,16 @@ InventoryRequest = TypedDict("InventoryRequest", {
     "all": NotRequired[bool], "animated": NotRequired[bool],
 })
 Command = Input | Look | Release | Configure | InventoryRequest
-Message = Hello | Observation | InventoryResult | Error
+Message = Hello | Observation | InventoryResult | Error | Event
 Reliable = InventoryResult | Error
 
 
 class InvalidMessage(ValueError):
     """Malformed or unsupported wire message; never a fabricated server event."""
+
+
+class UnsupportedMessage(InvalidMessage):
+    """A well-formed message whose ``type`` this client does not know."""
 
 
 def validate(value: object, schema: object, path: str = "message") -> None:
@@ -226,10 +315,17 @@ def decode(raw: str | bytes) -> Message:
     kind = value.get("type")
     if not isinstance(kind, str):
         raise InvalidMessage("type must be a string")
-    schema = {"hello": Hello, "observation": Observation,
-              "inventory_result": InventoryResult, "error": Error}.get(kind)
+    schema: object = {"hello": Hello, "observation": Observation,
+                      "inventory_result": InventoryResult, "error": Error}.get(kind)
+    if kind == "event":
+        event = value.get("event")
+        if not isinstance(event, str):
+            raise InvalidMessage("event must be a string")
+        schema = EVENT_SCHEMAS.get(event, OtherEvent)
+        if "id" in value:
+            raise InvalidMessage("events never carry an id")
     if schema is None:
-        raise InvalidMessage("unsupported message type")
+        raise UnsupportedMessage(f"unsupported message type {kind!r}")
     validate(value, schema)
     return cast(Message, value)
 

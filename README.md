@@ -21,7 +21,7 @@ Marionette aims to provide:
 
 ## Project status
 
-**Protocol 2, bridge hardening, movement, camera smoothing, attack/use/hotbar control, inventory/container actions, and player observations are implemented.** An external script can drive the rendered player over a localhost WebSocket, with read-only observers alongside the controller — see [examples/](examples/) for working clients. See [ROADMAP.md](ROADMAP.md) for verification status and upcoming event work (M4.6).
+**Protocol 2, bridge hardening, movement, camera smoothing, attack/use/hotbar control, inventory/container actions, player observations, and opt-in one-shot events are implemented.** An external script can drive the rendered player over a localhost WebSocket, with read-only observers alongside the controller — see [examples/](examples/) for working clients. Events (damage, death, respawn, item pickup, chat, block breaking, dimension change) require the in-repository Python client; the published 0.1.0a1 alpha predates them and never receives them. See [ROADMAP.md](ROADMAP.md) for verification status.
 
 - The implementation plan lives in [ROADMAP.md](ROADMAP.md) — phases, milestones, and definitions of done.
 - Design decisions (settled, experiment-gated, and still open) are recorded in [docs/decisions.md](docs/decisions.md). Highlights: the transport is a localhost WebSocket carrying JSON; the core is client-only with an optional server component later; [Baritone](https://github.com/cabaletta/baritone) is planned as an optional (never bundled) integration for high-level navigation.

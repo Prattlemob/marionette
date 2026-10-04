@@ -12,7 +12,7 @@ from marionette_mc.messages import InvalidMessage, decode
 
 HELLO = dict(type="hello", version=2, mod="0.1.0", capabilities=dict(
     configure=True, observer=True, playerState=True, tap=True, camera=True,
-    interact=True, inventory=True, inventoryAnimation=True, bridgeSafety=True))
+    interact=True, inventory=True, inventoryAnimation=True, bridgeSafety=True, events=True))
 
 
 async def send(ws, **message):
@@ -70,7 +70,7 @@ class ClientTests(unittest.IsolatedAsyncioTestCase):
                     wire.pop('id', None)
                     if kind == 'hello':
                         continue
-                    if kind == 'configure':
+                    if kind == 'configure' and 'rateDivisor' in wire:
                         wire['rate_divisor'] = wire.pop('rateDivisor')
                     if kind == 'inventory':
                         if 'from' in wire: wire['source'] = wire.pop('from')

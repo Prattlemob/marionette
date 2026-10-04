@@ -11,9 +11,10 @@ from websockets.asyncio.client import ClientConnection, connect as ws_connect
 from websockets.exceptions import ConnectionClosed
 
 from .messages import (
-    PROTOCOL_VERSION, Command, Configure, Error, Hello, Input, InputFields,
+    PROTOCOL_VERSION, Command, Configure, Error, Event, Hello, Input, InputFields,
     InventoryRequest, InventoryResult, InvalidMessage, Look, LookFields, MenuRef,
-    Observation, Operation, Reliable, Role, Section, SlotRef, decode, validate,
+    Observation, Operation, Reliable, Role, Section, SlotRef, UnsupportedMessage,
+    decode, validate,
 )
 
 
@@ -72,12 +73,15 @@ class Client:
     """Use ``async with connect(...)``. Stream consumers compete, not broadcast.
 
     Observations retain the latest frame. Errors and unmatched/late inventory
-    replies share a bounded reliable queue. Overflow terminates the session
+    replies share a bounded reliable queue. Subscribed events have their own
+    bounded queue and never resolve requests. Overflow terminates the session
     explicitly instead of silently dropping replies or blocking the reader.
+    Message types this client does not know are counted and ignored.
     """
 
     def __init__(self, socket: ClientConnection, hello: Hello, role: Role,
-                 reliable_limit: int, pending_limit: int, request_timeout: float):
+                 reliable_limit: int, pending_limit: int, request_timeout: float,
+                 event_limit: int = 1024):
         self._socket = socket
         self.hello = hello
         self.role = role
@@ -86,6 +90,10 @@ class Client:
         self._request_timeout = request_timeout
         self._pending: dict[str, asyncio.Future[Reliable | Disconnect]] = {}
         self._reliable: deque[Reliable] = deque()
+        self._event_limit = event_limit
+        self._events: deque[Event] = deque()
+        self.last_event_seq = 0
+        self.unknown_messages = 0
         self._observation: Observation | None = None
         self._changed = asyncio.Event()
         self._closed = asyncio.Event()
@@ -117,8 +125,21 @@ class Client:
         cause: BaseException | None = None
         try:
             async for raw in self._socket:
-                message = decode(raw)
-                if message["type"] == "observation":
+                try:
+                    message = decode(raw)
+                except UnsupportedMessage:
+                    self.unknown_messages += 1
+                    continue
+                if message["type"] == "event":
+                    # A separate stream: an event never satisfies a pending request.
+                    event = cast(Event, message)
+                    if event["seq"] != self.last_event_seq + 1:
+                        raise InvalidMessage(f"event seq {event['seq']} after {self.last_event_seq}")
+                    if len(self._events) >= self._event_limit:
+                        raise CapacityError("event queue overflow; unread events lost on disconnect")
+                    self.last_event_seq = event["seq"]
+                    self._events.append(event)
+                elif message["type"] == "observation":
                     if self._observation is not None:
                         self.observations_coalesced += 1
                     self._observation = message
@@ -163,6 +184,20 @@ class Client:
                 self._active()
                 self._changed.clear()
                 await self._changed.wait()
+
+    async def next_event(self, timeout: float | None = None) -> Event:
+        """Next subscribed event, in ``seq`` order. Received events remain readable after closure."""
+        async with asyncio.timeout(timeout):
+            while True:
+                if self._events:
+                    return self._events.popleft()
+                self._active()
+                self._changed.clear()
+                await self._changed.wait()
+
+    async def events(self) -> AsyncIterator[Event]:
+        while True:
+            yield await self.next_event()
 
     async def observations(self) -> AsyncIterator[Observation]:
         while True:
@@ -235,9 +270,15 @@ class Client:
         await self._send({"type": "release"})
 
     async def configure(self, *, rate_divisor: int | None = None,
-                        sections: list[Section] | None = None) -> None:
+                        sections: list[Section] | None = None,
+                        events: bool | None = None) -> None:
         self.require("configure")
         message: Configure = {"type": "configure"}
+        if events is not None:
+            self.require("events")
+            if type(events) is not bool:
+                raise ValueError("events must be a boolean")
+            message["events"] = events
         if rate_divisor is not None:
             if type(rate_divisor) is not int or not 1 <= rate_divisor <= 100:
                 raise ValueError("rate_divisor must be an integer 1–100")
@@ -339,15 +380,18 @@ async def connect(uri: str = "ws://127.0.0.1:24680/", *, role: Role = "controlle
                   sections: list[Section] | None = None,
                   required_capabilities: Iterable[str] = (), handshake_timeout: float = 5,
                   request_timeout: float = 10, reliable_limit: int = 64,
-                  pending_limit: int = 32) -> AsyncIterator[Client]:
+                  pending_limit: int = 32, events: bool = False,
+                  event_limit: int = 1024) -> AsyncIterator[Client]:
     """Open exactly one protocol-2 session, validating hello before yielding.
+
+    ``events=True`` subscribes in hello and requires the ``events`` capability.
 
     No Origin/proxy/compression; automatic WebSocket pong handling stays active.
     Keep the asyncio loop responsive. Do CPU/blocking work in another thread.
     """
     positive(handshake_timeout, "handshake_timeout")
     positive(request_timeout, "request_timeout")
-    for value in (reliable_limit, pending_limit):
+    for value in (reliable_limit, pending_limit, event_limit):
         if type(value) is not int or not 1 <= value <= 1024:
             raise ValueError("queue bounds must be integers 1–1024")
     if role not in ("controller", "observer"):
@@ -360,6 +404,11 @@ async def connect(uri: str = "ws://127.0.0.1:24680/", *, role: Role = "controlle
         validate(sections, list[Section])
         request["sections"] = sections
         required.add("playerState")
+    if type(events) is not bool:
+        raise ValueError("events must be a boolean")
+    if events:
+        request["events"] = True
+        required.add("events")
     async with ws_connect(uri, origin=None, proxy=None, compression=None,
                           open_timeout=handshake_timeout, close_timeout=1,
                           ping_interval=None, max_size=131072, max_queue=16,
@@ -376,7 +425,7 @@ async def connect(uri: str = "ws://127.0.0.1:24680/", *, role: Role = "controlle
             raise InvalidMessage("expected hello reply")
         if hello["version"] != PROTOCOL_VERSION:
             raise VersionError(f"unsupported selected protocol {hello['version']}; expected {PROTOCOL_VERSION}")
-        client = Client(socket, hello, role, reliable_limit, pending_limit, request_timeout)
+        client = Client(socket, hello, role, reliable_limit, pending_limit, request_timeout, event_limit)
         try:
             client.require(*required)
             yield client

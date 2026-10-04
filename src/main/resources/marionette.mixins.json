@@ -8,7 +8,10 @@
     "MinecraftFocusPauseMixin",
     "MinecraftInteractionMixin",
     "InventoryCursorMixin",
-    "InventoryHoverAccess"
+    "InventoryHoverAccess",
+    "ClientPacketListenerEventsMixin",
+    "LocalPlayerHealthMixin",
+    "MultiPlayerGameModeEventsMixin"
   ],
   "injectors": {
     "defaultRequire": 1
