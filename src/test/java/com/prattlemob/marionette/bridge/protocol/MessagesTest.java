@@ -86,6 +86,30 @@ class MessagesTest {
     }
 
     @Test
+    void observationOrdersEverySectionAndOmitsUnselected() {
+        java.util.Map<String, JsonObject> sections = new java.util.HashMap<>();
+        for (String name : List.of("world", "target", "inventory", "player")) {
+            JsonObject section = new JsonObject();
+            section.addProperty("name", name);
+            sections.put(name, section);
+        }
+        assertEquals(List.of("type", "tick", "player", "inventory", "target", "world"),
+                List.copyOf(parse(Messages.sectionObservation(9, sections)).keySet()));
+        sections.remove("inventory");
+        sections.put("player", null);
+        assertEquals(List.of("type", "tick", "target", "world"),
+                List.copyOf(parse(Messages.sectionObservation(9, sections)).keySet()));
+    }
+
+    @Test
+    void helloReplyAdvertisesTargetAndWorldStateCapabilities() {
+        JsonObject capabilities = parse(Messages.helloReply(2, "0.1.0", null)).getAsJsonObject("capabilities");
+        assertTrue(capabilities.get("targetState").getAsBoolean());
+        assertTrue(capabilities.get("worldState").getAsBoolean());
+        assertFalse(capabilities.has("entities"), "entities stays reserved until M4.4");
+    }
+
+    @Test
     void helloReplyAdvertisesInventoryStateCapability() {
         assertTrue(parse(Messages.helloReply(2, "0.1.0", null)).getAsJsonObject("capabilities")
                 .get("inventoryState").getAsBoolean());

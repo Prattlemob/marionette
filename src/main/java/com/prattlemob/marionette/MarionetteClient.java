@@ -1,7 +1,10 @@
 package com.prattlemob.marionette;
 
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
+import com.google.gson.JsonObject;
 import com.prattlemob.marionette.bridge.BridgeServer;
 import com.prattlemob.marionette.bridge.protocol.AgentCommand;
 import com.prattlemob.marionette.bridge.protocol.ErrorCode;
@@ -22,6 +25,8 @@ import com.prattlemob.marionette.event.MinecraftEvents;
 
 import com.prattlemob.marionette.observation.InventoryObservation;
 import com.prattlemob.marionette.observation.PlayerObservation;
+import com.prattlemob.marionette.observation.TargetObservation;
+import com.prattlemob.marionette.observation.WorldObservation;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.KeyMapping;
@@ -500,9 +505,12 @@ public class MarionetteClient {
                     player.getX(), player.getY(), player.getZ(), player.getYRot()));
         }
         if (bridge != null && inWorld && player != null) {
-            bridge.sendSectionObservation(ticksInWorld, MarionetteConfig.observationRateDivisor,
-                    () -> PlayerObservation.capture(player),
-                    () -> InventoryObservation.capture(player, inventoryApplier));
+            Minecraft minecraft = Minecraft.getInstance();
+            bridge.sendSectionObservation(ticksInWorld, MarionetteConfig.observationRateDivisor, Map.<String, Supplier<JsonObject>>of(
+                    "player", () -> PlayerObservation.capture(player),
+                    "inventory", () -> InventoryObservation.capture(player, inventoryApplier),
+                    "target", () -> TargetObservation.capture(minecraft, player),
+                    "world", () -> minecraft.level == null ? null : WorldObservation.capture(minecraft.level, player)));
         }
     }
 

@@ -33,6 +33,21 @@
         "versions": [
           2
         ],
+        "role": "observer",
+        "sections": [
+          "player",
+          "target",
+          "world"
+        ]
+      }
+    },
+    {
+      "javaType": "Hello",
+      "wire": {
+        "type": "hello",
+        "versions": [
+          2
+        ],
         "role": "controller",
         "events": true
       }
@@ -214,6 +229,16 @@
         "from": "hotbar.0",
         "all": true
       }
+    },
+    {
+      "javaType": "Configure",
+      "wire": {
+        "type": "configure",
+        "sections": [
+          "world",
+          "target"
+        ]
+      }
     }
   ],
   "messages": [
@@ -233,7 +258,9 @@
         "inventoryAnimation": true,
         "events": true,
         "inventoryState": true,
-        "inventoryStorage": true
+        "inventoryStorage": true,
+        "targetState": true,
+        "worldState": true
       },
       "mod": "0.1.0",
       "id": "hello-fixture"
@@ -542,6 +569,104 @@
       }
     },
     {
+      "type": "observation",
+      "tick": 1400,
+      "target": {
+        "kind": "block",
+        "pos": {
+          "x": 3,
+          "y": -60,
+          "z": 1
+        },
+        "block": "minecraft:oak_log",
+        "face": "north",
+        "hit": {
+          "x": 3.62,
+          "y": -59.31,
+          "z": 1.0
+        },
+        "distance": 2.734,
+        "reach": {
+          "block": 4.5,
+          "entity": 3.0
+        }
+      }
+    },
+    {
+      "type": "observation",
+      "tick": 1460,
+      "target": {
+        "kind": "entity",
+        "id": 187,
+        "entity": "minecraft:pig",
+        "hit": {
+          "x": 0.21,
+          "y": -59.48,
+          "z": -2.55
+        },
+        "distance": 2.118,
+        "reach": {
+          "block": 4.5,
+          "entity": 3.0
+        }
+      }
+    },
+    {
+      "type": "observation",
+      "tick": 1520,
+      "target": {
+        "kind": "none",
+        "reach": {
+          "block": 4.5,
+          "entity": 3.0
+        }
+      },
+      "world": {
+        "dimension": "minecraft:the_nether",
+        "dayTime": -1,
+        "timeOfDay": 23999,
+        "day": -1,
+        "weather": "clear",
+        "rainLevel": 0.0,
+        "thunderLevel": 0.0,
+        "feet": {
+          "x": -4,
+          "y": 70,
+          "z": 12
+        },
+        "light": {
+          "block": 11,
+          "sky": 0,
+          "combined": 11,
+          "effective": 11
+        }
+      }
+    },
+    {
+      "type": "observation",
+      "tick": 1600,
+      "world": {
+        "dimension": "minecraft:overworld",
+        "dayTime": 30000,
+        "timeOfDay": 6000,
+        "day": 1,
+        "weather": "rain",
+        "rainLevel": 1.0,
+        "thunderLevel": 0.0,
+        "feet": {
+          "x": 0,
+          "y": -60,
+          "z": 0
+        },
+        "light": {
+          "block": 0,
+          "sky": 15,
+          "combined": 15,
+          "effective": 12
+        }
+      }
+    },
+    {
       "type": "inventory_result",
       "id": "inspect",
       "op": "inspect",
@@ -706,7 +831,7 @@
       "wire": {
         "type": "configure",
         "sections": [
-          "world"
+          "entities"
         ]
       },
       "code": "invalid_field"
@@ -715,8 +840,8 @@
       "wire": {
         "type": "configure",
         "sections": [
-          "inventory",
-          "target"
+          "target",
+          "entities"
         ]
       },
       "code": "invalid_field"

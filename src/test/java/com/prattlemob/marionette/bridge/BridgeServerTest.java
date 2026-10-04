@@ -214,6 +214,40 @@ class BridgeServerTest {
         assertEquals(1, inventories.get(), "unselected sections must not sample game state");
     }
 
+    @Test
+    void targetAndWorldSectionsAreSampledOnceAndOnlyWhenSelected() throws Exception {
+        var counts = new java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger>();
+        java.util.Map<String, java.util.function.Supplier<JsonObject>> samplers = new java.util.HashMap<>();
+        for (String name : List.of("player", "inventory", "target", "world")) {
+            samplers.put(name, () -> {
+                counts.computeIfAbsent(name, k -> new java.util.concurrent.atomic.AtomicInteger()).incrementAndGet();
+                JsonObject section = new JsonObject();
+                section.addProperty("name", name);
+                return section;
+            });
+        }
+        TestClient controller = connectAndHello(); // default ["player"], e.g. a published 0.1.0a1 client
+        TestClient first = TestClient.connect(server.port());
+        first.send("{\"type\":\"hello\",\"versions\":[2],\"role\":\"observer\",\"sections\":[\"target\",\"world\"]}");
+        first.awaitMessage();
+        TestClient second = TestClient.connect(server.port());
+        second.send("{\"type\":\"hello\",\"versions\":[2],\"role\":\"observer\",\"sections\":[\"player\",\"target\"]}");
+        second.awaitMessage();
+        await(() -> server.observerCount() == 2);
+        server.sendSectionObservation(1, 1, samplers);
+        JsonObject plain = JsonParser.parseString(controller.awaitMessage()).getAsJsonObject();
+        JsonObject both = JsonParser.parseString(first.awaitMessage()).getAsJsonObject();
+        JsonObject mixed = JsonParser.parseString(second.awaitMessage()).getAsJsonObject();
+        assertEquals(List.of("type", "tick", "player"), List.copyOf(plain.keySet()),
+                "default-mask sessions see unchanged frames");
+        assertEquals(List.of("type", "tick", "target", "world"), List.copyOf(both.keySet()));
+        assertEquals(List.of("type", "tick", "player", "target"), List.copyOf(mixed.keySet()));
+        assertEquals(1, counts.get("player").get());
+        assertEquals(1, counts.get("target").get(), "shared sections are sampled once per tick");
+        assertEquals(1, counts.get("world").get());
+        assertFalse(counts.containsKey("inventory"), "unselected sections must not sample game state");
+    }
+
     private static final String OBSERVER_HELLO =
             "{\"type\": \"hello\", \"versions\": [2], \"role\": \"observer\"}";
 

@@ -481,7 +481,8 @@ mod.
   reuses for attack/use.
 - Item-component serialization depth (enchantments, custom names) — **resolved in
   M4.2** (2026-10-04): an enumerated, capped set of stack extras; see D18.
-- Crosshair ray-cast distance: vanilla reach vs. configurable gaze — M4.3.
+- Crosshair ray-cast distance: vanilla reach vs. configurable gaze — **resolved in
+  M4.3** (2026-10-04): vanilla reach only, no gaze distance; see D20.
 - Hostility classification source; client-side aggro inference depth — M4.4.
 - Raw-input vs. active-Baritone-goal conflict policy; which Baritone settings
   are exposed — M6.2.
@@ -923,3 +924,95 @@ coverage only), `shared_slots` and `click_behavior` on a live modded menu
 the top and bottom rows of the 276-pixel-tall diamond chest screen; actions
 address slots by index and were unaffected. M3.3's physical alt-tab and human
 animation acceptance and the remaining M5.1 items stay outstanding.
+
+## D20 — Crosshair target and world context: vanilla reach, opt-in sections — **Settled** (2026-10-04, M4.3)
+
+The `target` and `world` observation sections (`protocol/v1.md`, Target and
+World sections) are advertised as `targetState` and `worldState` and selected
+through the existing D2 `sections` mask, like D18's inventory section.
+
+**Reach (the M4.3 minor decision):** `target` is exactly vanilla's crosshair
+pick, `Minecraft.hitResult`, which the game recomputes every rendered frame
+from the camera entity. It is bounded by the player's own interaction-range
+attributes (survival 4.5 blocks for blocks and 3.0 for entities, creative 5.0
+for both, plus any modifiers), reported as `reach` in every target. The mod
+casts no ray of its own and there is no configurable extended "gaze" distance.
+
+- The target then means one thing: the block or entity the crosshair outline
+  shows and that `attack`/`use` will act on. A gaze ray would create a second
+  "what am I looking at" that can disagree with both the outline and the
+  outcome of an interaction.
+- It costs nothing extra per tick and cannot drift from vanilla behavior
+  (fluids skipped, unpickable entities skipped, an entity beyond entity reach
+  hiding a block behind it), including under mods that change reach.
+- Far perception belongs to the M4.4 entity list and M4.5 block scans, which
+  are bounded by their own configured caps. If agents need a longer look ray
+  later, it is an additive opt-in section or field that leaves `target`
+  unchanged.
+- F3's "Targeted Block" uses a separate fixed 20-block ray. The two agree
+  within reach; beyond it F3 can show a block while `target` is `"none"`. This
+  difference is documented in the protocol rather than hidden.
+
+**World context:** `dimension`, `dayTime` with derived `timeOfDay` and `day`
+(F3's day), `weather` from vanilla's thresholds with the raw `rainLevel` and
+`thunderLevel`, and light at the feet block (`feet`, F3's "Block") as
+`block`/`sky`/`combined` (F3's "Client Light") plus `effective`, the
+time- and weather-adjusted local brightness. All are client-known values.
+
+**Compatibility:** 0.1.0a1 validates sections against `["player"]`, so it
+cannot select either section; default-mask frames are unchanged. The new
+capability flags are additive hello keys. No message type was added. Protocol
+stays 2.
+
+Rejected: a configurable gaze distance in `target` (two meanings of target;
+F3 already diverges at its fixed 20 blocks), always-on target/world data in
+every frame (changes 0.1.0a1 frames and the D2 default), block state
+properties in the target (unbounded for modded blocks; a later additive field),
+and per-position precipitation (biome-dependent; `weather` is level-wide).
+
+### M4.3 implementation and verification (2026-10-04)
+
+`./gradlew build` passed with 286 tests (277 before). In-repository Python
+client tests passed on 3.11 and 3.14 (42 tests, 36 before; mypy strict clean).
+A rendered client in an isolated copy of the test world, provisioned by a
+temporary client-side harness outside the repository (server-console commands,
+per-tick reads of vanilla's hit result and the literal F3 debug text, dumps and
+screenshots), was observed through a real WebSocket session (observer,
+`player`/`target`/`world`, divisor 1) while a controller sent only smooth looks
+across a prepared floating scene. No movement or jump input was used.
+
+| Look at | Observed `target` | Vanilla hit result and F3 |
+|---|---|---|
+| Oak log, south face | block, its position, `south`, 2.74 | same block and face; F3 Targeted Block same |
+| Emerald block overhead | block, `down`, 1.70 | same |
+| Gold block to the west | block, `east` | same |
+| Bricks to the south | block, `north` | same |
+| Diamond floor block | block, `up` | same |
+| Iron block to the east | block, `west` | same |
+| Pig at 1.8 blocks | entity, `minecraft:pig`, its id | same entity; F3 Targeted Entity `minecraft:pig` |
+| Open sky | none | miss; F3 shows no targeted block |
+| Sheep at about 3.7 blocks (entity reach 3) | none | miss; F3 shows no targeted entity |
+| Lapis block at about 5.1 blocks (block reach 4.5) | none | miss; F3's 20-block ray still names the lapis block |
+| Nether roof (after a dimension change) | block bedrock, `up` | same |
+
+Every one of 1677 consecutive frames, including those during pans, matched
+vanilla's hit result at the same tick end. World context, driven by commands,
+matched F3 (dimension line, feet block, day, client light) and the integrated
+server (dimension, day time, weather, sky and block light) at all 24
+checkpoints, 357 checks in total: time 13000 and 18000 lowered `effective`
+light to 9 and 4; rain and thunder reported `rain`/`thunder` with levels 1.0
+and `effective` 12 and 10; a glowstone block beside the feet raised block light
+to 14; a stone roof at night reduced sky light to 13; the Nether reported
+`minecraft:the_nether` with no sky light.
+
+Published 0.1.0a1, unmodified, observed the whole run (1676 player-only
+observations; only `hello` and `observation` frames), and as a controller it
+received unchanged frames, panned the camera and released cleanly. It cannot
+select the new sections itself (its local validation refuses them). Offline,
+its decoder accepted every recorded frame carrying the new sections.
+
+Not demonstrated in the rendered run: spectating another entity (camera entity
+other than the player), creative-mode reach, reach modifiers and modded blocks
+or entities, multiplayer servers, and day counts above zero (unit tests cover
+the arithmetic). M3.3's physical alt-tab and human animation acceptance and the
+remaining M5.1 items stay outstanding.

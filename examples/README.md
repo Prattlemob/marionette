@@ -18,6 +18,13 @@ joined a world.
   in-repository client; the published 0.1.0a1 alpha cannot select that section.
   Run `python examples/inventory_view.py [port]`; `--once` prints one frame and
   `--json` prints raw frames.
+- `target_view.py` — M4.3: read-only crosshair target (block position, id and
+  face; entity id and type; or none, within vanilla reach) and world context
+  (dimension, time of day, weather, light at the feet) from the `target` and
+  `world` sections, for comparison with the F3 debug screen. Needs the
+  in-repository client; the published 0.1.0a1 alpha cannot select those sections.
+  Run `python examples/target_view.py [port]`; `--once` prints one frame and
+  `--json` prints raw frames.
 - `probe.py` — connect, print observations, hold forward for 0.2 s, release.
 - `walk_square.py` — walk a ~5-block square and report the return error.
   Also the target for the disconnect-safety test: `kill -9` it mid-walk and
