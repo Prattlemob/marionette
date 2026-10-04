@@ -14,6 +14,17 @@
       }
     },
     {
+      "javaType": "Hello",
+      "wire": {
+        "type": "hello",
+        "versions": [
+          2
+        ],
+        "role": "controller",
+        "events": true
+      }
+    },
+    {
       "javaType": "InputUpdate",
       "wire": {
         "type": "input",
@@ -77,6 +88,13 @@
         "type": "configure",
         "rateDivisor": 3,
         "sections": []
+      }
+    },
+    {
+      "javaType": "Configure",
+      "wire": {
+        "type": "configure",
+        "events": true
       }
     },
     {
@@ -189,7 +207,8 @@
         "observer": true,
         "interact": true,
         "inventory": true,
-        "inventoryAnimation": true
+        "inventoryAnimation": true,
+        "events": true
       },
       "mod": "0.1.0",
       "id": "hello-fixture"
@@ -306,6 +325,130 @@
         "type": "made_up"
       },
       "code": "unknown_type"
+    },
+    {
+      "wire": {
+        "type": "configure",
+        "events": "yes"
+      },
+      "code": "invalid_field"
+    }
+  ],
+  "events": [
+    {
+      "type": "event",
+      "event": "damage",
+      "seq": 1,
+      "worldSession": "5d0c6f3e9a4b2c18",
+      "tick": 120,
+      "basis": "server",
+      "source": {
+        "type": "minecraft:mob_attack",
+        "attacker": "minecraft:zombie",
+        "direct": "minecraft:zombie"
+      },
+      "amount": 2.5,
+      "health": 17.5
+    },
+    {
+      "type": "event",
+      "event": "damage",
+      "seq": 2,
+      "worldSession": "5d0c6f3e9a4b2c18",
+      "tick": 140,
+      "basis": "server",
+      "source": null,
+      "amount": null,
+      "health": null
+    },
+    {
+      "type": "event",
+      "event": "death",
+      "seq": 3,
+      "worldSession": "5d0c6f3e9a4b2c18",
+      "tick": 300,
+      "basis": "server",
+      "message": "Dev fell out of the world",
+      "truncated": false
+    },
+    {
+      "type": "event",
+      "event": "respawn",
+      "seq": 4,
+      "worldSession": "5d0c6f3e9a4b2c18",
+      "tick": 302,
+      "basis": "server",
+      "dimension": "minecraft:overworld"
+    },
+    {
+      "type": "event",
+      "event": "dimension_change",
+      "seq": 5,
+      "worldSession": "5d0c6f3e9a4b2c18",
+      "tick": 410,
+      "basis": "server",
+      "from": "minecraft:overworld",
+      "to": "minecraft:the_nether"
+    },
+    {
+      "type": "event",
+      "event": "item_pickup",
+      "seq": 6,
+      "worldSession": "5d0c6f3e9a4b2c18",
+      "tick": 455,
+      "basis": "server",
+      "item": "minecraft:diamond",
+      "count": 3
+    },
+    {
+      "type": "event",
+      "event": "item_pickup",
+      "seq": 7,
+      "worldSession": "5d0c6f3e9a4b2c18",
+      "tick": 456,
+      "basis": "server",
+      "item": null,
+      "count": 1
+    },
+    {
+      "type": "event",
+      "event": "chat",
+      "seq": 8,
+      "worldSession": "5d0c6f3e9a4b2c18",
+      "tick": 460,
+      "basis": "server",
+      "kind": "chat",
+      "text": "[Dev] hello",
+      "sender": "00000000-0000-0000-0000-000000000001",
+      "chatType": "minecraft:say_command",
+      "truncated": false
+    },
+    {
+      "type": "event",
+      "event": "chat",
+      "seq": 9,
+      "worldSession": "5d0c6f3e9a4b2c18",
+      "tick": 461,
+      "basis": "server",
+      "kind": "action_bar",
+      "text": "Hi",
+      "sender": null,
+      "chatType": null,
+      "truncated": false
+    },
+    {
+      "type": "event",
+      "event": "block_broken",
+      "seq": 10,
+      "worldSession": "5d0c6f3e9a4b2c18",
+      "tick": 470,
+      "basis": "client",
+      "block": "minecraft:glass",
+      "pos": {
+        "x": 0,
+        "y": -59,
+        "z": 3
+      }
     }
   ]
 }

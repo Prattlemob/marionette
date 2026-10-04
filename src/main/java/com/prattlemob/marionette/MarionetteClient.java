@@ -17,6 +17,8 @@ import com.prattlemob.marionette.control.DemoScript;
 import com.prattlemob.marionette.control.MixinInputApplier;
 import com.prattlemob.marionette.control.Rotation;
 import com.prattlemob.marionette.control.SmoothingModel;
+import com.prattlemob.marionette.event.EventRecorder;
+import com.prattlemob.marionette.event.MinecraftEvents;
 
 import com.prattlemob.marionette.observation.PlayerObservation;
 
@@ -30,11 +32,13 @@ import org.lwjgl.glfw.GLFW;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.player.LocalPlayer;
 import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.neoforge.client.event.ClientChatReceivedEvent;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RenderFrameEvent;
@@ -96,6 +100,12 @@ public class MarionetteClient {
     private boolean controlsEngaged;
     private BridgeServer bridge;
     private long reportedCoalesced;
+    /** One-shot events (M4.6); stamped with the in-progress tick, sent immediately. */
+    private final EventRecorder eventRecorder = new EventRecorder(() -> ticksInWorld + 1, event -> {
+        logVerbose("Event {} tick {} ({})", event.kind(), event.tick(), event.fields());
+        BridgeServer server = bridge;
+        if (server != null) server.sendEvent(event);
+    });
 
     private final String modVersion;
 
@@ -125,6 +135,9 @@ public class MarionetteClient {
         NeoForge.EVENT_BUS.addListener(this::onRenderFramePre);
         NeoForge.EVENT_BUS.addListener(this::onLoggingIn);
         NeoForge.EVENT_BUS.addListener(this::onLoggingOut);
+        NeoForge.EVENT_BUS.addListener(this::onPlayerClone);
+        // Last, and only if shown: what the player actually saw.
+        NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, this::onChatReceived);
         NeoForge.EVENT_BUS.addListener(this::onInventoryMousePress);
         NeoForge.EVENT_BUS.addListener(this::onInventoryKeyPress);
         NeoForge.EVENT_BUS.addListener(this::onInventoryScroll);
@@ -133,6 +146,32 @@ public class MarionetteClient {
 
     public InventoryActionApplier inventoryActions() {
         return inventoryApplier;
+    }
+
+    /** Client-thread recorder for one-shot events; mixins report through it. */
+    public EventRecorder eventRecorder() {
+        return eventRecorder;
+    }
+
+    /** Respawn packet: a new LocalPlayer replaces the old one (death or dimension). */
+    private void onPlayerClone(ClientPlayerNetworkEvent.Clone event) {
+        eventRecorder.playerReplaced(event.getOldPlayer().isDeadOrDying(),
+                MinecraftEvents.dimension(event.getOldPlayer().level()),
+                MinecraftEvents.dimension(event.getNewPlayer().level()));
+    }
+
+    private void onChatReceived(ClientChatReceivedEvent event) {
+        String kind = "chat";
+        String sender = null;
+        if (event instanceof ClientChatReceivedEvent.System system) {
+            kind = system.isOverlay() ? "action_bar" : "system";
+        } else if (event instanceof ClientChatReceivedEvent.Player player) {
+            sender = player.getSender().toString();
+        }
+        var bound = event.getBoundChatType();
+        String chatType = bound == null ? null
+                : bound.chatType().unwrapKey().map(key -> key.location().toString()).orElse(null);
+        eventRecorder.chat(kind, event.getMessage().getString(), sender, chatType);
     }
 
     private void onInventoryMousePress(ScreenEvent.MouseButtonPressed.Pre event) {
@@ -372,6 +411,7 @@ public class MarionetteClient {
             }
             case AgentCommand.Configure configure -> {
                 if (configure.sections() != null) received.from().setSections(configure.sections());
+                if (configure.events() != null) received.from().setEvents(configure.events());
                 if (configure.rateDivisor() != null) {
                     received.from().setRateDivisor(configure.rateDivisor());
                     logNormal("Observation rate divisor set to {} for a {} session",
@@ -430,6 +470,9 @@ public class MarionetteClient {
         // an attack/use tap nothing consumed this tick (screen open) dies
         // here rather than firing when the menu closes later.
         controlState.dropInteractionTaps();
+        LocalPlayer tickPlayer = Minecraft.getInstance().player;
+        if (tickPlayer != null) eventRecorder.healthObserved(tickPlayer.getHealth()); // entity-data health too
+        eventRecorder.tick(); // close damage windows within this tick, before its observation
         ticksInWorld++;
         if (ticksInWorld % TICK_LOG_INTERVAL == 0) {
             logVerbose("Client tick {} in world", ticksInWorld);
@@ -503,6 +546,7 @@ public class MarionetteClient {
     private void onLoggingIn(ClientPlayerNetworkEvent.LoggingIn event) {
         inWorld = true;
         ticksInWorld = 0;
+        eventRecorder.startWorldSession(EventRecorder.newWorldSessionId());
         if (Boolean.getBoolean("marionette.demo")) {
             demo = new DemoScript(Boolean.getBoolean("marionette.demo.gui"));
             logNormal("Demo armed (gui stunts: {})", Boolean.getBoolean("marionette.demo.gui"));
@@ -523,6 +567,7 @@ public class MarionetteClient {
         }
         if (bridge != null) bridge.disconnectController("left world");
         inventoryApplier.cancel("left world", false);
+        eventRecorder.endWorldSession();
         inWorld = false;
         demo = null;
         if (controlsEngaged) {

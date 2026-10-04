@@ -40,8 +40,11 @@ public final class ProtocolSession {
     private boolean helloCompleted;
     private Role role;
     private Set<String> sections = Set.of("player");
+    private boolean events;
 
     public Set<String> sections() { return sections; }
+    /** True when hello subscribed this session to one-shot events. */
+    public boolean events() { return events; }
 
     public ProtocolSession(String modVersion) {
         this(modVersion, r -> null);
@@ -112,6 +115,7 @@ public final class ProtocolSession {
                     new Action.Close(refusal.closeCode(), refusal.wire()));
         }
         if (hello.sections() != null) sections = hello.sections();
+        events = Boolean.TRUE.equals(hello.events());
         role = requested;
         state = State.ACTIVE;
         helloCompleted = true;

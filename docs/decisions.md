@@ -669,3 +669,71 @@ Rejected:
   discoverable or rebindable separately in the Controls menu.
 - A reconnect cool-down or timed latch: control would return without a human
   decision.
+
+## D17 — One-shot events: opt-in, sequenced, never coalesced — **Settled** (2026-10-04, M4.6)
+
+Events (`protocol/v1.md`, Events) are separate `event` messages with an
+envelope of `event` kind, per-connection `seq`, `worldSession`, `tick` and
+`basis`. They are delivered only to sessions that subscribe with
+`events: true` in `hello` or `configure`; the `events` capability is additive.
+
+**Why opt-in:** the published `marionette-mc==0.1.0a1` decoder rejects any
+unknown message type, and its reader then ends the session. Sending events
+unconditionally would disconnect every existing client, so the protocol
+integer stays 2 and only subscribers receive the new type. The in-repository
+client now subscribes on request, ignores unknown message types and event
+kinds, and keeps events in their own bounded queue.
+
+**Delivery:** events are recorded on the client thread and written at once,
+so events, observations and tick-side replies share one write order: an event
+stamped with tick T follows observations of earlier ticks and precedes the
+observation of T. An older stashed observation is dropped rather than sent
+after an event. Events never carry `id`. Each connection has its own bound
+(1024 events not yet accepted by the socket, plus the shared 256 KiB reliable
+budget). Exceeding it closes only that connection (1013 `event overflow`)
+instead of skipping or coalescing an event, so a received stream is always a
+gapless prefix. There is no replay and no exactly-once claim across reconnects.
+
+**Facts:** `basis` is `server` for packet-reported facts and `client` for local
+predictions (block breaking). Unknown values are explicit `null`, never zero.
+Damage pairs the server's damage report with server-synced health, measured
+against a per-player baseline because health can arrive in the health packet
+or in entity data. Unpaired halves are reported with `null` fields. `/title`
+action bars, client-local messages and other mods' suppressed chat are not
+reported.
+
+Rejected: events inside observation frames (they would coalesce away),
+unconditional delivery (breaks 0.1.0a1), a protocol bump (the change is
+additive), and resumable sequence numbers across connections (would imply a
+replay buffer and exactly-once guarantees the mod cannot keep).
+
+### M4.6 implementation and verification (2026-10-04)
+
+`./gradlew build` passed with 250 tests (229 before). In-repository Python
+client tests passed on 3.11 and 3.14 (27 tests, mypy strict clean). A rendered
+client in an isolated copy of the test world, driven by temporary server-side
+setup outside the repository, delivered through real WebSocket sessions:
+
+- `/damage 3` → `damage` (generic, amount 3, health 17); `tellraw` → system
+  `chat`; `say` → player `chat` (`minecraft:say_command`); a dropped diamond
+  stack → `item_pickup` (3); a controller-held attack on glass → `block_broken`
+  (basis `client`); `/kill` → `damage`, `death`, the death-message `chat`,
+  `respawn`; teleport to the Nether → `dimension_change`; `/kill` there →
+  `damage` (source `null`: the server sent no damage report), `death`, `chat`,
+  `respawn`, `dimension_change`. Each appeared exactly once, in order, on both
+  a controller and an observer, with identical content and independent `seq`.
+- Every event followed the observations of earlier ticks and preceded the
+  observation of its own tick, which showed the reported health. Three
+  inventory requests sent during chat bursts were answered only by their own
+  `inventory_result` while events arrived before and after them.
+- A non-reading subscriber with a small receive window was closed with
+  `event overflow` during a 2000-event burst; it had received a contiguous
+  prefix (seq 1–184), while the controller received all 2000 in order.
+- Published 0.1.0a1, never subscribing, observed and controlled (configure,
+  observations, inventory inspect, release) alongside the event subscribers and
+  received only `hello`, `observation` and `inventory_result` frames.
+
+Not demonstrated in the rendered run: overlay `action_bar` system messages
+(no command emits one; covered by unit tests), arrow pickups, chat-delay and
+blocked-player filtering, and multiplayer servers. M3.3's physical alt-tab and
+human animation acceptance and the remaining M5.1 items stay outstanding.

@@ -32,8 +32,10 @@ Java sources live under `src/main/java/com/prattlemob/marionette/`:
   Keep transport and protocol code free of Minecraft imports for headless tests.
 - `control/`: control state, camera smoothing, and the input-applier seam.
   Keep state/math independent of Minecraft; isolate game access in the applier.
+- `event/`: one-shot event recording. `EventRecorder` stays Minecraft-free;
+  `MinecraftEvents` adapts vanilla hooks on the client thread.
 - `config/`: NeoForge configuration and validation.
-- `mixin/`: narrowly scoped vanilla input and focus/pause hooks.
+- `mixin/`: narrowly scoped vanilla input, focus/pause and event hooks.
 
 Tests mirror these packages under `src/test/java/`. Assets and mixin metadata
 live in `src/main/resources/`. Mod metadata is generated from

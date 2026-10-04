@@ -47,5 +47,16 @@ class PythonCompatibilityTest {
             };
             assertEquals(expected, JsonParser.parseString(actual));
         }
+        // Event frames are kept apart from "messages": clients that predate
+        // events (and never subscribe) are only ever sent the messages above.
+        for (var entry : fixture.getAsJsonArray("events")) {
+            var expected = entry.getAsJsonObject();
+            var fields = expected.deepCopy();
+            for (String envelope : List.of("type", "event", "seq", "worldSession", "tick", "basis")) fields.remove(envelope);
+            var event = new GameEvent(expected.get("event").getAsString(), expected.get("worldSession").getAsString(),
+                    expected.get("tick").getAsLong(),
+                    GameEvent.Basis.valueOf(expected.get("basis").getAsString().toUpperCase(java.util.Locale.ROOT)), fields);
+            assertEquals(expected, JsonParser.parseString(Messages.event(event, expected.get("seq").getAsLong())));
+        }
     }
 }

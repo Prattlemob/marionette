@@ -7,6 +7,10 @@ joined a world.
 
 - `dashboard.py` — M4.1: read-only live player state, effects, and movement flags.
   Run `python examples/dashboard.py [port]`; Ctrl-C exits without changing controls.
+- `events.py` — M4.6: read-only one-shot event log (damage, death, respawn,
+  item pickup, chat, block broken, dimension change), one line per event in
+  `seq` order. Needs the in-repository client (`pip install -e ./python`); the
+  published 0.1.0a1 alpha has no event support. Run `python examples/events.py [port]`.
 - `probe.py` — connect, print observations, hold forward for 0.2 s, release.
 - `walk_square.py` — walk a ~5-block square and report the return error.
   Also the target for the disconnect-safety test: `kill -9` it mid-walk and

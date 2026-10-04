@@ -4,12 +4,19 @@ import java.nio.charset.StandardCharsets;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.prattlemob.marionette.bridge.protocol.AgentCommand;
+import com.prattlemob.marionette.bridge.protocol.ErrorCode;
+import com.prattlemob.marionette.bridge.protocol.GameEvent;
+import com.prattlemob.marionette.bridge.protocol.Messages;
 import com.prattlemob.marionette.bridge.protocol.ProtocolSession;
 import com.prattlemob.marionette.bridge.protocol.Role;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFutureListener;
@@ -19,9 +26,12 @@ import java.util.concurrent.TimeUnit;
 
 /** Per-connection bounded queues. No Minecraft access; safe from the tick thread. */
 public final class AgentConnection {
+    private static final Logger LOG = LoggerFactory.getLogger(AgentConnection.class);
     static final int COMMAND_LIMIT = 128;
     static final int OUTBOUND_BYTES = 256 * 1024;
     static final int FRAME_BYTES = 128 * 1024;
+    /** Events written but not yet accepted by the socket; never coalesced. */
+    static final int EVENT_LIMIT = 1024;
     private final Channel channel;
     private final ProtocolSession session;
     private final Runnable onLoss;
@@ -34,6 +44,9 @@ public final class AgentConnection {
     private final AtomicLong outboundBytes = new AtomicLong();
     private final AtomicLong generation = new AtomicLong();
     private final AtomicLong coalesced = new AtomicLong();
+    private final AtomicInteger eventsInFlight = new AtomicInteger();
+    private long eventSeq; // guarded by this
+    private volatile boolean events;
     private volatile Role role;
     private volatile boolean ready;
     private volatile Set<String> sections = Set.of("player");
@@ -49,6 +62,8 @@ public final class AgentConnection {
 
     public Set<String> sections() { return sections; }
     public void setSections(Set<String> sections) { this.sections = Set.copyOf(sections); }
+    public boolean events() { return events; }
+    public void setEvents(boolean events) { this.events = events; }
     public Role role() { return role; }
     void setRole(Role role) { this.role = role; admittedNanos = System.nanoTime(); }
     public void setRateDivisor(Integer divisor) { rateDivisorOverride = divisor; }
@@ -74,6 +89,10 @@ public final class AgentConnection {
 
     /** Reserve bytes before scheduling a Netty task, not merely after it reaches the socket. */
     private boolean writeText(String json) {
+        return writeText(json, null);
+    }
+
+    private boolean writeText(String json, Runnable written) {
         int bytes = json.getBytes(StandardCharsets.UTF_8).length + 64;
         if (bytes > FRAME_BYTES || closing.get() || !channel.isActive()) return false;
         long reserved = outboundBytes.addAndGet(bytes);
@@ -83,6 +102,7 @@ public final class AgentConnection {
         }
         channel.writeAndFlush(new TextWebSocketFrame(json)).addListener(future -> {
             outboundBytes.addAndGet(-bytes);
+            if (written != null) written.run();
             if (!future.isSuccess()) close(1011, "write failed");
             else flushPending();
         });
@@ -116,6 +136,41 @@ public final class AgentConnection {
         pendingObservation.set(null);
         if (lossNotified.compareAndSet(false, true)) onLoss.run();
     }
+
+    /**
+     * Deliver one event to a subscribed, ready session (client thread). Events
+     * never coalesce: they bypass the writability gate and use their own
+     * in-flight bound plus the shared reliable byte budget. Exceeding either
+     * closes this connection (1013 "event overflow") instead of skipping a
+     * sequence number. A stashed observation older than the event is dropped
+     * so it can never be delivered after it.
+     *
+     * @return the sequence number written, or 0 if not delivered
+     */
+    public synchronized long sendEvent(GameEvent event) {
+        if (!ready() || !events) return 0;
+        if (pendingObservation.getAndSet(null) != null) coalesced.incrementAndGet();
+        String json = Messages.event(event, eventSeq + 1);
+        // Count before writing: the completion listener may run first.
+        if (eventsInFlight.incrementAndGet() > EVENT_LIMIT
+                || !writeText(json, eventsInFlight::decrementAndGet)) {
+            eventsInFlight.decrementAndGet();
+            overflowEvents();
+            return 0;
+        }
+        return ++eventSeq;
+    }
+
+    private void overflowEvents() {
+        if (closing.get()) return;
+        LOG.warn("Bridge {} event overflow after seq {} ({} in flight); closing 1013",
+                role, eventSeq, eventsInFlight.get());
+        writeText(Messages.error(ErrorCode.OVERLOADED, "event queue overflow", null, null));
+        close(1013, "event overflow");
+    }
+
+    long eventSeq() { synchronized (this) { return eventSeq; } }
+    int eventsInFlight() { return eventsInFlight.get(); }
 
     public long coalescedObservations() { return coalesced.get(); }
     long outboundBytes() { return outboundBytes.get(); }

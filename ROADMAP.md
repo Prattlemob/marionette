@@ -27,8 +27,9 @@ depends on.
 ## Cross-project execution order (2026-10-03)
 
 Keep milestone IDs and completed history. **M2.5 (published client) and M5.1a
-(bridge safety) are complete.** The remaining implementation order is **M4.6 →
-M4.2 → M3.5 → M4.3 → M4.4 → M4.5 → M3.6 → M3.7 → M5.1 → M5.2**.
+(bridge safety) are complete; M4.6 (one-shot events) is complete.** The remaining
+implementation order is **M4.2 → M3.5 → M4.3 → M4.4 → M4.5 → M3.6 → M3.7 → M5.1
+→ M5.2**.
 Further package publication retains D12/D14 decision gates; a blocked release
 does not prevent independent safety/perception work. M3.3's outstanding visual
 acceptance remains debt and must be reconciled for milestones requiring it.
@@ -645,14 +646,20 @@ Items:
 
 Items:
 
-- [ ] Event envelope + initial taxonomy in `protocol/`
-- [ ] Reliable (non-coalesced) event queue with its own bound
-- [ ] The event set above implemented and demoed
-- [ ] Sequence/world-session identity, ordering relative to state/results, and
+- [x] Event envelope + initial taxonomy in `protocol/`
+- [x] Reliable (non-coalesced) event queue with its own bound
+- [x] The event set above implemented and demoed
+- [x] Sequence/world-session identity, ordering relative to state/results, and
       per-connection overflow/disconnect semantics specified; no unsupported
       exactly-once guarantee across reconnects
-- [ ] Recorded-wire fixtures verify unsolicited events cannot answer requests
-- [ ] Unknown, client-predicted and server-observed facts distinguished
+- [x] Recorded-wire fixtures verify unsolicited events cannot answer requests
+- [x] Unknown, client-predicted and server-observed facts distinguished
+
+Implemented as the additive, opt-in `events` capability (protocol 2; D17).
+Build, Python client and rendered-client checks passed; see the
+[M4.6 verification record](docs/decisions.md#m46-implementation-and-verification-2026-10-04).
+The published 0.1.0a1 client is unaffected; event support in Python is
+source-only until a further publication is authorized (D14).
 
 ---
 

@@ -47,5 +47,5 @@ public sealed interface AgentCommand extends ParsedMessage {
     record Release() implements AgentCommand {}
 
     /** Per-session settings; a null field means "unchanged". See protocol/v1.md. */
-    record Configure(Integer rateDivisor, Set<String> sections) implements AgentCommand {}
+    record Configure(Integer rateDivisor, Set<String> sections, Boolean events) implements AgentCommand {}
 }

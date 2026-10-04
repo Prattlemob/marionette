@@ -1,6 +1,7 @@
 package com.prattlemob.marionette.bridge.protocol;
 
 import java.util.List;
+import java.util.Set;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -31,6 +32,7 @@ public final class Messages {
         capabilities.addProperty("interact", true);
         capabilities.addProperty("inventory", true);
         capabilities.addProperty("inventoryAnimation", true);
+        capabilities.addProperty("events", true);
         reply.add("capabilities", capabilities);
         reply.addProperty("mod", modVersion);
         return reply.toString();
@@ -65,6 +67,27 @@ public final class Messages {
         if (player != null) frame.add("player", player);
         return frame.toString();
     }
+
+    /**
+     * One event frame: envelope fields first, then the kind's own fields.
+     * Never carries an id; events never answer requests.
+     */
+    public static String event(GameEvent event, long seq) {
+        JsonObject frame = new JsonObject();
+        frame.addProperty("type", "event");
+        frame.addProperty("event", event.kind());
+        frame.addProperty("seq", seq);
+        frame.addProperty("worldSession", event.worldSession());
+        frame.addProperty("tick", event.tick());
+        frame.addProperty("basis", event.basis().wire());
+        for (var field : event.fields().entrySet()) {
+            if (!ENVELOPE_FIELDS.contains(field.getKey())) frame.add(field.getKey(), field.getValue());
+        }
+        return frame.toString();
+    }
+
+    private static final Set<String> ENVELOPE_FIELDS =
+            Set.of("type", "id", "event", "seq", "worldSession", "tick", "basis");
 
     private static JsonObject errorObject(ErrorCode code, String message, JsonPrimitive id, String offendingInput) {
         JsonObject error = new JsonObject();

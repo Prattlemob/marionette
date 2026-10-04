@@ -29,6 +29,10 @@ requirement, not an afterthought. The current posture, as specified in
   authorization for other releases (D14).
 - **One controller and bounded observers.** Observer loss cannot release a
   controller's inputs. Each connection has independent bounded queues.
+- **Events expose what the player sees.** A session that subscribes to events
+  (controller or observer) receives the chat and system messages shown to the
+  player, death messages and similar text. Under the local trust model above,
+  any local process can subscribe.
 - **Bounded work and emergency release.** See the protocol's `bridgeSafety`
   limits, overload/close behavior, pong watchdog and local F8 panic binding.
   Panic latches controller admission off until the player presses the
