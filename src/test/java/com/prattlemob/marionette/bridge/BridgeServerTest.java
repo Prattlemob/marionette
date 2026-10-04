@@ -398,6 +398,57 @@ class BridgeServerTest {
     }
 
     @Test
+    void clientInitiatedCloseIsEchoedAndIsControllerLoss() throws Exception {
+        TestClient client = connectAndHello();
+        client.ws.sendClose(WebSocket.NORMAL_CLOSURE, "bye").join();
+        assertEquals(1000, (int) client.closeCode.get(5, TimeUnit.SECONDS), "the close handshake completes");
+        await(server::pollDisconnected);
+    }
+
+    @Test
+    void anAbruptCloseAddsNoNormalClosureFrame() {
+        var defaults = new io.netty.channel.embedded.EmbeddedChannel(
+                new io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler(
+                        io.netty.handler.codec.http.websocketx.WebSocketServerProtocolConfig.newBuilder().build()));
+        defaults.close();
+        var added = (io.netty.handler.codec.http.websocketx.CloseWebSocketFrame) defaults.readOutbound();
+        assertEquals(1000, added.statusCode(), "Netty's default would report a normal closure");
+        added.release();
+        defaults.finishAndReleaseAll();
+
+        var channel = new io.netty.channel.embedded.EmbeddedChannel(
+                new io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler(BridgeServer.protocolConfig()));
+        channel.close();
+        assertEquals(null, (Object) channel.readOutbound(), "no frame is added to an abrupt close");
+        channel.finishAndReleaseAll();
+    }
+
+    @Test
+    void overflowCloseOfASaturatedConnectionNeverReportsNormalClosure() {
+        var channel = new io.netty.channel.embedded.EmbeddedChannel(
+                new io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler(BridgeServer.protocolConfig()));
+        var connection = new AgentConnection(channel,
+                new com.prattlemob.marionette.bridge.protocol.ProtocolSession("test", role -> null), () -> {});
+        connection.setReady(true);
+        try {
+            channel.unsafe().outboundBuffer().setUserDefinedWritability(1, false);
+            connection.close(1013, "event overflow");
+            channel.runPendingTasks();
+            assertFalse(channel.isOpen());
+            for (Object frame; (frame = channel.readOutbound()) != null; ) {
+                try {
+                    assertFalse(frame instanceof io.netty.handler.codec.http.websocketx.CloseWebSocketFrame,
+                            "a saturated connection closes without a frame: " + frame);
+                } finally {
+                    io.netty.util.ReferenceCountUtil.release(frame);
+                }
+            }
+        } finally {
+            channel.finishAndReleaseAll();
+        }
+    }
+
+    @Test
     void eventLoopThreadsAreNamedDaemons() {
         var bridgeThreads = Thread.getAllStackTraces().keySet().stream()
                 .filter(t -> t.getName().startsWith("marionette-bridge")).toList();

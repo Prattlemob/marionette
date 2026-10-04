@@ -209,6 +209,21 @@ public final class BridgeServer {
         return current != null ? current.lastPongNanos() : 0;
     }
 
+    /**
+     * Every intentional close writes its own coded frame first, so Netty must
+     * not add one: its default 1000 "normal closure" would otherwise reach an
+     * agent whose connection was dropped for being saturated.
+     */
+    static WebSocketServerProtocolConfig protocolConfig() {
+        return WebSocketServerProtocolConfig.newBuilder()
+                .websocketPath("/")
+                .allowExtensions(true)
+                .maxFramePayloadLength(MAX_FRAME_BYTES)
+                .dropPongFrames(false)
+                .sendCloseFrame(null)
+                .build();
+    }
+
     /** Bind to the configured address. Blocks briefly; call once. Throws on bind failure. */
     public void start() {
         group = new NioEventLoopGroup(1, new DefaultThreadFactory("marionette-bridge", true));
@@ -261,12 +276,7 @@ public final class BridgeServer {
                                         ctx.fireChannelRead(message);
                                     }
                                 },
-                                new WebSocketServerProtocolHandler(WebSocketServerProtocolConfig.newBuilder()
-                                        .websocketPath("/")
-                                        .allowExtensions(true)
-                                        .maxFramePayloadLength(MAX_FRAME_BYTES)
-                                        .dropPongFrames(false)
-                                        .build()),
+                                new WebSocketServerProtocolHandler(protocolConfig()),
                                 new WebSocketFrameAggregator(MAX_FRAME_BYTES),
                                 handler);
                     }
