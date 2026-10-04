@@ -1147,22 +1147,69 @@ class BridgeServerTest {
     }
 
     @Test
-    void pingFloodFromANonReaderCannotBypassOutputBackpressure() throws Exception {
+    void pongRepliesToAnUnwritableChannelAreDroppedAndCloseThePeer() {
+        java.util.concurrent.atomic.AtomicInteger overloads = new java.util.concurrent.atomic.AtomicInteger();
+        var channel = new io.netty.channel.embedded.EmbeddedChannel(
+                new BridgeServer.ControlFrameBackpressure(ctx -> overloads.incrementAndGet()));
+        channel.config().setWriteBufferWaterMark(new io.netty.channel.WriteBufferWaterMark(8, 16));
+        assertTrue(channel.writeAndFlush(new io.netty.handler.codec.http.websocketx.PongWebSocketFrame()).isSuccess());
+        assertEquals(0, overloads.get());
+        channel.write(new io.netty.handler.codec.http.websocketx.TextWebSocketFrame("x".repeat(64))); // unflushed
+        assertFalse(channel.isWritable());
+        var pong = new io.netty.handler.codec.http.websocketx.PongWebSocketFrame(
+                io.netty.buffer.Unpooled.wrappedBuffer(new byte[125]));
+        var dropped = channel.writeAndFlush(pong);
+        assertFalse(dropped.isSuccess());
+        assertEquals(0, pong.refCnt(), "a dropped pong is released, not buffered");
+        assertEquals(1, overloads.get());
+        channel.finishAndReleaseAll();
+    }
+
+    /**
+     * A non-reading ping flood is severed within the documented liveness bound
+     * (pong timeout plus one watchdog interval): output backpressure usually
+     * closes it first, and the watchdog is the backstop. The flood runs on its
+     * own thread: under host load, a peer whose tiny receive buffer is full can
+     * drop the server's window updates and stall its own blocking write in TCP
+     * zero-window backoff for minutes, so loss is polled independently of it.
+     */
+    @Test
+    void pingFloodFromANonReaderIsSeveredWithinTheLivenessBound() throws Exception {
+        server.stop();
+        long timeout = TimeUnit.SECONDS.toMillis(com.prattlemob.marionette.config.MarionetteConfig.pongTimeoutSeconds);
+        long interval = Math.min(1000, timeout / 4);
+        long slack = 1000;
+        server = new BridgeServer(java.net.InetAddress.getLoopbackAddress(), 0, "test", 2, 10_000, timeout);
+        server.start();
         try (var socket = silentClient(server.port(), HELLO)) {
             socket.setReceiveBufferSize(1024);
             await(server::hasController);
+            long admitted = System.nanoTime();
+            rawText(socket, "{\"type\":\"input\",\"forward\":true}");
+            List<BridgeServer.Received> held = new java.util.ArrayList<>();
+            await(() -> { held.addAll(server.drainCommands()); return !held.isEmpty(); });
             byte[] flood = new byte[131 * 50000]; // masked 125-byte control frames
             for (int offset = 0; offset < flood.length; offset += 131) {
                 flood[offset] = (byte) 0x89;
                 flood[offset + 1] = (byte) (0x80 | 125);
             }
-            long start = System.nanoTime();
-            try { socket.getOutputStream().write(flood); }
-            catch (java.net.SocketException closedDuringFlood) { /* expected */ }
-            await(server::pollDisconnected);
-            assertTrue(System.nanoTime() - start < TimeUnit.SECONDS.toNanos(4),
-                    "backpressure must close before the five-second watchdog");
+            Thread flooder = new Thread(() -> {
+                try { socket.getOutputStream().write(flood); }
+                catch (java.io.IOException closedDuringFlood) { /* expected */ }
+            }, "ping-flood");
+            flooder.setDaemon(true);
+            flooder.start();
+            long deadline = admitted + TimeUnit.MILLISECONDS.toNanos(timeout + interval + slack);
+            while (!server.pollDisconnected()) {
+                long elapsed = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - admitted);
+                assertTrue(System.nanoTime() < deadline, "flooding controller still attached after " + elapsed
+                        + " ms; bound is " + (timeout + interval) + " ms plus " + slack + " ms slack");
+                Thread.sleep(5);
+            }
             assertFalse(server.hasController());
+            assertFalse(held.getFirst().valid(), "the loss invalidates already-polled controls");
+            socket.close();
+            flooder.join(TimeUnit.SECONDS.toMillis(5));
         }
     }
 
