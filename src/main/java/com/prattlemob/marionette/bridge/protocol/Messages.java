@@ -1,6 +1,8 @@
 package com.prattlemob.marionette.bridge.protocol;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import com.google.gson.JsonArray;
@@ -35,6 +37,8 @@ public final class Messages {
         capabilities.addProperty("events", true);
         capabilities.addProperty("inventoryState", true);
         capabilities.addProperty("inventoryStorage", true);
+        capabilities.addProperty("targetState", true);
+        capabilities.addProperty("worldState", true);
         reply.add("capabilities", capabilities);
         reply.addProperty("mod", modVersion);
         return reply.toString();
@@ -75,11 +79,24 @@ public final class Messages {
 
     /** Null sections are omitted (unselected); sections appear in protocol order. */
     public static String observation(long tick, JsonObject player, JsonObject inventory) {
+        Map<String, JsonObject> sections = new HashMap<>();
+        sections.put("player", player);
+        sections.put("inventory", inventory);
+        return sectionObservation(tick, sections);
+    }
+
+    /** Observation sections in their protocol (frame) order. */
+    public static final List<String> SECTION_ORDER = List.of("player", "inventory", "target", "world");
+
+    /** Absent or null sections are omitted (unselected); present ones appear in protocol order. */
+    public static String sectionObservation(long tick, Map<String, JsonObject> sections) {
         JsonObject frame = new JsonObject();
         frame.addProperty("type", "observation");
         frame.addProperty("tick", tick);
-        if (player != null) frame.add("player", player);
-        if (inventory != null) frame.add("inventory", inventory);
+        for (String name : SECTION_ORDER) {
+            JsonObject section = sections.get(name);
+            if (section != null) frame.add(name, section);
+        }
         return frame.toString();
     }
 

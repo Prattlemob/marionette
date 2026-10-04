@@ -28,8 +28,9 @@ depends on.
 
 Keep milestone IDs and completed history. **M2.5 (published client) and M5.1a
 (bridge safety) are complete; M4.6 (one-shot events), M4.2 (inventory
-observation) and M3.5 (modded storage) are complete.** The remaining
-implementation order is **M4.3 → M4.4 → M4.5 → M3.6 → M3.7 → M5.1 → M5.2**.
+observation), M3.5 (modded storage) and M4.3 (crosshair target and world
+context) are complete.** The remaining implementation order is
+**M4.4 → M4.5 → M3.6 → M3.7 → M5.1 → M5.2**.
 Further package publication retains D12/D14 decision gates; a blocked release
 does not prevent independent safety/perception work. M3.3's outstanding visual
 acceptance remains debt and must be reconciled for milestones requiring it.
@@ -589,14 +590,20 @@ source-only until a further publication is authorized (D14).
 - **Definition of done:** Dashboard shows the targeted block/entity matching
   the vanilla F3 debug info while panning the camera across a scene.
 - **Tier:** Core.
-- **Decision (minor, open):** ray-cast distance — vanilla reach vs.
-  configurable extended "gaze" distance.
+- **Decision (minor, resolved 2026-10-04, D20):** vanilla reach only; no
+  configurable gaze distance.
 
 Items:
 
-- [ ] Crosshair ray-cast (block + entity) in the frame
-- [ ] Dimension, world time, weather, light level
-- [ ] Reach-distance semantics documented in `protocol/`
+- [x] Crosshair ray-cast (block + entity) in the frame
+- [x] Dimension, world time, weather, light level
+- [x] Reach-distance semantics documented in `protocol/`
+
+Implemented as the additive `targetState` and `worldState` capabilities
+(protocol 2; D20): opt-in `target` and `world` sections. See the
+[M4.3 verification record](docs/decisions.md#m43-implementation-and-verification-2026-10-04).
+The published 0.1.0a1 client is unaffected; the new sections are source-only
+until a further publication is authorized (D14).
 
 ### M4.4 — Nearby entities
 

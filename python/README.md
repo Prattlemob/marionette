@@ -63,6 +63,12 @@ ignore environment proxies. Current local trust has no authentication.
   (`messages.Stack`), and menu descriptors list `operations` or a `refusal`.
   The inventory section is in the repository source only; the published 0.1.0a1
   alpha cannot select it and ignores the new descriptor fields.
+  `sections=["target"]` adds the crosshair hit result (`messages.Target`: kind
+  `"block"` with `pos`/`block`/`face`, `"entity"` with `id`/`entity`, or
+  `"none"`, always with the vanilla `reach` it is limited to) and requires
+  `targetState`; `sections=["world"]` adds dimension, time of day, weather and
+  light at the feet (`messages.World`) and requires `worldState`. Both are in
+  the repository source only; the published 0.1.0a1 alpha cannot select them.
 - `inventory(op, menu=..., source=..., destination=..., hotbar=..., all=False,
   animated=False, timeout=...)` supports open/inspect/move/swap/equip/drop/close.
   Obtain `menu_ref(result["menu"])` from a recent inspect before mutations.

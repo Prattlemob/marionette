@@ -363,17 +363,29 @@ public final class BridgeServer {
     /** Serialize once per due mask; sample each section at most once per tick, only when selected. */
     public void sendSectionObservation(long tick, int defaultDivisor,
                                        Supplier<JsonObject> player, Supplier<JsonObject> inventory) {
+        sendSectionObservation(tick, defaultDivisor, Map.of("player", player, "inventory", inventory));
+    }
+
+    /**
+     * Serialize once per due mask; sample each section at most once per tick,
+     * only when some due session selected it. Sections without a sampler are omitted.
+     */
+    public void sendSectionObservation(long tick, int defaultDivisor, Map<String, Supplier<JsonObject>> samplers) {
         Map<Set<String>, String> frames = new HashMap<>();
-        JsonObject playerSnapshot = null, inventorySnapshot = null;
+        Map<String, JsonObject> snapshots = new HashMap<>();
         for (AgentConnection connection : (Iterable<AgentConnection>) connections()::iterator) {
             if (!connection.ready() || tick % connection.effectiveDivisor(defaultDivisor) != 0) continue;
             var mask = connection.sections();
             String json = frames.get(mask);
             if (json == null) {
-                if (mask.contains("player") && playerSnapshot == null) playerSnapshot = player.get();
-                if (mask.contains("inventory") && inventorySnapshot == null) inventorySnapshot = inventory.get();
-                json = Messages.observation(tick, mask.contains("player") ? playerSnapshot : null,
-                        mask.contains("inventory") ? inventorySnapshot : null);
+                Map<String, JsonObject> selected = new HashMap<>();
+                for (String name : mask) {
+                    Supplier<JsonObject> sampler = samplers.get(name);
+                    if (sampler == null) continue;
+                    if (!snapshots.containsKey(name)) snapshots.put(name, sampler.get());
+                    selected.put(name, snapshots.get(name));
+                }
+                json = Messages.sectionObservation(tick, selected);
                 frames.put(mask, json);
             }
             connection.sendObservation(json);

@@ -6,7 +6,7 @@ from typing import Literal, NotRequired, TypedDict, Union, cast, get_args, get_o
 
 PROTOCOL_VERSION = 2
 Role = Literal["controller", "observer"]
-Section = Literal["player", "inventory"]
+Section = Literal["player", "inventory", "target", "world"]
 Tap = Literal["jump", "attack", "use"]
 Operation = Literal["open", "inspect", "move", "swap", "equip", "drop", "close"]
 RequestId = str | int | float
@@ -160,11 +160,70 @@ class Inventory(TypedDict):
     reduced: NotRequired[bool]
 
 
+class BlockPos(TypedDict):
+    x: int
+    y: int
+    z: int
+
+
+class Reach(TypedDict):
+    block: float
+    entity: float
+
+
+TargetKind = Literal["block", "entity", "none"]
+Face = Literal["down", "up", "north", "south", "west", "east"]
+
+
+class Target(TypedDict):
+    """The ``target`` section (``targetState``): vanilla's crosshair hit result.
+
+    ``kind`` is a ``TargetKind`` but stays an open string; treat unknown kinds
+    as ``"none"``. Blocks add ``pos``, ``block`` and ``face``; entities add
+    ``id`` and ``entity``; both add ``hit`` and ``distance``. ``reach`` is always
+    present: nothing beyond it is ever a target.
+    """
+    kind: str
+    reach: Reach
+    pos: NotRequired[BlockPos]
+    block: NotRequired[str]
+    face: NotRequired[str]
+    id: NotRequired[int]
+    entity: NotRequired[str]
+    hit: NotRequired[Vector]
+    distance: NotRequired[float]
+
+
+class Light(TypedDict):
+    block: int
+    sky: int
+    combined: int
+    effective: int
+
+
+Weather = Literal["clear", "rain", "thunder"]
+
+
+class World(TypedDict):
+    """The ``world`` section (``worldState``). ``weather`` is a ``Weather`` but stays open."""
+    dimension: str
+    dayTime: int
+    timeOfDay: int
+    day: int
+    weather: str
+    rainLevel: float
+    thunderLevel: float
+    feet: BlockPos
+    light: Light
+
+
 class Observation(TypedDict):
     type: Literal["observation"]
     tick: int
     player: NotRequired[Player]
     inventory: NotRequired[Inventory]
+    target: NotRequired[Target]
+    world: NotRequired[World]
 
 
 class InventoryResult(Envelope):
@@ -280,12 +339,6 @@ class ChatEvent(EventEnvelope):
     sender: str | None
     chatType: str | None
     truncated: bool
-
-
-class BlockPos(TypedDict):
-    x: int
-    y: int
-    z: int
 
 
 class BlockBrokenEvent(EventEnvelope):

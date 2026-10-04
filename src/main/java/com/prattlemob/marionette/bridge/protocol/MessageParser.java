@@ -114,7 +114,7 @@ public final class MessageParser {
     }
 
     /** Implemented observation sections; reserved future names are rejected until they ship. */
-    static final Set<String> SECTIONS = Set.of("player", "inventory");
+    static final Set<String> SECTIONS = Set.of("player", "inventory", "target", "world");
 
     private static Set<String> sections(JsonObject json) {
         if (!json.has("sections")) return null;

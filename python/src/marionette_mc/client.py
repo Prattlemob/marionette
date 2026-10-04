@@ -74,9 +74,13 @@ class RequestTimeout(TimeoutError):
         super().__init__(f"request {request_id} timed out; outcome unknown, inspect late replies; do not replay")
 
 
+SECTION_CAPABILITIES = {"inventory": "inventoryState", "target": "targetState", "world": "worldState"}
+
+
 def section_capabilities(sections: Iterable[str]) -> list[str]:
-    """Selecting any mask needs ``playerState``; the inventory section also ``inventoryState``."""
-    return ["playerState"] + (["inventoryState"] if "inventory" in sections else [])
+    """Selecting any mask needs ``playerState``; other sections also need their own capability."""
+    selected = set(sections)
+    return ["playerState"] + [cap for name, cap in SECTION_CAPABILITIES.items() if name in selected]
 
 
 def positive(value: float, name: str) -> None:
