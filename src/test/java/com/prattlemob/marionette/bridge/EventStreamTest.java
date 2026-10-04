@@ -238,14 +238,18 @@ class EventStreamTest {
         Client controller = Client.connect(server.port(), "{\"type\":\"hello\",\"versions\":[2],\"events\":true}");
         Client stalled = Client.connect(server.port(),
                 "{\"type\":\"hello\",\"versions\":[2],\"role\":\"observer\",\"events\":true}");
+        AgentConnection controllerConnection = configure(controller, "{\"type\":\"configure\"}");
         AgentConnection stalledConnection = configure(stalled, "{\"type\":\"configure\"}");
         stalled.stalled = true;
         String padding = "p".repeat(400);
         long sent = 0;
         while (stalledConnection.ready() && sent < 200_000) {
+            // Pace on the controller's own backlog, not wall time: it must keep
+            // up on a loaded machine while only the stalled reader overflows.
+            await(() -> controllerConnection.outboundBytes() < AgentConnection.OUTBOUND_BYTES / 4
+                    && controllerConnection.eventsInFlight() < AgentConnection.EVENT_LIMIT / 4);
             server.sendEvent(chat(sent + 1, padding));
             sent++;
-            if (sent % 64 == 0) Thread.sleep(1); // a paced producer: the controller keeps up
         }
         assertFalse(stalledConnection.ready(), "the stalled subscriber must overflow");
         assertFalse(server.pollDisconnected(), "an observer overflow is not controller loss");
@@ -259,7 +263,17 @@ class EventStreamTest {
         }
         stalled.stalled = false;
         stalled.ws.request(Long.MAX_VALUE);
-        await(() -> stalled.closeCode.isDone());
+        // The server drops the saturated socket, possibly mid-frame. The JDK
+        // client does not always report such an end, so wait for the server
+        // side to close and the client to report it or stop receiving.
+        await(() -> !stalledConnection.channel().isOpen());
+        int[] seen = {-1};
+        long[] quietSince = {System.nanoTime()};
+        await(() -> {
+            int size = stalled.messages.size();
+            if (size != seen[0]) { seen[0] = size; quietSince[0] = System.nanoTime(); }
+            return stalled.closeCode.isDone() || System.nanoTime() - quietSince[0] > TimeUnit.SECONDS.toNanos(1);
+        });
         long last = 0;
         for (String raw : stalled.messages) {
             JsonObject message = JsonParser.parseString(raw).getAsJsonObject();
@@ -272,10 +286,12 @@ class EventStreamTest {
         // Writes still buffered in the process when it closes are discarded
         // with the connection: the agent sees a gapless prefix of the stream.
         assertTrue(last >= 1 && last <= delivered, "received a prefix, saw " + last + " of " + delivered);
-        try {
-            int code = stalled.closeCode.get();
-            assertTrue(code == 1013 || code == 1006, "event overflow or abnormal close, saw " + code);
-        } catch (java.util.concurrent.ExecutionException lostCourtesyClose) { /* documented */ }
+        if (stalled.closeCode.isDone()) {
+            try {
+                int code = stalled.closeCode.get();
+                assertTrue(code == 1013 || code == 1006, "event overflow or abnormal close, saw " + code);
+            } catch (java.util.concurrent.ExecutionException lostCourtesyClose) { /* documented */ }
+        }
     }
 
     @Test
