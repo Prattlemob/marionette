@@ -37,6 +37,7 @@ class MarionetteConfigTest {
         assertEquals(32, MarionetteConfig.entityRadius);
         assertEquals(64, MarionetteConfig.entityMaxCount);
         assertEquals(16, MarionetteConfig.blockScanRadius);
+        assertEquals(1024, MarionetteConfig.blockScanBlocksPerTick);
         assertEquals(true, MarionetteConfig.suppressPauseOnLostFocus);
         assertEquals(180.0, MarionetteConfig.cameraSmoothingSpeed);
     }

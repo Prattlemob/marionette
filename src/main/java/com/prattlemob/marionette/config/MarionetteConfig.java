@@ -32,6 +32,7 @@ public final class MarionetteConfig {
     private static final ModConfigSpec.IntValue ENTITY_RADIUS;
     private static final ModConfigSpec.IntValue ENTITY_MAX_COUNT;
     private static final ModConfigSpec.IntValue BLOCK_SCAN_RADIUS;
+    private static final ModConfigSpec.IntValue BLOCK_SCAN_BUDGET;
     private static final ModConfigSpec.BooleanValue SUPPRESS_PAUSE;
     private static final ModConfigSpec.DoubleValue SMOOTHING_SPEED;
     private static final ModConfigSpec.EnumValue<Verbosity> VERBOSITY;
@@ -78,9 +79,13 @@ public final class MarionetteConfig {
                         "the section is flagged truncated. (live)")
                 .defineInRange("entityMaxCount", 64, 1, 256);
         BLOCK_SCAN_RADIUS = builder
-                .comment("Cap for the future block scan (M4.5). Defined now so operators see the",
-                        "ceiling; enforced when it ships. (live)")
+                .comment("Hard cap for `scan` requests: every scanned block must lie within this many",
+                        "blocks of the player's feet block on each axis; larger requests are refused. (live)")
                 .defineInRange("blockScanRadius", 16, 4, 32);
+        BLOCK_SCAN_BUDGET = builder
+                .comment("Most block positions a scan reads per client tick; larger scans continue on",
+                        "later ticks so a scan never stalls a frame. (live)")
+                .defineInRange("blockScanBlocksPerTick", 1024, 64, 8192);
         builder.pop();
         builder.push("client");
         SUPPRESS_PAUSE = builder
@@ -114,6 +119,7 @@ public final class MarionetteConfig {
     public static volatile int entityRadius = 32;
     public static volatile int entityMaxCount = 64;
     public static volatile int blockScanRadius = 16;
+    public static volatile int blockScanBlocksPerTick = 1024;
     public static volatile boolean suppressPauseOnLostFocus = true;
     public static volatile double cameraSmoothingSpeed = 180.0;
     public static volatile Verbosity verbosity = Verbosity.NORMAL;
@@ -176,6 +182,7 @@ public final class MarionetteConfig {
         entityRadius = ENTITY_RADIUS.get();
         entityMaxCount = ENTITY_MAX_COUNT.get();
         blockScanRadius = BLOCK_SCAN_RADIUS.get();
+        blockScanBlocksPerTick = BLOCK_SCAN_BUDGET.get();
         suppressPauseOnLostFocus = SUPPRESS_PAUSE.get();
         cameraSmoothingSpeed = SMOOTHING_SPEED.get();
         verbosity = VERBOSITY.get();

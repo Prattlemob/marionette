@@ -2,7 +2,7 @@
 import json
 import math
 import types
-from typing import Literal, NotRequired, TypedDict, Union, cast, get_args, get_origin, get_type_hints, is_typeddict
+from typing import Iterator, Literal, NotRequired, TypedDict, Union, cast, get_args, get_origin, get_type_hints, is_typeddict
 
 PROTOCOL_VERSION = 2
 Role = Literal["controller", "observer"]
@@ -271,13 +271,43 @@ class InventoryResult(Envelope):
     menu: Menu | None
 
 
+ScanReason = Literal["no_world", "over_radius", "over_volume", "busy",
+                     "released", "world_exit", "level_changed", "too_large"]
+MAX_SCAN_VOLUME = 8192
+
+
+class ScanLimits(TypedDict):
+    """The caps in force, sent with ``over_radius``/``over_volume`` refusals."""
+    radius: int
+    maxVolume: int
+
+
+class ScanResult(Envelope):
+    """A ``scan_result`` (``blockScan``): ``palette`` plus y→z→x ``indices``.
+
+    A ``None`` palette entry means the client had no block data (unloaded chunk).
+    Use ``scan_block``/``scan_blocks`` rather than decoding the order by hand.
+    """
+    type: Literal["scan_result"]
+    dimension: str
+    min: BlockPos
+    size: BlockPos
+    order: str
+    startTick: int
+    tick: int
+    palette: list[str | None]
+    indices: list[int]
+
+
 class Error(Envelope):
     type: Literal["error"]
     code: str
     message: str
     input: NotRequired[str]
     supported: NotRequired[list[int]]
-    reason: NotRequired[str]  # inventory rejection reason (inventoryStorage); see RejectionReason
+    # Inventory (inventoryStorage, see RejectionReason) or scan (blockScan, see ScanReason) reason.
+    reason: NotRequired[str]
+    limits: NotRequired[ScanLimits]
 
 
 class InputFields(TypedDict, total=False):
@@ -406,9 +436,17 @@ InventoryRequest = TypedDict("InventoryRequest", {
     "to": NotRequired[SlotRef], "hotbar": NotRequired[int],
     "all": NotRequired[bool], "animated": NotRequired[bool],
 })
-Command = Input | Look | Release | Configure | InventoryRequest
-Message = Hello | Observation | InventoryResult | Error | Event
-Reliable = InventoryResult | Error
+
+
+class ScanRequest(Envelope):
+    type: Literal["scan"]
+    size: BlockPos
+    min: NotRequired[BlockPos]
+
+
+Command = Input | Look | Release | Configure | InventoryRequest | ScanRequest
+Message = Hello | Observation | InventoryResult | ScanResult | Error | Event
+Reliable = InventoryResult | ScanResult | Error
 
 
 class InvalidMessage(ValueError):
@@ -479,7 +517,8 @@ def decode(raw: str | bytes) -> Message:
     if not isinstance(kind, str):
         raise InvalidMessage("type must be a string")
     schema: object = {"hello": Hello, "observation": Observation,
-                      "inventory_result": InventoryResult, "error": Error}.get(kind)
+                      "inventory_result": InventoryResult, "scan_result": ScanResult,
+                      "error": Error}.get(kind)
     if kind == "event":
         event = value.get("event")
         if not isinstance(event, str):
@@ -491,6 +530,40 @@ def decode(raw: str | bytes) -> Message:
         raise UnsupportedMessage(f"unsupported message type {kind!r}")
     validate(value, schema)
     return cast(Message, value)
+
+
+def check_scan(result: ScanResult) -> None:
+    """Raise ``InvalidMessage`` unless ``indices`` covers the box and points into ``palette``."""
+    size = result["size"]
+    if result["order"] != "yzx" or size["x"] < 1 or size["y"] < 1 or size["z"] < 1:
+        raise InvalidMessage("unsupported scan order or empty box")
+    if len(result["indices"]) != size["x"] * size["y"] * size["z"]:
+        raise InvalidMessage("scan indices do not cover the box")
+    if any(type(i) is not int or not 0 <= i < len(result["palette"]) for i in result["indices"]):
+        raise InvalidMessage("scan index outside the palette")
+
+
+def scan_block(result: ScanResult, x: int, y: int, z: int) -> str | None:
+    """Block id at absolute ``(x, y, z)``; ``None`` where the client had no data.
+
+    Raises ``KeyError`` for a position outside the scanned box.
+    """
+    low, size = result["min"], result["size"]
+    dx, dy, dz = x - low["x"], y - low["y"], z - low["z"]
+    if not (0 <= dx < size["x"] and 0 <= dy < size["y"] and 0 <= dz < size["z"]):
+        raise KeyError((x, y, z))
+    return result["palette"][result["indices"][(dy * size["z"] + dz) * size["x"] + dx]]
+
+
+def scan_blocks(result: ScanResult) -> Iterator[tuple[int, int, int, str | None]]:
+    """Every ``(x, y, z, block)`` in wire (y→z→x) order."""
+    low, size = result["min"], result["size"]
+    palette, indices = result["palette"], result["indices"]
+    for i, index in enumerate(indices):
+        dx = i % size["x"]
+        dz = i // size["x"] % size["z"]
+        dy = i // (size["x"] * size["z"])
+        yield low["x"] + dx, low["y"] + dy, low["z"] + dz, palette[index]
 
 
 def menu_ref(menu: Menu) -> MenuRef:

@@ -29,8 +29,8 @@ depends on.
 Keep milestone IDs and completed history. **M2.5 (published client) and M5.1a
 (bridge safety) are complete; M4.6 (one-shot events), M4.2 (inventory
 observation), M3.5 (modded storage), M4.3 (crosshair target and world
-context) and M4.4 (nearby entities) are complete.** The remaining implementation
-order is **M4.5 → M3.6 → M3.7 → M5.1 → M5.2**.
+context), M4.4 (nearby entities) and M4.5 (bounded block scan) are complete.**
+The remaining implementation order is **M3.6 → M3.7 → M5.1 → M5.2**.
 Further package publication retains D12/D14 decision gates; a blocked release
 does not prevent independent safety/perception work. M3.3's outstanding visual
 acceptance remains debt and must be reconciled for milestones requiring it.
@@ -652,12 +652,18 @@ until a further publication is authorized (D14).
 
 Items:
 
-- [ ] Palette + indices encoding documented in `protocol/` with a worked
+- [x] Palette + indices encoding documented in `protocol/` with a worked
       example (D3)
-- [ ] On-demand scan with per-tick work budget (chunked across ticks)
-- [ ] Config-capped radius; over-cap requests rejected with error
-- [ ] Frame-time measurement demonstrating no render hitch
-- [ ] Delta-update follow-up reserved in `protocol/`
+- [x] On-demand scan with per-tick work budget (chunked across ticks)
+- [x] Config-capped radius; over-cap requests rejected with error
+- [x] Frame-time measurement demonstrating no render hitch
+- [x] Delta-update follow-up reserved in `protocol/`
+
+Implemented as the additive `blockScan` capability (protocol 2; D22): a
+controller `scan` request answered by one `scan_result`. See the
+[M4.5 verification record](docs/decisions.md#m45-implementation-and-verification-2026-10-04).
+The published 0.1.0a1 client is unaffected; scans are source-only until a
+further publication is authorized (D14).
 
 ### M4.6 — One-shot events (outbound)
 

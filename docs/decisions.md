@@ -487,6 +487,9 @@ mod.
   in M4.4** (2026-10-04): a vanilla type table over class markers, and
   `targetingMe` only from synchronized attack targets, otherwise `"unknown"`;
   see D21.
+- Block scan request shape, caps, budget and observer access — **resolved in
+  M4.5** (2026-10-04): a box with a fixed 8192 volume limit, config radius and
+  per-tick budget, controller only; see D22.
 - Raw-input vs. active-Baritone-goal conflict policy; which Baritone settings
   are exposed — M6.2.
 - Human-input precedence policy details — M5.1. (The watchdog timeout default
@@ -1125,4 +1128,101 @@ Not demonstrated in the rendered run: the wither's target and elder guardians
 (same synchronized-data path as the guardian, unit-tested mapping), other
 players and their names, modded entities, multiplayer servers and their entity
 tracking ranges, and entities in vehicles. M3.3's physical alt-tab and human
+animation acceptance and the remaining M5.1 items stay outstanding.
+
+## D22 — Block scan: controller request, box caps, budgeted reads — **Settled** (2026-10-04, M4.5)
+
+D3 settled the shape (on-demand request/response, a `palette` of block ids
+plus flat y→z→x indices as JSON, chunked reads, config radius cap, reserved
+deltas and binary frames). M4.5 fixed the remaining details
+(`protocol/v1.md`, scan and scan_result), advertised as the additive
+`blockScan` capability:
+
+- **Request:** a box by `size` and an optional absolute `min` corner; without
+  `min` the box is centred on the feet block. A box rather than a radius lets an
+  agent ask for the non-cubic shapes it needs (16×8×16) and re-scan an exact
+  region; the result always echoes the box actually read.
+- **Caps:** every position must lie within `observation.blockScanRadius`
+  (4–32, default 16, live) of the feet block on each axis, checked when the
+  request is applied, and the volume is at most 8192 positions, a fixed
+  protocol limit that keeps every vanilla result far inside the 128 KiB reply
+  limit (the measured 32×8×32 result was 17 KB). Over-cap requests fail with
+  `scan_refused` (`over_radius`/`over_volume`) carrying `limits`, so agents can
+  shrink a request without guessing. An oversized result (only possible with
+  extreme modded ids) becomes `scan_cancelled` `too_large`, never a 1013 close.
+- **Work budget:** reads happen at the end of client ticks in index order, at
+  most `observation.blockScanBlocksPerTick` (64–8192, default 1024, live)
+  positions per tick, so 16×8×16 spans two ticks. The result is sent before
+  that tick's observation, with `startTick`/`tick`; it is not an atomic
+  snapshot. One scan runs at a time (`busy` otherwise).
+- **Controller only.** D7a keeps observers to `hello` and `configure`;
+  inventory inspection set the precedent for read-only requests. Opening scans
+  to observers would be a separate decision.
+- **Block ids only.** No block states; `null` palette entries mark unloaded
+  chunks; outside the build height reads `minecraft:void_air` as vanilla does.
+- **Cancellation:** `release` and safety releases cancel with `released`,
+  world exit with `world_exit`, a replaced client level with `level_changed`.
+
+**Compatibility:** published 0.1.0a1 has no scan API and never sends `scan`,
+so it never receives `scan_result` or the new error codes; the extra hello
+capability is ignored. Protocol stays 2.
+
+Rejected: a periodic or observation-section scan (D3); a radius-only request;
+server-side or integrated-server block access (the field would mean different
+things in singleplayer); queueing several scans (an unbounded queue, or a
+second bound, for little gain over `busy`); per-session budgets.
+
+### M4.5 implementation and verification (2026-10-04)
+
+`./gradlew build` passed with 315 tests (295 before). In-repository Python
+client tests passed on 3.11 and 3.14 (57 tests, 48 before; mypy strict clean).
+A rendered client in an isolated copy of the test world, provisioned by a
+temporary client-side harness outside the repository, was driven through a
+real WebSocket controller session. Ground truth was the integrated server's own
+blocks for each scanned box, read on the server thread; the result was decoded
+with the client's `scan_block`/`scan_blocks`.
+
+| Scan | Positions | Mismatches vs server | Ticks |
+|---|---|---|---|
+| Natural (superflat) terrain, 16×8×16 centred on the feet | 2048 | 0 | 2 |
+| Prepared varied area, 16×8×16 at an explicit corner (18 solid kinds, air, an enclosed water pool and lava pool; 20 palette entries) | 2048 | 0 | 2 |
+| The same box centred on the feet above it | 2048 | 0 | 2 |
+| The prepared area again after three refusals | 2048 | 0 | 2 |
+| The prepared area at a live budget of 64 blocks per tick | 2048 | 0 | 32 |
+| 32×8×32 (8192) at the default budget | 8192 | 0 | 8 |
+| The same at a budget of 8192 | 8192 | 0 | 1 |
+
+Over-radius (horizontally and vertically) and over-volume requests were refused
+with `scan_refused`, the right reason and `limits`, and the session continued
+(the next observation and scan succeeded). A second concurrent scan was refused
+as `busy`; `release` during a 32-tick scan cancelled it (`scan_cancelled`,
+`released`); an observer's scan was refused with `role_forbidden` and the
+observer stayed connected. 652 back-to-back scans in the timing windows all
+matched the server's blocks.
+
+Frame and tick timing, 20-second windows (the unfocused window is held at
+30 fps by vanilla's inactivity limit, so frame intervals sit at 33.4 ms):
+
+| Window | Frame p50 / p99 / max (ms) | Frames > 50 ms | Render + ticks per frame p99 / max (ms) |
+|---|---|---|---|
+| No scans | 33.41 / 34.50 / 34.76 | 0 | 2.08 / 4.67 |
+| Back-to-back 16×8×16 (201 scans) | 33.40 / 34.89 / 49.52 | 0 | 2.92 / 17.35 |
+| Back-to-back 32×8×32 (51 scans) | 33.42 / 34.68 / 35.10 | 0 | 2.50 / 3.58 |
+| No scans | 33.40 / 34.56 / 37.05 | 0 | 2.47 / 4.05 |
+| Back-to-back 32×8×32, budget 8192 (400 scans) | 33.40 / 35.55 / 38.23 | 0 | 3.49 / 5.50 |
+
+A 1024-block portion took 0.05 ms median (p99 0.30, max 1.45) and an
+8192-block portion 0.36 ms median (max 1.18). The one slow frame in the
+16×8×16 window came from a 16 ms client tick whose scan portion took 0.06 ms.
+No scan window had a frame above 50 ms.
+
+Published 0.1.0a1, unmodified, observed the whole run (3058 player-only
+observations; only `hello` and `observation` frames) and afterwards controlled
+(configure, observations, inventory inspect, smooth look, release) without ever
+receiving a scan frame.
+
+Not demonstrated in the rendered run: unloaded-chunk `null` entries and
+`void_air` outside the build height (the radius cap keeps boxes near the
+player; unit-tested), `level_changed` and `world_exit` cancellation, a modded
+oversized result, and multiplayer servers. M3.3's physical alt-tab and human
 animation acceptance and the remaining M5.1 items stay outstanding.

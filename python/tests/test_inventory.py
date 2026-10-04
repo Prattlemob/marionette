@@ -52,7 +52,7 @@ class InventoryDecodeTests(unittest.TestCase):
                 decode(json.dumps(frame))
 
     def test_rejection_reasons_decode_and_are_optional(self):
-        errors = [m for m in FIXTURE['messages'] if m['type'] == 'error']
+        errors = [m for m in FIXTURE['messages'] if m['type'] == 'error' and not m['code'].startswith('scan_')]
         self.assertEqual([e.get('reason') for e in errors],
                          ['released', 'destination_rejects', 'unsupported_menu', None])
         with self.assertRaises(InvalidMessage):

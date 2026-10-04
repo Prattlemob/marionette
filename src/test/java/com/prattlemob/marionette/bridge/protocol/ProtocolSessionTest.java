@@ -134,7 +134,8 @@ class ProtocolSessionTest {
         for (String frame : List.of(
                 "{\"type\": \"input\", \"forward\": true, \"id\": 9}",
                 "{\"type\": \"look\", \"yaw\": 0, \"pitch\": 0}",
-                "{\"type\": \"release\"}")) {
+                "{\"type\": \"release\"}",
+                "{\"type\": \"scan\", \"size\": {\"x\": 1, \"y\": 1, \"z\": 1}}")) {
             List<ProtocolSession.Action> actions = session.onFrame(frame);
             assertEquals(1, actions.size(), "non-fatal: error only, no close");
             JsonObject error = json(actions.get(0));

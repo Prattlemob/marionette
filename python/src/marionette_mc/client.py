@@ -11,10 +11,10 @@ from websockets.asyncio.client import ClientConnection, connect as ws_connect
 from websockets.exceptions import ConnectionClosed
 
 from .messages import (
-    PROTOCOL_VERSION, Command, Configure, Error, Event, Hello, Input, InputFields,
+    PROTOCOL_VERSION, BlockPos, Command, Configure, Error, Event, Hello, Input, InputFields,
     InventoryRequest, InventoryResult, InvalidMessage, Look, LookFields, MenuRef,
-    Observation, Operation, Reliable, Role, Section, SlotRef, UnsupportedMessage,
-    decode, validate,
+    Observation, Operation, Reliable, Role, ScanRequest, ScanResult, Section, SlotRef,
+    UnsupportedMessage, check_scan, decode, validate,
 )
 
 
@@ -50,7 +50,7 @@ class ServerError(ClientError):
 
     @property
     def reason(self) -> str | None:
-        """Machine-readable inventory rejection reason (``inventoryStorage``), if sent."""
+        """Machine-readable inventory (``inventoryStorage``) or scan (``blockScan``) reason, if sent."""
         return self.error.get("reason")
 
 
@@ -83,6 +83,20 @@ def section_capabilities(sections: Iterable[str]) -> list[str]:
     """Selecting any mask needs ``playerState``; other sections also need their own capability."""
     selected = set(sections)
     return ["playerState"] + [cap for name, cap in SECTION_CAPABILITIES.items() if name in selected]
+
+
+def block_pos(value: "tuple[int, int, int] | BlockPos", name: str, low: int, high: int) -> BlockPos:
+    if isinstance(value, dict):
+        if set(value) != {"x", "y", "z"}:
+            raise ValueError(f"{name} must have exactly x, y and z")
+        coords = (value["x"], value["y"], value["z"])
+    else:
+        if not isinstance(value, tuple) or len(value) != 3:
+            raise ValueError(f"{name} must be an (x, y, z) tuple or mapping")
+        coords = value
+    if any(type(c) is not int or not low <= c <= high for c in coords):
+        raise ValueError(f"{name} components must be integers {low}–{high}")
+    return {"x": coords[0], "y": coords[1], "z": coords[2]}
 
 
 def positive(value: float, name: str) -> None:
@@ -164,7 +178,7 @@ class Client:
                     if self._observation is not None:
                         self.observations_coalesced += 1
                     self._observation = message
-                elif message["type"] in ("error", "inventory_result"):
+                elif message["type"] in ("error", "inventory_result", "scan_result"):
                     reply = cast(Reliable, message)
                     request_id = reply.get("id")
                     future = self._pending.pop(request_id, None) if isinstance(request_id, str) else None
@@ -354,6 +368,51 @@ class Client:
             raise ValueError("swap requires hotbar")
         if hotbar is not None and not 0 <= hotbar <= 8:
             raise ValueError("hotbar must be 0–8")
+        reply = await self._request(message, request_id, wait)
+        if reply["type"] != "inventory_result" or reply["op"] != op:
+            await self.close()
+            raise InvalidMessage("inventory result does not match request")
+        return reply
+
+    async def scan(self, size: tuple[int, int, int] | BlockPos, *,
+                   min: tuple[int, int, int] | BlockPos | None = None,
+                   timeout: float | None = None) -> ScanResult:
+        """Request one bounded block scan (``blockScan``); controller only.
+
+        ``size`` is the box extent per axis (1–8192 each, at most 8192 blocks in
+        all); ``min`` the lowest corner, or omitted to centre the box on the
+        player's feet. Caps are enforced by the mod: over-cap requests raise
+        ``ServerError`` (``scan_refused``, reasons ``over_radius``/``over_volume``,
+        with ``error["limits"]``). Decode with ``scan_block``/``scan_blocks``.
+        """
+        self.require("blockScan")
+        self._active()
+        if self.role != "controller":
+            raise RoleError("scan requires controller role")
+        if len(self._pending) >= self._pending_limit:
+            raise CapacityError("too many pending requests")
+        wait = self._request_timeout if timeout is None else timeout
+        positive(wait, "timeout")
+        self._sequence += 1
+        request_id = f"scan-{self._sequence}"
+        message: ScanRequest = {"type": "scan", "id": request_id, "size": block_pos(size, "size", 1, 8192)}
+        if min is not None:
+            message["min"] = block_pos(min, "min", -2**31, 2**31 - 1)
+        validate(message, ScanRequest)
+        reply = await self._request(message, request_id, wait)
+        if reply["type"] != "scan_result" or reply["size"] != message["size"] or (
+                "min" in message and reply["min"] != message["min"]):
+            await self.close()
+            raise InvalidMessage("scan result does not match request")
+        try:
+            check_scan(reply)
+        except InvalidMessage:
+            await self.close()
+            raise
+        return reply
+
+    async def _request(self, message: Command, request_id: str, wait: float) -> Reliable:
+        """Send one correlated request. Timeout/cancellation does not cancel server work."""
         future: asyncio.Future[Reliable | Disconnect] = asyncio.get_running_loop().create_future()
         self._pending[request_id] = future
         consumed = False
@@ -369,9 +428,6 @@ class Client:
                 raise Disconnected(reply)
             if reply["type"] == "error":
                 raise ServerError(reply)
-            if reply["op"] != op:
-                await self.close()
-                raise InvalidMessage("inventory result operation does not match request")
             return reply
         finally:
             self._pending.pop(request_id, None)

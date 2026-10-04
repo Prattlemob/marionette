@@ -115,6 +115,12 @@ class MessagesTest {
     }
 
     @Test
+    void helloReplyAdvertisesBlockScanCapability() {
+        assertTrue(parse(Messages.helloReply(2, "0.1.0", null)).getAsJsonObject("capabilities")
+                .get("blockScan").getAsBoolean());
+    }
+
+    @Test
     void helloReplyAdvertisesInventoryStateCapability() {
         assertTrue(parse(Messages.helloReply(2, "0.1.0", null)).getAsJsonObject("capabilities")
                 .get("inventoryState").getAsBoolean());

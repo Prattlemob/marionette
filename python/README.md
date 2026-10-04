@@ -85,6 +85,19 @@ ignore environment proxies. Current local trust has no authentication.
   a machine-readable `ServerError.reason` (`messages.RejectionReason`, for example
   `destination_full` or `destination_rejects`). Both are in the repository
   source only; the published 0.1.0a1 alpha keeps the new fields undecoded.
+- `scan(size, min=None, timeout=...)` requests one bounded block scan (requires
+  `blockScan`; controller only). `size` and `min` are `(x, y, z)` tuples or
+  `{"x", "y", "z"}` mappings; without `min` the box is centred on the player's
+  feet. The result (`messages.ScanResult`) carries a `palette` of block ids and
+  y→z→x `indices`; read it with `scan_block(result, x, y, z)` or iterate
+  `scan_blocks(result)`. A `None` block means the client had no data there
+  (unloaded chunk). The mod enforces its caps: a box beyond the configured
+  radius or above 8192 blocks raises `ServerError` with code `scan_refused`,
+  `reason` `over_radius`/`over_volume` and `error["limits"]`; a concurrent scan
+  is refused as `busy`, and `release` or leaving the world cancels one
+  (`scan_cancelled`). A result inconsistent with the request ends the session as
+  `InvalidMessage`. Repository source only; the published 0.1.0a1 alpha has no
+  scan API.
 - `connect(..., events=True)` subscribes in hello (requires the `events`
   capability); `configure(events=True | False)` changes it later.
   `next_event(timeout=...)` / `events()` consume events in `seq` order from a

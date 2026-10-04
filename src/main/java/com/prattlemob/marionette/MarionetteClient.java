@@ -23,8 +23,10 @@ import com.prattlemob.marionette.control.SmoothingModel;
 import com.prattlemob.marionette.event.EventRecorder;
 import com.prattlemob.marionette.event.MinecraftEvents;
 
+import com.prattlemob.marionette.observation.BlockScanRunner;
 import com.prattlemob.marionette.observation.EntityObservation;
 import com.prattlemob.marionette.observation.InventoryObservation;
+import com.prattlemob.marionette.observation.LevelBlockSource;
 import com.prattlemob.marionette.observation.PlayerObservation;
 import com.prattlemob.marionette.observation.TargetObservation;
 import com.prattlemob.marionette.observation.WorldObservation;
@@ -93,6 +95,9 @@ public class MarionetteClient {
     private static final SystemToast.SystemToastId CONTROL_TOAST = new SystemToast.SystemToastId();
 
     private final InventoryActionApplier inventoryApplier = new InventoryActionApplier();
+    /** Bounded block scans (M4.5, D3): one at a time, a budgeted portion per tick. */
+    private final BlockScanRunner scans = new BlockScanRunner();
+    private LevelBlockSource scanSource;
     private final ControlState controlState = new ControlState();
     private final ControlStateApplier applier = new MixinInputApplier();
     private final CameraSmoother cameraSmoother = new CameraSmoother();
@@ -225,6 +230,7 @@ public class MarionetteClient {
 
     private void onGameShuttingDown(GameShuttingDownEvent event) {
         inventoryApplier.cancel("world_exit", "game shutting down", false);
+        scans.cancel("world_exit", "game shutting down");
         // Ordering rule (docs/decisions.md, M2.3): controls release before the
         // bridge stops. Inert in practice (ticks have stopped) but explicit.
         if (controlsEngaged) {
@@ -360,6 +366,7 @@ public class MarionetteClient {
             if (!received.valid()) continue;
             if (player != null || received.command() instanceof AgentCommand.Configure
                     || received.command() instanceof AgentCommand.InventoryAction
+                    || received.command() instanceof AgentCommand.Scan
                     || received.command() instanceof AgentCommand.Release) applyCommand(received, player);
         }
     }
@@ -373,6 +380,15 @@ public class MarionetteClient {
                 } else {
                     inventoryApplier.apply(inventory, received.from()::sendReliable);
                 }
+            }
+            case AgentCommand.Scan scan -> {
+                Minecraft minecraft = Minecraft.getInstance();
+                var level = minecraft.level;
+                var feet = player == null || level == null ? null : player.blockPosition();
+                scans.start(scan, received.from()::sendReliable,
+                        feet == null ? null : new int[] {feet.getX(), feet.getY(), feet.getZ()},
+                        MarionetteConfig.blockScanRadius, level,
+                        level == null ? null : LevelBlockSource.dimension(level));
             }
             case AgentCommand.InputUpdate update -> {
                 if (update.forward() != null) controlState.setForward(update.forward());
@@ -462,6 +478,7 @@ public class MarionetteClient {
     /** The safety rule: neutral ControlState, applier released, evidence logged. */
     private void releaseControls() {
         inventoryApplier.cancel("released", "controls released");
+        scans.cancel("released", "controls released");
         cameraSmoother.cancel();
         controlState.releaseAll();
         applier.release();
@@ -500,6 +517,7 @@ public class MarionetteClient {
                 reportedCoalesced = total;
             }
         }
+        tickScan();
         LocalPlayer player = Minecraft.getInstance().player;
         if (controlsEngaged && player != null && ticksInWorld % PUPPET_LOG_INTERVAL == 0) {
             logVerbose(String.format("Puppet pos %.2f %.2f %.2f yaw %.1f",
@@ -514,6 +532,20 @@ public class MarionetteClient {
                     "world", () -> minecraft.level == null ? null : WorldObservation.capture(minecraft.level, player),
                     "entities", () -> minecraft.level == null ? null : EntityObservation.capture(minecraft.level, player,
                             MarionetteConfig.entityRadius, MarionetteConfig.entityMaxCount)));
+        }
+    }
+
+    /** Read this tick's portion of an active block scan, before this tick's observation. */
+    private void tickScan() {
+        if (!scans.active()) return;
+        var level = Minecraft.getInstance().level;
+        if (level != null && (scanSource == null || scanSource.level() != level)) scanSource = new LevelBlockSource(level);
+        long start = System.nanoTime();
+        int read = scans.tick(ticksInWorld, MarionetteConfig.blockScanBlocksPerTick, level, scanSource);
+        if (read > 0) {
+            // Evidence marker for the per-tick work budget (chunking across ticks).
+            logVerbose("Block scan read {} blocks at tick {} in {} us{}", read, ticksInWorld,
+                    (System.nanoTime() - start) / 1000, scans.active() ? "" : " (complete)");
         }
     }
 
@@ -580,6 +612,8 @@ public class MarionetteClient {
         }
         if (bridge != null) bridge.disconnectController("left world");
         inventoryApplier.cancel("world_exit", "left world", false);
+        scans.cancel("world_exit", "left world");
+        scanSource = null;
         eventRecorder.endWorldSession();
         inWorld = false;
         demo = null;
