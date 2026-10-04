@@ -69,6 +69,12 @@ ignore environment proxies. Current local trust has no authentication.
   `targetState`; `sections=["world"]` adds dimension, time of day, weather and
   light at the feet (`messages.World`) and requires `worldState`. Both are in
   the repository source only; the published 0.1.0a1 alpha cannot select them.
+  `sections=["entities"]` adds the nearby entities (`messages.Entities`: the
+  nearest `maxCount` of `total` within `radius`, `truncated` when the cap cut
+  the list; each `messages.Entity` has `id`, `type`, `hostility`, position,
+  `velocity`, `distance`, and where applicable `health`/`maxHealth`,
+  `targetingMe` (`"yes"`/`"no"`/`"unknown"`), `name` or `item`) and requires
+  `entityState`. Repository source only, like the sections above.
 - `inventory(op, menu=..., source=..., destination=..., hotbar=..., all=False,
   animated=False, timeout=...)` supports open/inspect/move/swap/equip/drop/close.
   Obtain `menu_ref(result["menu"])` from a recent inspect before mutations.

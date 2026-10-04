@@ -74,7 +74,9 @@ class RequestTimeout(TimeoutError):
         super().__init__(f"request {request_id} timed out; outcome unknown, inspect late replies; do not replay")
 
 
-SECTION_CAPABILITIES = {"inventory": "inventoryState", "target": "targetState", "world": "worldState"}
+SECTION_CAPABILITIES = {
+    "inventory": "inventoryState", "target": "targetState", "world": "worldState", "entities": "entityState",
+}
 
 
 def section_capabilities(sections: Iterable[str]) -> list[str]:

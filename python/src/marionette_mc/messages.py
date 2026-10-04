@@ -6,7 +6,7 @@ from typing import Literal, NotRequired, TypedDict, Union, cast, get_args, get_o
 
 PROTOCOL_VERSION = 2
 Role = Literal["controller", "observer"]
-Section = Literal["player", "inventory", "target", "world"]
+Section = Literal["player", "inventory", "target", "world", "entities"]
 Tap = Literal["jump", "attack", "use"]
 Operation = Literal["open", "inspect", "move", "swap", "equip", "drop", "close"]
 RequestId = str | int | float
@@ -217,6 +217,44 @@ class World(TypedDict):
     light: Light
 
 
+Hostility = Literal["hostile", "neutral", "passive", "player", "item", "other"]
+TargetingMe = Literal["yes", "no", "unknown"]
+
+
+class DroppedItem(TypedDict):
+    item: str
+    count: int
+
+
+class Entity(Vector):
+    """One ``entities`` entry. ``hostility`` is a ``Hostility`` and ``targetingMe``
+    a ``TargetingMe``, but both stay open strings: treat unknown values as
+    ``"other"`` and ``"unknown"``. Living entities add ``health``, ``maxHealth``
+    and ``targetingMe``; players ``name``; dropped items ``item``.
+    """
+    id: int
+    type: str
+    hostility: str
+    velocity: Vector
+    distance: float
+    health: NotRequired[float]
+    maxHealth: NotRequired[float]
+    targetingMe: NotRequired[str]
+    name: NotRequired[str]
+    item: NotRequired[DroppedItem]
+
+
+class Entities(TypedDict):
+    """The ``entities`` section (``entityState``): nearest first, at most ``maxCount``
+    of the ``total`` entities within ``radius``; ``truncated`` when some were left out.
+    """
+    radius: int
+    maxCount: int
+    total: int
+    truncated: bool
+    nearby: list[Entity]
+
+
 class Observation(TypedDict):
     type: Literal["observation"]
     tick: int
@@ -224,6 +262,7 @@ class Observation(TypedDict):
     inventory: NotRequired[Inventory]
     target: NotRequired[Target]
     world: NotRequired[World]
+    entities: NotRequired[Entities]
 
 
 class InventoryResult(Envelope):

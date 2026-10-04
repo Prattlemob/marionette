@@ -71,11 +71,16 @@ public final class MarionetteConfig {
                         "message; this config value is the default and is restored on disconnect.")
                 .defineInRange("rateDivisor", 1, 1, 100);
         ENTITY_RADIUS = builder
-                .comment("Caps for future observation sections (M4.4 entities, M4.5 block scan).",
-                        "Defined now so operators see the ceiling; enforced when those ship. (live)")
+                .comment("Radius in blocks of the `entities` observation section, for every session. (live)")
                 .defineInRange("entityRadius", 32, 4, 64);
-        ENTITY_MAX_COUNT = builder.defineInRange("entityMaxCount", 64, 1, 256);
-        BLOCK_SCAN_RADIUS = builder.defineInRange("blockScanRadius", 16, 4, 32);
+        ENTITY_MAX_COUNT = builder
+                .comment("Most entities listed in the `entities` section; the nearest are kept and",
+                        "the section is flagged truncated. (live)")
+                .defineInRange("entityMaxCount", 64, 1, 256);
+        BLOCK_SCAN_RADIUS = builder
+                .comment("Cap for the future block scan (M4.5). Defined now so operators see the",
+                        "ceiling; enforced when it ships. (live)")
+                .defineInRange("blockScanRadius", 16, 4, 32);
         builder.pop();
         builder.push("client");
         SUPPRESS_PAUSE = builder

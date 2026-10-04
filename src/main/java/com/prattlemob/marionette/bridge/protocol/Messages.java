@@ -39,6 +39,7 @@ public final class Messages {
         capabilities.addProperty("inventoryStorage", true);
         capabilities.addProperty("targetState", true);
         capabilities.addProperty("worldState", true);
+        capabilities.addProperty("entityState", true);
         reply.add("capabilities", capabilities);
         reply.addProperty("mod", modVersion);
         return reply.toString();
@@ -86,7 +87,7 @@ public final class Messages {
     }
 
     /** Observation sections in their protocol (frame) order. */
-    public static final List<String> SECTION_ORDER = List.of("player", "inventory", "target", "world");
+    public static final List<String> SECTION_ORDER = List.of("player", "inventory", "target", "world", "entities");
 
     /** Absent or null sections are omitted (unselected); present ones appear in protocol order. */
     public static String sectionObservation(long tick, Map<String, JsonObject> sections) {

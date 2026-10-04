@@ -483,7 +483,10 @@ mod.
   M4.2** (2026-10-04): an enumerated, capped set of stack extras; see D18.
 - Crosshair ray-cast distance: vanilla reach vs. configurable gaze — **resolved in
   M4.3** (2026-10-04): vanilla reach only, no gaze distance; see D20.
-- Hostility classification source; client-side aggro inference depth — M4.4.
+- Hostility classification source; client-side aggro inference depth — **resolved
+  in M4.4** (2026-10-04): a vanilla type table over class markers, and
+  `targetingMe` only from synchronized attack targets, otherwise `"unknown"`;
+  see D21.
 - Raw-input vs. active-Baritone-goal conflict policy; which Baritone settings
   are exposed — M6.2.
 - Human-input precedence policy details — M5.1. (The watchdog timeout default
@@ -1016,3 +1019,110 @@ other than the player), creative-mode reach, reach modifiers and modded blocks
 or entities, multiplayer servers, and day counts above zero (unit tests cover
 the arithmetic). M3.3's physical alt-tab and human animation acceptance and the
 remaining M5.1 items stay outstanding.
+
+## D21 — Nearby entities: type-table hostility, synchronized-target aggro only — **Settled** (2026-10-04, M4.4)
+
+The `entities` observation section (`protocol/v1.md`, Entities section) is
+advertised as `entityState` and selected through the D2 `sections` mask, like
+D18 and D20. It lists the entities the client has loaded within
+`observation.entityRadius` of the player's feet, nearest first, at most
+`observation.entityMaxCount`, with `total` and an always-present `truncated`
+flag. Both caps are the existing M2.2 config values, now enforced and live; they
+apply to every session alike rather than being negotiable per session.
+
+**Hostility source (minor decision):** a fixed per-type classification, not
+current behavior. Precedence: players, dropped items, then a mod-maintained
+table of vanilla registry ids, then class markers for everything else (vanilla
+`NeutralMob` is neutral; `Enemy` or the monster spawn category is hostile; any
+other mob is passive; non-mobs are other).
+
+- The vanilla table only needs the types whose class does not say what players
+  experience: spiders, cave spiders and piglins are `Enemy` subclasses, and
+  goats, llamas, trader llamas, pandas and dolphins are plain animals, but all
+  are neutral (attack when provoked or under conditions). The resulting table
+  for every vanilla type is published in the protocol, and a unit test
+  classifies each 1.21.8 entity class and compares it with that published
+  table, so code and contract cannot drift.
+- Tags were rejected: vanilla has no hostility tag, and the existing entity
+  tags (`undead`, `raiders`, `arthropod` and similar) describe other things.
+  A new tag would be server data that a vanilla server never sends. Class
+  markers already give modded entities a sensible default.
+- Dynamic mood is deliberately not part of the classification: an angered wolf
+  stays neutral and a tamed one too. What an entity is doing now belongs in
+  `targetingMe`.
+
+**Aggro inference depth (minor decision): none.** `targetingMe` is `"yes"` or
+`"no"` only when the entity synchronizes its attack target to clients and that
+target is set: in vanilla, guardians and elder guardians (beam target) and the
+wither (main target). Everything else, and those entities while no target is
+synchronized, is `"unknown"`. Zombies, skeletons, creepers and other mobs never
+tell the client their target, so no client-side signal can confirm it; distance,
+facing, raised arms, anger timers and recent damage are heuristics that fail
+with several players, pets, golems and villagers around. Agents may add their
+own heuristics on top of the reported facts. Values are strings so later
+evidence classes can be added without a protocol bump.
+
+Other choices: positions and health are client-visible (interpolated) values,
+not server state; `velocity` is the client's position change over the last
+tick, which is what was rendered, rather than the client's rarely meaningful
+delta movement for remote entities; parts of multipart entities are not
+listed; players carry their profile `name` and item entities the dropped stack's
+id and count. No other per-entity detail (equipment, custom names, effects,
+passengers) is included; additions would be optional fields under the same
+capability.
+
+**Compatibility:** 0.1.0a1 validates sections against `["player"]`, so it
+cannot select `entities`; default-mask frames are unchanged and no message type
+was added. Protocol stays 2.
+
+Rejected: entity-type tags as the classification source; dynamic hostility from
+current behavior; inferring aggro from heuristics; reading privileged server
+state (the integrated server's AI targets) in singleplayer, which would make
+the field mean different things in singleplayer and on servers; per-session
+radius and count negotiation (config is the ceiling; per-session limits could
+later be added through `configure` without a bump).
+
+### M4.4 implementation and verification (2026-10-04)
+
+`./gradlew build` passed with 295 tests (287 before). In-repository Python
+client tests passed on 3.11 and 3.14 (48 tests, 42 before; mypy strict clean).
+A rendered client in an isolated copy of the test world, provisioned by a
+temporary client-side harness outside the repository (server-console commands,
+and the integrated server's own entity state recorded on the server thread
+every server tick, paired with each client tick), was observed through a real
+WebSocket session (observer, `player`/`entities`, divisor 1; 1217 gapless
+frames, none coalesced). The player stood still on a floating arena under
+resistance and regeneration; no controller input was sent except one smooth
+look by the published client (no movement, no jump, no holds).
+
+| Scene | Observed `entities` | Integrated server |
+|---|---|---|
+| Zombie, cow and dropped diamonds ×3 | all three listed: zombie `hostile`, cow `passive`, item `item` with `minecraft:diamond` ×3; nearest first | same ids and types; the zombie walked 12 blocks to the player and the cow 5.6 blocks |
+| Their positions over the 18-second scene | within 0.1 blocks of the server position (medians below 0.001) | at the server tick a few ticks earlier, the interpolation lag |
+| Guardian in a pool beside the player | `hostile`, `targetingMe` `"yes"` in 275 frames | its beam was on the player in 270 of them; the other 5 within the synchronization lag |
+| Guardian about 29 blocks away hunting a squid | `"no"` in 166 frames | its beam was on the squid |
+| Zombie attacking the player | `"unknown"` in all 691 frames | its AI target was the player throughout |
+| 100 pigs, radius 32, cap 64 | `total` 77, 64 listed, `truncated` true | 77 within 32 blocks; the listed ids are exactly the 64 nearest |
+| Caps changed live to radius 8 and cap 10 | `radius` 8, `maxCount` 10, `total` 17, 10 listed, `truncated` true | the 10 nearest of 17 |
+| Caps changed live to radius 64 and cap 256 | `total` 102, 102 listed, `truncated` false | 102 within 64 blocks |
+| After cleanup | `total` 0 | no entities within 60 blocks |
+
+In every frame the count equalled `min(total, maxCount)`, `truncated` equalled
+`total > maxCount`, entries were sorted by distance, and every distance was
+within the radius (86,910 checks, 0 failures). Selections matched the server's
+nearest set in all 335 settled busy frames; in 2 more the summon was still
+arriving on the client (71 of 77 spawn packets received). Health matched the
+server, allowing the same few ticks of lag, in all 26,448 comparisons. `targetingMe` changes reached the client 1 to
+6 ticks after the server's beam changed.
+
+Published 0.1.0a1, unmodified, observed the whole run (1216 player-only
+observations; only `hello` and `observation` frames), and as a controller it
+received unchanged frames, panned the camera and released cleanly. It cannot
+select the new section itself (its local validation refuses it). Offline, its
+decoder accepted every recorded frame carrying the section.
+
+Not demonstrated in the rendered run: the wither's target and elder guardians
+(same synchronized-data path as the guardian, unit-tested mapping), other
+players and their names, modded entities, multiplayer servers and their entity
+tracking ranges, and entities in vehicles. M3.3's physical alt-tab and human
+animation acceptance and the remaining M5.1 items stay outstanding.

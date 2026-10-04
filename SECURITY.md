@@ -34,7 +34,9 @@ requirement, not an afterthought. The current posture, as specified in
   player, death messages and similar text. Under the local trust model above,
   any local process can subscribe. The same holds for the opt-in inventory
   section: any local observer can read item names and open container contents,
-  and, with the target and world sections, what the player looks at and where.
+  and, with the target and world sections, what the player looks at and where;
+  the entities section lists nearby players by name and other entities the
+  client knows within the configured radius.
 - **Bounded work and emergency release.** See the protocol's `bridgeSafety`
   limits, overload/close behavior, pong watchdog and local F8 panic binding.
   Panic latches controller admission off until the player presses the

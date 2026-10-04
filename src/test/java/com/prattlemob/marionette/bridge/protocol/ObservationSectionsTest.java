@@ -28,12 +28,18 @@ class ObservationSectionsTest {
         assertEquals(Set.of("player", "inventory", "target", "world"), ((ParsedMessage.Hello) MessageParser.parse("""
                 {"type":"hello","versions":[2],"sections":["player","inventory","target","world"]}
                 """)).sections());
+        assertEquals(Set.of("entities"), ((AgentCommand.Configure) MessageParser.parse("""
+                {"type":"configure","sections":["entities"]}
+                """)).sections());
+        assertEquals(Set.of("player", "inventory", "target", "world", "entities"), ((ParsedMessage.Hello) MessageParser.parse("""
+                {"type":"hello","versions":[2],"sections":["entities","player","inventory","target","world"]}
+                """)).sections());
     }
 
     @Test
     void invalidMasksRejectWholeMessageAndEchoId() {
         for (String value : new String[]{"null", "true", "{}", "\"player\"", "[1]",
-                "[\"entities\"]", "[\"player\",\"entities\"]", "[\"Inventory\"]", "[\"Target\"]",
+                "[\"entity\"]", "[\"player\",\"Entities\"]", "[\"Inventory\"]", "[\"Target\"]",
                 "[\"player\",\"unknown\"]"}) {
             for (String prefix : new String[]{"\"type\":\"configure\",\"rateDivisor\":4",
                     "\"type\":\"hello\",\"versions\":[2]"}) {
