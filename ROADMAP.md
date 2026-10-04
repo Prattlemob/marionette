@@ -30,9 +30,10 @@ Keep milestone IDs and completed history. **M2.5 (published client) and M5.1a
 (bridge safety) are complete; M4.6 (one-shot events), M4.2 (inventory
 observation), M3.5 (modded storage), M4.3 (crosshair target and world
 context), M4.4 (nearby entities), M4.5 (bounded block scan), M3.6 (crafting
-and processing menus), M3.7 (gameplay and social controls) and M5.1 (human
-precedence and lifecycle safety; details pending owner review, D25) are
-complete.** The remaining implementation order is **M5.2**.
+and processing menus), M3.7 (gameplay and social controls), M5.1 (human
+precedence and lifecycle safety; details pending owner review, D25) and M5.2
+(diagnostics and operator visibility, D26) are complete.** The cross-project
+execution order is complete; later milestones are selected by requested scope.
 Further package publication retains D12/D14 decision gates; a blocked release
 does not prevent independent safety/perception work. M3.3's outstanding visual
 acceptance remains debt and must be reconciled for milestones requiring it.
@@ -824,9 +825,20 @@ separate and unchecked.
 
 Items:
 
-- [ ] Status HUD overlay with toggle
-- [ ] Held-controls indicator (viewers/users can see the agent's inputs)
-- [ ] Drop/latency counters exposed on HUD and via a protocol `status` query
+- [x] Status HUD overlay with toggle (rebindable F6, Controls menu; on by
+      default because D25 requires the mode to be visible; saved in `[hud]`)
+- [x] Held-controls indicator (viewers/users can see the agent's inputs)
+- [x] Drop/latency counters exposed on HUD and via a protocol `status` query
+      (additive `status` capability; hello `agent` name)
+- [x] Structured logging levels per config (per-category `[logging]` overrides)
+
+Verification (2026-10-04): D26 in docs/decisions.md records the rendered
+checks — HUD screenshots while an agent walked the player with bounded holds
+and no jumping, disconnect-to-idle 2.2–6.1 ms after the loss in five trials
+(the next rendered frame), panic, pause and lockout
+displays, the toggle, and `status` replies matching the HUD. Published
+0.1.0a1 worked unchanged. M3.3 visual/alt-tab debt and the M5.1 owner-review
+items remain open.
 
 ---
 

@@ -1,5 +1,6 @@
 package com.prattlemob.marionette;
 
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
@@ -11,10 +12,13 @@ import java.util.function.Supplier;
 import com.google.gson.JsonObject;
 import com.prattlemob.marionette.bridge.BridgeServer;
 import com.prattlemob.marionette.bridge.protocol.AgentCommand;
+import com.prattlemob.marionette.bridge.protocol.ConnectionStatus;
+import com.prattlemob.marionette.bridge.protocol.StatusReport;
 import com.prattlemob.marionette.bridge.protocol.ErrorCode;
 import com.prattlemob.marionette.bridge.protocol.Messages;
 import com.prattlemob.marionette.config.MarionetteConfig;
-import com.prattlemob.marionette.config.Verbosity;
+import com.prattlemob.marionette.config.LogCategory;
+import com.prattlemob.marionette.config.MarionetteLog;
 import com.prattlemob.marionette.control.CameraSmoother;
 import com.prattlemob.marionette.control.InventoryActionApplier;
 import com.prattlemob.marionette.control.CappedRateModel;
@@ -27,6 +31,7 @@ import com.prattlemob.marionette.control.HumanPrecedence.HumanInput;
 import com.prattlemob.marionette.control.MixinInputApplier;
 import com.prattlemob.marionette.control.Rotation;
 import com.prattlemob.marionette.control.SmoothingModel;
+import com.prattlemob.marionette.diagnostics.StatusHud;
 import com.prattlemob.marionette.event.EventRecorder;
 import com.prattlemob.marionette.event.MinecraftEvents;
 
@@ -45,7 +50,10 @@ import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.client.event.InputEvent;
+import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
+import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
+import net.minecraft.resources.ResourceLocation;
 import org.lwjgl.glfw.GLFW;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.player.LocalPlayer;
@@ -82,16 +90,12 @@ public class MarionetteClient {
     /** Longest dt one render frame may advance a pan, seconds (hitch/pause clamp). */
     private static final float MAX_FRAME_DT = 0.1f;
 
-    private static void logNormal(String message, Object... args) {
-        if (MarionetteConfig.logAt(Verbosity.NORMAL)) {
-            Marionette.LOGGER.info(message, args);
-        }
+    private static void logNormal(LogCategory category, String message, Object... args) {
+        MarionetteLog.normal(category, message, args);
     }
 
-    private static void logVerbose(String message, Object... args) {
-        if (MarionetteConfig.logAt(Verbosity.VERBOSE)) {
-            Marionette.LOGGER.info(message, args);
-        }
+    private static void logVerbose(LogCategory category, String message, Object... args) {
+        MarionetteLog.verbose(category, message, args);
     }
 
     private static MarionetteClient instance;
@@ -102,6 +106,9 @@ public class MarionetteClient {
             "key.categories.marionette");
     /** Agent-exclusive input lockout toggle (M5.1); never suppressed. */
     private final KeyMapping lockoutKey = new KeyMapping("key.marionette.lockout", GLFW.GLFW_KEY_F7,
+            "key.categories.marionette");
+    /** Status HUD toggle (M5.2); an interface key, never suppressed or human input. */
+    private final KeyMapping hudKey = new KeyMapping("key.marionette.hud", GLFW.GLFW_KEY_F6,
             "key.categories.marionette");
     /** One replaceable toast slot for agent-control notices. */
     private static final SystemToast.SystemToastId CONTROL_TOAST = new SystemToast.SystemToastId();
@@ -133,7 +140,7 @@ public class MarionetteClient {
     private long reportedCoalesced;
     /** One-shot events (M4.6); stamped with the in-progress tick, sent immediately. */
     private final EventRecorder eventRecorder = new EventRecorder(() -> ticksInWorld + 1, event -> {
-        logVerbose("Event {} tick {} ({})", event.kind(), event.tick(), event.fields());
+        logVerbose(LogCategory.EVENTS, "Event {} tick {} ({})", event.kind(), event.tick(), event.fields());
         BridgeServer server = bridge;
         if (server != null) server.sendEvent(event);
     });
@@ -149,7 +156,13 @@ public class MarionetteClient {
             event.register(panicKey);
             event.register(rearmKey);
             event.register(lockoutKey);
+            event.register(hudKey);
         });
+        // Below chat, so chat and the tab list draw over it; above everything else in game.
+        modBus.addListener((RegisterGuiLayersEvent event) -> event.registerBelow(VanillaGuiLayers.CHAT,
+                ResourceLocation.fromNamespaceAndPath(Marionette.MODID, "status"),
+                new StatusHud(this::statusReport, () -> lockoutKey.getTranslatedKeyMessage().getString(),
+                        () -> rearmKey.getTranslatedKeyMessage().getString())));
         MixinInputApplier.setLocalInputGate(this::localInputLocked);
         // Panic is checked first and wins if mappings share a key. Re-arm and
         // engaging the lockout are deliberate in-game input only: never from a
@@ -159,6 +172,7 @@ public class MarionetteClient {
                 if (panicKey.matches(event.getKey(), event.getScanCode())) panic();
                 else if (rearmKey.matches(event.getKey(), event.getScanCode())) rearm();
                 else if (lockoutKey.matches(event.getKey(), event.getScanCode())) toggleLockout();
+                else if (hudKey.matches(event.getKey(), event.getScanCode())) toggleHud();
             }
             if (event.getAction() != GLFW.GLFW_RELEASE) {
                 humanInput(mapping -> mapping.matches(event.getKey(), event.getScanCode()));
@@ -169,6 +183,7 @@ public class MarionetteClient {
             if (panicKey.matchesMouse(event.getButton())) panic();
             else if (rearmKey.matchesMouse(event.getButton())) rearm();
             else if (lockoutKey.matchesMouse(event.getButton())) toggleLockout();
+            else if (hudKey.matchesMouse(event.getButton())) toggleHud();
             humanInput(mapping -> mapping.matchesMouse(event.getButton()));
         });
         // In game only (vanilla fires it with no screen open): hotbar scrolling.
@@ -252,7 +267,7 @@ public class MarionetteClient {
 
     private void startBridge() {
         if (!MarionetteConfig.bridgeEnabled) {
-            logNormal("Bridge disabled by config");
+            logNormal(LogCategory.BRIDGE, "Bridge disabled by config");
             return;
         }
         String configured = MarionetteConfig.bindAddress;
@@ -267,7 +282,7 @@ public class MarionetteClient {
             server.start();
             bridge = server;
             if (bind.isLoopbackAddress()) {
-                logNormal("Bridge listening on {}:{}", bind, server.port());
+                logNormal(LogCategory.BRIDGE, "Bridge listening on {}:{}", bind, server.port());
             } else {
                 Marionette.LOGGER.warn("Bridge listening on NON-LOOPBACK {}:{} without authentication"
                         + " (bridge.iUnderstandNonLoopbackIsUnauthenticated)", bind, server.port());
@@ -288,7 +303,7 @@ public class MarionetteClient {
         }
         if (bridge != null) {
             bridge.stop();
-            logNormal("Bridge stopped");
+            logNormal(LogCategory.BRIDGE, "Bridge stopped");
         }
     }
 
@@ -330,6 +345,7 @@ public class MarionetteClient {
     private void onClientTickPre(ClientTickEvent.Pre event) {
         Minecraft minecraft = Minecraft.getInstance();
         LocalPlayer player = minecraft.player;
+        if (bridge != null) bridge.sampleRates(System.nanoTime());
         processSafety();
         if (!inWorld || player == null) {
             processCommands(null);
@@ -350,7 +366,7 @@ public class MarionetteClient {
             executeStunt(minecraft, player, stunt);
             if (demo.isDone()) {
                 demo = null;
-                logNormal("Demo complete");
+                logNormal(LogCategory.CONTROL, "Demo complete");
             }
         }
         boolean shouldControl = demo != null || (bridge != null && bridge.hasController());
@@ -396,12 +412,12 @@ public class MarionetteClient {
         releaseControls();
         report(precedence.panic());
         if (bridge == null) {
-            logNormal("Local panic: controls released (bridge not running)");
+            logNormal(LogCategory.PRECEDENCE, "Local panic: controls released (bridge not running)");
         } else if (engaged) {
-            logNormal("Local panic: controller severed; agent control latched off until re-armed");
+            logNormal(LogCategory.PRECEDENCE, "Local panic: controller severed; agent control latched off until re-armed");
             notifyControl("marionette.control.disabled", "marionette.control.disabled.detail");
         } else {
-            logNormal("Local panic: agent control already latched off");
+            logNormal(LogCategory.PRECEDENCE, "Local panic: agent control already latched off");
             notifyControl("marionette.control.still_disabled", "marionette.control.disabled.detail");
         }
     }
@@ -410,7 +426,7 @@ public class MarionetteClient {
     private void rearm() {
         if (Minecraft.getInstance().screen != null || bridge == null || !bridge.rearm()) return;
         report(precedence.rearm());
-        logNormal("Panic latch re-armed: a controller may connect again");
+        logNormal(LogCategory.PRECEDENCE, "Panic latch re-armed: a controller may connect again");
         notifyControl("marionette.control.enabled", "marionette.control.enabled.detail");
     }
 
@@ -430,11 +446,11 @@ public class MarionetteClient {
         HumanPrecedence.Toggle toggle = precedence.toggleLockout(Minecraft.getInstance().screen != null);
         switch (toggle.result()) {
             case ENGAGED -> {
-                logNormal("Input lockout engaged: agent-exclusive, local gameplay input suppressed");
+                logNormal(LogCategory.PRECEDENCE, "Input lockout engaged: agent-exclusive, local gameplay input suppressed");
                 notifyControl("marionette.lockout.on", "marionette.lockout.on.detail", lockoutKey);
             }
             case RELEASED -> {
-                logNormal("Input lockout released: human-priority");
+                logNormal(LogCategory.PRECEDENCE, "Input lockout released: human-priority");
                 notifyControl("marionette.lockout.off", "marionette.lockout.off.detail", lockoutKey);
             }
             case NO_CONTROLLER -> notifyControl("marionette.lockout.unavailable",
@@ -444,6 +460,39 @@ public class MarionetteClient {
             case SCREEN_OPEN -> { }
         }
         report(toggle.change());
+    }
+
+    /** The HUD key (M5.2): in game with no screen open, like re-arm; the choice is saved. */
+    private void toggleHud() {
+        if (Minecraft.getInstance().screen != null) return;
+        logNormal(LogCategory.CLIENT, "Status HUD {}", MarionetteConfig.toggleHud() ? "shown" : "hidden");
+    }
+
+    /**
+     * What the HUD shows and a status query reports, sampled now on the client
+     * thread (protocol/v1.md, status_result). The session field is left for
+     * the requester.
+     */
+    public StatusReport statusReport() {
+        BridgeServer server = bridge;
+        long now = System.nanoTime();
+        boolean latched = server != null && server.panicLatched();
+        ConnectionStatus controller = server == null ? null
+                : server.controllerStatus(MarionetteConfig.observationRateDivisor, now);
+        String state = latched ? StatusReport.LATCHED : controller != null ? StatusReport.CONNECTED : StatusReport.IDLE;
+        List<String> held = new ArrayList<>();
+        if (controlState.forward()) held.add("forward");
+        if (controlState.back()) held.add("back");
+        if (controlState.left()) held.add("left");
+        if (controlState.right()) held.add("right");
+        if (controlState.jump()) held.add("jump");
+        if (controlState.sneak()) held.add("sneak");
+        if (controlState.sprint()) held.add("sprint");
+        if (controlState.attack()) held.add("attack");
+        if (controlState.use()) held.add("use");
+        return new StatusReport(state, precedence.mode().wire(), precedence.agentPaused(), inWorld,
+                inWorld ? ticksInWorld : null, List.copyOf(held), cameraSmoother.active(),
+                server == null ? 0 : server.observerCount(), controller, null);
     }
 
     /** Human gameplay input matching {@code matches}, if it happened in game with no screen open. */
@@ -511,7 +560,7 @@ public class MarionetteClient {
             releaseControls("human_input", "human input paused agent control", false);
         }
         List<String> inputs = change.inputs().stream().map(HumanInput::wire).toList();
-        logNormal("Human precedence: mode {} paused {} cause {}{}", change.mode().wire(), change.paused(),
+        logNormal(LogCategory.PRECEDENCE, "Human precedence: mode {} paused {} cause {}{}", change.mode().wire(), change.paused(),
                 change.cause().wire(), inputs.isEmpty() ? "" : " inputs " + inputs);
         if (change.cause() == HumanPrecedence.Cause.CONTROLLER_LOST) {
             notifyControl("marionette.lockout.dropped", "marionette.lockout.dropped.detail", lockoutKey);
@@ -538,7 +587,9 @@ public class MarionetteClient {
             BridgeServer.Received received = bridge.pollCommand();
             if (received == null) break;
             if (!received.valid()) continue;
+            received.from().recordApplied(received.receivedNanos(), System.nanoTime());
             if (player != null || received.command() instanceof AgentCommand.Configure
+                    || received.command() instanceof AgentCommand.Status
                     || received.command() instanceof AgentCommand.InventoryAction
                     || received.command() instanceof AgentCommand.Scan
                     || received.command() instanceof AgentCommand.Respawn
@@ -621,12 +672,15 @@ public class MarionetteClient {
             case AgentCommand.Release release -> {
                 releaseControls();
             }
+            case AgentCommand.Status status -> received.from().sendReliable(Messages.statusResult(
+                    statusReport().forSession(received.from().status(MarionetteConfig.observationRateDivisor,
+                            System.nanoTime())), status.id()));
             case AgentCommand.Configure configure -> {
                 if (configure.sections() != null) received.from().setSections(configure.sections());
                 if (configure.events() != null) received.from().setEvents(configure.events());
                 if (configure.rateDivisor() != null) {
                     received.from().setRateDivisor(configure.rateDivisor());
-                    logNormal("Observation rate divisor set to {} for a {} session",
+                    logNormal(LogCategory.OBSERVATION, "Observation rate divisor set to {} for a {} session",
                             configure.rateDivisor(), received.from().role());
                 }
             }
@@ -650,7 +704,7 @@ public class MarionetteClient {
             return;
         }
         player.respawn();
-        logNormal("Agent respawn requested");
+        logNormal(LogCategory.CONTROL, "Agent respawn requested");
         reply.accept(Messages.actionResult("respawn", respawn.id()));
     }
 
@@ -681,7 +735,7 @@ public class MarionetteClient {
         } else {
             player.connection.sendChat(decision.content());
         }
-        logNormal("Agent {} sent ({} characters)", decision.action(), decision.content().length());
+        logNormal(LogCategory.CONTROL, "Agent {} sent ({} characters)", decision.action(), decision.content().length());
         reply.accept(Messages.actionResult(decision.action(), chat.id()));
     }
 
@@ -698,7 +752,7 @@ public class MarionetteClient {
         Rotation target = cameraSmoother.target();
         float speed = (float) (MarionetteConfig.cameraSmoothingSpeed
                 * (speedMultiplier != null ? speedMultiplier : 1.0f));
-        logVerbose(String.format("Pan start target yaw=%.3f pitch=%.3f speed=%.1f model=%s",
+        logVerbose(LogCategory.CONTROL, String.format("Pan start target yaw=%.3f pitch=%.3f speed=%.1f model=%s",
                 target.yaw(), target.pitch(), speed, CappedRateModel.class.getSimpleName()));
     }
 
@@ -706,11 +760,11 @@ public class MarionetteClient {
         switch (stunt) {
             case OPEN_INVENTORY -> {
                 minecraft.setScreen(new InventoryScreen(player));
-                logNormal("Demo stunt: opened inventory");
+                logNormal(LogCategory.CONTROL, "Demo stunt: opened inventory");
             }
             case CLOSE_SCREEN -> {
                 minecraft.setScreen(null);
-                logNormal("Demo stunt: closed screen");
+                logNormal(LogCategory.CONTROL, "Demo stunt: closed screen");
             }
             case NONE -> { }
         }
@@ -733,7 +787,7 @@ public class MarionetteClient {
         controlState.releaseAll();
         applier.release();
         controlsEngaged = false;
-        logNormal("Controls released ({}); vanilla input restored", message);
+        logNormal(LogCategory.CONTROL, "Controls released ({}); vanilla input restored", message);
     }
 
     private void onClientTickPost(ClientTickEvent.Post event) {
@@ -749,12 +803,12 @@ public class MarionetteClient {
         eventRecorder.tick(); // close damage windows within this tick, before its observation
         ticksInWorld++;
         if (ticksInWorld % TICK_LOG_INTERVAL == 0) {
-            logVerbose("Client tick {} in world", ticksInWorld);
+            logVerbose(LogCategory.CLIENT, "Client tick {} in world", ticksInWorld);
         }
         if (bridge != null && ticksInWorld % TICK_LOG_INTERVAL == 0) {
             long total = bridge.coalescedObservations();
             if (total > reportedCoalesced) {
-                logNormal("{} observation frames coalesced for a slow-reading agent ({} total this session)",
+                logNormal(LogCategory.OBSERVATION, "{} observation frames coalesced for a slow-reading agent ({} total this session)",
                         total - reportedCoalesced, total);
                 reportedCoalesced = total;
             } else if (total < reportedCoalesced) {
@@ -770,7 +824,7 @@ public class MarionetteClient {
         tickScan();
         LocalPlayer player = Minecraft.getInstance().player;
         if (controlsEngaged && player != null && ticksInWorld % PUPPET_LOG_INTERVAL == 0) {
-            logVerbose(String.format("Puppet pos %.2f %.2f %.2f yaw %.1f",
+            logVerbose(LogCategory.CONTROL, String.format("Puppet pos %.2f %.2f %.2f yaw %.1f",
                     player.getX(), player.getY(), player.getZ(), player.getYRot()));
         }
         if (bridge != null && inWorld && player != null) {
@@ -794,7 +848,7 @@ public class MarionetteClient {
         int read = scans.tick(ticksInWorld, MarionetteConfig.blockScanBlocksPerTick, level, scanSource);
         if (read > 0) {
             // Evidence marker for the per-tick work budget (chunking across ticks).
-            logVerbose("Block scan read {} blocks at tick {} in {} us{}", read, ticksInWorld,
+            logVerbose(LogCategory.OBSERVATION, "Block scan read {} blocks at tick {} in {} us{}", read, ticksInWorld,
                     (System.nanoTime() - start) / 1000, scans.active() ? "" : " (complete)");
         }
     }
@@ -832,9 +886,9 @@ public class MarionetteClient {
         float t = (now - panStartNanos) / 1_000_000.0f;
         if (cameraSmoother.active()) {
             // Frame log marker; scripts/analyze_pan.py parses this format.
-            logVerbose(String.format("Pan yaw=%.3f pitch=%.3f t=%.1f", next.yaw(), next.pitch(), t));
+            logVerbose(LogCategory.CONTROL, String.format("Pan yaw=%.3f pitch=%.3f t=%.1f", next.yaw(), next.pitch(), t));
         } else {
-            logVerbose(String.format("Pan converged t=%.1f", t));
+            logVerbose(LogCategory.CONTROL, String.format("Pan converged t=%.1f", t));
         }
     }
 
@@ -847,11 +901,11 @@ public class MarionetteClient {
         eventRecorder.startWorldSession(EventRecorder.newWorldSessionId());
         if (Boolean.getBoolean("marionette.demo")) {
             demo = new DemoScript(Boolean.getBoolean("marionette.demo.gui"));
-            logNormal("Demo armed (gui stunts: {})", Boolean.getBoolean("marionette.demo.gui"));
+            logNormal(LogCategory.CONTROL, "Demo armed (gui stunts: {})", Boolean.getBoolean("marionette.demo.gui"));
         }
-        logNormal("Entered world");
+        logNormal(LogCategory.CLIENT, "Entered world");
         if (bridge != null && bridge.panicLatched()) {
-            logNormal("Agent control remains latched off by panic");
+            logNormal(LogCategory.PRECEDENCE, "Agent control remains latched off by panic");
             notifyControl("marionette.control.still_disabled", "marionette.control.disabled.detail");
         }
     }
@@ -874,6 +928,6 @@ public class MarionetteClient {
         if (controlsEngaged) {
             releaseControls();
         }
-        logNormal("Left world");
+        logNormal(LogCategory.CLIENT, "Left world");
     }
 }

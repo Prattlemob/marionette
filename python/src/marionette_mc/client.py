@@ -15,6 +15,7 @@ from .messages import (
     InputFields,
     InventoryRequest, InventoryResult, InvalidMessage, Look, LookFields, MenuRef,
     Observation, Operation, Reliable, RespawnRequest, Role, ScanRequest, ScanResult, Section, SlotRef,
+    StatusRequest, StatusResult,
     UnsupportedMessage, check_scan, decode, validate,
 )
 
@@ -100,6 +101,16 @@ def block_pos(value: "tuple[int, int, int] | BlockPos", name: str, low: int, hig
     return {"x": coords[0], "y": coords[1], "z": coords[2]}
 
 
+AGENT_NAME_LIMIT = 64
+
+
+def check_agent_name(agent: str) -> None:
+    """The hello ``agent`` display name: 1–64 characters, no control characters or ``§``."""
+    if not isinstance(agent, str) or not 1 <= len(agent.encode("utf-16-le")) // 2 <= AGENT_NAME_LIMIT or any(
+            ord(c) < 0x20 or 0x7f <= ord(c) <= 0x9f or c == "\u00a7" for c in agent):
+        raise ValueError(f"agent must be 1–{AGENT_NAME_LIMIT} characters without control characters or \u00a7")
+
+
 def positive(value: float, name: str) -> None:
     if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
         raise ValueError(f"{name} must be positive and finite")
@@ -179,7 +190,8 @@ class Client:
                     if self._observation is not None:
                         self.observations_coalesced += 1
                     self._observation = message
-                elif message["type"] in ("error", "inventory_result", "scan_result", "action_result"):
+                elif message["type"] in ("error", "inventory_result", "scan_result", "action_result",
+                                         "status_result"):
                     reply = cast(Reliable, message)
                     request_id = reply.get("id")
                     future = self._pending.pop(request_id, None) if isinstance(request_id, str) else None
@@ -250,8 +262,8 @@ class Client:
 
     async def _send(self, message: Command) -> None:
         self._active()
-        if self.role == "observer" and message["type"] != "configure":
-            raise RoleError("observer sessions may only configure")
+        if self.role == "observer" and message["type"] not in ("configure", "status"):
+            raise RoleError("observer sessions may only configure and query status")
         raw = json.dumps(message, allow_nan=False, separators=(",", ":"))
         if len(raw.encode("utf-8")) > 65536:
             raise ValueError("command exceeds 64 KiB")
@@ -470,6 +482,27 @@ class Client:
             raise InvalidMessage("chat result does not match request")
         return reply
 
+    async def status(self, *, timeout: float | None = None) -> StatusResult:
+        """Query the bridge and precedence state the local status HUD shows (``status``).
+
+        Both roles may ask; the reply goes only to this session. ``controller`` describes
+        the attached controller (or is ``None``) and ``session`` this session's own
+        counters and settings. Read-only: it changes nothing and is answered while paused.
+        """
+        self.require("status")
+        self._active()
+        if len(self._pending) >= self._pending_limit:
+            raise CapacityError("too many pending requests")
+        wait = self._request_wait(timeout)
+        self._sequence += 1
+        request_id = f"status-{self._sequence}"
+        message: StatusRequest = {"type": "status", "id": request_id}
+        reply = await self._request(message, request_id, wait)
+        if reply["type"] != "status_result":
+            await self.close()
+            raise InvalidMessage("status result does not match request")
+        return reply
+
     def _next_id(self, kind: str) -> str:
         self._active()
         if self.role != "controller":
@@ -531,10 +564,12 @@ async def connect(uri: str = "ws://127.0.0.1:24680/", *, role: Role = "controlle
                   required_capabilities: Iterable[str] = (), handshake_timeout: float = 5,
                   request_timeout: float = 10, reliable_limit: int = 64,
                   pending_limit: int = 32, events: bool = False,
-                  event_limit: int = 1024) -> AsyncIterator[Client]:
+                  event_limit: int = 1024, agent: str | None = None) -> AsyncIterator[Client]:
     """Open exactly one protocol-2 session, validating hello before yielding.
 
     ``events=True`` subscribes in hello and requires the ``events`` capability.
+    ``agent`` is an optional display name shown on the local status HUD and in
+    ``status`` replies (1–64 characters); mods without ``status`` ignore it.
 
     No Origin/proxy/compression; automatic WebSocket pong handling stays active.
     Keep the asyncio loop responsive. Do CPU/blocking work in another thread.
@@ -559,6 +594,9 @@ async def connect(uri: str = "ws://127.0.0.1:24680/", *, role: Role = "controlle
     if events:
         request["events"] = True
         required.add("events")
+    if agent is not None:
+        check_agent_name(agent)
+        request["agent"] = agent
     async with ws_connect(uri, origin=None, proxy=None, compression=None,
                           open_timeout=handshake_timeout, close_timeout=1,
                           ping_interval=None, max_size=131072, max_queue=16,

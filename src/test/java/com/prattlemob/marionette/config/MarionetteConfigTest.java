@@ -62,6 +62,14 @@ class MarionetteConfigTest {
     }
 
     @Test
+    void hudIsShownByDefaultAndTogglesWithoutALoadedConfig() {
+        assertEquals(true, MarionetteConfig.hudEnabled, "D25: the HUD must show the mode prominently");
+        assertEquals(false, MarionetteConfig.toggleHud());
+        assertEquals(true, MarionetteConfig.toggleHud());
+        assertEquals(true, MarionetteConfig.hudEnabled);
+    }
+
+    @Test
     void observerDefaultsMatchTheSpec() {
         assertEquals(2, MarionetteConfig.maxObservers);
         assertEquals(10, MarionetteConfig.helloTimeoutSeconds);

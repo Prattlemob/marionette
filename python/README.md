@@ -145,6 +145,17 @@ ignore environment proxies. Current local trust has no authentication.
   client does not know are counted in `unknown_messages` and ignored.
   These event APIs are in the repository source only; the published
   0.1.0a1 alpha has none and ends its session on unknown message types.
+- `status(timeout=...)` (`status`; both roles) returns one `StatusResult`, sent
+  only to this session: `state` (`connected`, `idle`, `latched`), the precedence
+  `mode` and `paused`, the agent's `held` controls and `panning`, `observers`, the
+  attached `controller`'s counters (or `None`) and this `session`'s counters and
+  settings — what the local status HUD shows. Counters are `observationRate`,
+  `observationsSent`, `observationsDropped` (never delivered), `eventsSent`,
+  `queuedCommands`, `rttMillis` (latest ping round trip) and
+  `commandLatencyMillis` (receipt to application). `connect(..., agent="name")`
+  sends an optional 1–64 character display name in hello for the HUD and
+  `status`; mods without `status` ignore it. Repository source only; the
+  published 0.1.0a1 alpha has neither.
 - `next_observation(timeout=...)` / `observations()` consume latest observations.
   A slow consumer skips frames; `observations_coalesced` counts replacements.
 - `next_reply(timeout=...)` / `replies()` consume uncorrelated errors and late or

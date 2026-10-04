@@ -21,7 +21,7 @@ Marionette aims to provide:
 
 ## Project status
 
-**Protocol 2, bridge hardening, movement, camera smoothing, attack/use/hotbar control, inventory/container actions (vanilla and generically verified modded storage), player, inventory, crosshair-target, world and nearby-entity observations, on-demand bounded block scans, and opt-in one-shot events are implemented.** An external script can drive the rendered player over a localhost WebSocket, with read-only observers alongside the controller — see [examples/](examples/) for working clients. Events (damage, death, respawn, item pickup, chat, block breaking, dimension change) the opt-in inventory section (held item, hotbar, inventory, armor, offhand and open-menu contents) and the opt-in target and world sections (crosshair block or entity within vanilla reach; dimension, time, weather and light) and the opt-in entities section (nearby mobs, players and items with hostility classification, nearest first under configured caps) and block scans (a palette of block ids plus indices for a capped box around the player, read across ticks under a work budget) require the in-repository Python client; the published 0.1.0a1 alpha predates them and never receives them. See [ROADMAP.md](ROADMAP.md) for verification status.
+**Protocol 2, bridge hardening, movement, camera smoothing, attack/use/hotbar control, inventory/container actions (vanilla and generically verified modded storage), player, inventory, crosshair-target, world and nearby-entity observations, on-demand bounded block scans, opt-in one-shot events, human precedence and a status HUD with a `status` diagnostics query are implemented.** An external script can drive the rendered player over a localhost WebSocket, with read-only observers alongside the controller — see [examples/](examples/) for working clients. Events (damage, death, respawn, item pickup, chat, block breaking, dimension change) the opt-in inventory section (held item, hotbar, inventory, armor, offhand and open-menu contents) and the opt-in target and world sections (crosshair block or entity within vanilla reach; dimension, time, weather and light) and the opt-in entities section (nearby mobs, players and items with hostility classification, nearest first under configured caps) and block scans (a palette of block ids plus indices for a capped box around the player, read across ticks under a work budget) require the in-repository Python client; the published 0.1.0a1 alpha predates them and never receives them. See [ROADMAP.md](ROADMAP.md) for verification status.
 
 - The implementation plan lives in [ROADMAP.md](ROADMAP.md) — phases, milestones, and definitions of done.
 - Design decisions (settled, experiment-gated, and still open) are recorded in [docs/decisions.md](docs/decisions.md). Highlights: the transport is a localhost WebSocket carrying JSON; the core is client-only with an optional server component later; [Baritone](https://github.com/cabaletta/baritone) is planned as an optional (never bundled) integration for high-level navigation.
@@ -111,12 +111,6 @@ config files); values marked *(restart required)* are read once at startup.
 	#the session keeps running and streaming when unfocused. (live)
 	suppressPauseOnLostFocus = true
 
-[logging]
-	#QUIET: warnings/errors only. NORMAL: lifecycle + connection events.
-	#VERBOSE: adds per-tick heartbeat and puppet-position evidence logs. (live)
-	#Allowed Values: QUIET, NORMAL, VERBOSE
-	verbosity = "NORMAL"
-
 [precedence]
 	#Human-priority mode: milliseconds after the last human gameplay input before
 	#a paused agent may drive again. Held keys and an open pause menu keep the pause. (live)
@@ -143,6 +137,36 @@ config files); values marked *(restart required)* are read once at startup.
 	# Default: 180.0
 	# Range: 10.0 ~ 1080.0
 	smoothingSpeed = 180.0
+
+[logging]
+	#QUIET: warnings/errors only. NORMAL: lifecycle + connection events.
+	#VERBOSE: adds per-tick heartbeat and puppet-position evidence logs. (live)
+	#The default for every category below.
+	#Allowed Values: QUIET, NORMAL, VERBOSE
+	verbosity = "NORMAL"
+	#Verbosity of the 'bridge' category (logger marionette.bridge); INHERIT uses verbosity above. (live)
+	#Allowed Values: INHERIT, QUIET, NORMAL, VERBOSE
+	bridge = "INHERIT"
+	#Verbosity of the 'control' category (logger marionette.control); INHERIT uses verbosity above. (live)
+	#Allowed Values: INHERIT, QUIET, NORMAL, VERBOSE
+	control = "INHERIT"
+	#Verbosity of the 'precedence' category (logger marionette.precedence); INHERIT uses verbosity above. (live)
+	#Allowed Values: INHERIT, QUIET, NORMAL, VERBOSE
+	precedence = "INHERIT"
+	#Verbosity of the 'observation' category (logger marionette.observation); INHERIT uses verbosity above. (live)
+	#Allowed Values: INHERIT, QUIET, NORMAL, VERBOSE
+	observation = "INHERIT"
+	#Verbosity of the 'events' category (logger marionette.events); INHERIT uses verbosity above. (live)
+	#Allowed Values: INHERIT, QUIET, NORMAL, VERBOSE
+	events = "INHERIT"
+	#Verbosity of the 'client' category (logger marionette.client); INHERIT uses verbosity above. (live)
+	#Allowed Values: INHERIT, QUIET, NORMAL, VERBOSE
+	client = "INHERIT"
+
+[hud]
+	#Show the Marionette status overlay (connection, precedence mode, held agent
+	#controls, counters). The rebindable HUD key toggles it and saves this value. (live)
+	enabled = true
 ```
 
 Notes:
@@ -206,6 +230,34 @@ precedence). There are three modes:
 
 Toasts report lockout changes. Agents that subscribe to events receive a
 `control` event for each mode or pause change.
+
+### Status HUD and diagnostics
+
+A small overlay in the top-left corner shows what Marionette is doing (M5.2).
+It is on by default, because the precedence mode must always be visible (D25).
+Toggle it with the rebindable **F6** "Toggle Marionette status HUD" key
+(Controls → Marionette); the choice is saved as `[hud] enabled`. F1 and the F3
+debug screen hide it too. It shows:
+
+- `Marionette: idle`, one dim line, while no controller is attached;
+- `Marionette: connected`, then the agent's name and the observer count, the
+  precedence mode (`Human priority`, `PAUSED by your input` or `AGENT
+  EXCLUSIVE: input locked`), the controls the agent holds right now, and the
+  controller's observation rate, frames sent and dropped, ping round trip and
+  command latency;
+- `Marionette: PANIC` in red, naming the re-arm key, while panic is latched.
+
+Lines are kept short so toasts in the top-right corner never cover them.
+Agents name themselves with the optional hello `agent` field. Any connection
+can request the same data with the `status` query (`status` capability,
+[protocol](protocol/v1.md#status--diagnostics-query-status)); see
+[examples/status.py](examples/status.py).
+
+Logging is per category: `[logging] verbosity` sets the default, and `bridge`,
+`control`, `precedence`, `observation`, `events` and `client` override it
+(`INHERIT`, `QUIET`, `NORMAL` or `VERBOSE`, live). Each category logs through
+its own logger, `marionette.<category>`; connection lines carry `key=value` fields.
+Warnings and errors are never silenced.
 
 ### Emergency control and development trust
 

@@ -37,7 +37,11 @@ Java sources live under `src/main/java/com/prattlemob/marionette/`:
   extras and size bounds) stays Minecraft-free.
 - `event/`: one-shot event recording. `EventRecorder` stays Minecraft-free;
   `MinecraftEvents` adapts vanilla hooks on the client thread.
-- `config/`: NeoForge configuration and validation.
+- `config/`: NeoForge configuration and validation; `MarionetteLog` (per-category
+  log levels) stays Minecraft-free.
+- `diagnostics/`: the status HUD. `HudLines` (its text, from the same
+  `StatusReport` a `status` query returns) stays Minecraft-free; `StatusHud`
+  renders it as a GUI layer.
 - `mixin/`: narrowly scoped vanilla input, focus/pause and event hooks.
 
 Tests mirror these packages under `src/test/java/`. Assets and mixin metadata
