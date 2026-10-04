@@ -113,6 +113,9 @@ public final class MessageParser {
         };
     }
 
+    /** Implemented observation sections; reserved future names are rejected until they ship. */
+    static final Set<String> SECTIONS = Set.of("player", "inventory");
+
     private static Set<String> sections(JsonObject json) {
         if (!json.has("sections")) return null;
         if (!(json.get("sections") instanceof JsonArray array)) {
@@ -121,7 +124,7 @@ public final class MessageParser {
         Set<String> result = new HashSet<>();
         for (JsonElement entry : array) {
             if (!(entry instanceof JsonPrimitive value) || !value.isString()
-                    || !value.getAsString().equals("player")) {
+                    || !SECTIONS.contains(value.getAsString())) {
                 throw new ProtocolError(ErrorCode.INVALID_FIELD, "unsupported observation section");
             }
             result.add(value.getAsString());

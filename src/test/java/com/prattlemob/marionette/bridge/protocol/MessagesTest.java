@@ -77,6 +77,18 @@ class MessagesTest {
         assertEquals(player, frame.getAsJsonObject("player"));
         assertFalse(frame.has("x"));
         assertEquals(2, parse(Messages.observation(1234, null)).size());
+        JsonObject inventory = new JsonObject();
+        inventory.addProperty("selected", 3);
+        JsonObject both = parse(Messages.observation(7, player, inventory));
+        assertEquals(List.of("type", "tick", "player", "inventory"), List.copyOf(both.keySet()));
+        assertEquals(inventory, both.getAsJsonObject("inventory"));
+        assertFalse(parse(Messages.observation(7, player, null)).has("inventory"));
+    }
+
+    @Test
+    void helloReplyAdvertisesInventoryStateCapability() {
+        assertTrue(parse(Messages.helloReply(2, "0.1.0", null)).getAsJsonObject("capabilities")
+                .get("inventoryState").getAsBoolean());
     }
 
     @Test

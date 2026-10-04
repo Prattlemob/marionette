@@ -32,7 +32,8 @@ requirement, not an afterthought. The current posture, as specified in
 - **Events expose what the player sees.** A session that subscribes to events
   (controller or observer) receives the chat and system messages shown to the
   player, death messages and similar text. Under the local trust model above,
-  any local process can subscribe.
+  any local process can subscribe. The same holds for the opt-in inventory
+  section: any local observer can read item names and open container contents.
 - **Bounded work and emergency release.** See the protocol's `bridgeSafety`
   limits, overload/close behavior, pong watchdog and local F8 panic binding.
   Panic latches controller admission off until the player presses the

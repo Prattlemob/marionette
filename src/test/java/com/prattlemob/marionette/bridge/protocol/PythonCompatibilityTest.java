@@ -37,7 +37,8 @@ class PythonCompatibilityTest {
             String actual = switch (expected.get("type").getAsString()) {
                 case "hello" -> Messages.helloReply(2, "0.1.0", id);
                 case "observation" -> Messages.observation(expected.get("tick").getAsLong(),
-                        expected.has("player") ? expected.getAsJsonObject("player") : null);
+                        expected.has("player") ? expected.getAsJsonObject("player") : null,
+                        expected.has("inventory") ? expected.getAsJsonObject("inventory") : null);
                 case "inventory_result" -> Messages.inventoryResult(expected.get("op").getAsString(), id,
                         expected.get("menu").isJsonNull() ? null : expected.getAsJsonObject("menu"));
                 case "error" -> expected.get("code").getAsString().equals("unsupported_version")

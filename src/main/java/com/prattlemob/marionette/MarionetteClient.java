@@ -20,6 +20,7 @@ import com.prattlemob.marionette.control.SmoothingModel;
 import com.prattlemob.marionette.event.EventRecorder;
 import com.prattlemob.marionette.event.MinecraftEvents;
 
+import com.prattlemob.marionette.observation.InventoryObservation;
 import com.prattlemob.marionette.observation.PlayerObservation;
 
 import net.minecraft.client.Minecraft;
@@ -499,8 +500,9 @@ public class MarionetteClient {
                     player.getX(), player.getY(), player.getZ(), player.getYRot()));
         }
         if (bridge != null && inWorld && player != null) {
-            bridge.sendPlayerObservation(ticksInWorld, MarionetteConfig.observationRateDivisor,
-                    () -> PlayerObservation.capture(player));
+            bridge.sendSectionObservation(ticksInWorld, MarionetteConfig.observationRateDivisor,
+                    () -> PlayerObservation.capture(player),
+                    () -> InventoryObservation.capture(player, inventoryApplier));
         }
     }
 

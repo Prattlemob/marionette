@@ -181,6 +181,39 @@ class BridgeServerTest {
         assertEquals(3, samples.get(), "empty-only recipients must not sample game state");
     }
 
+    @Test
+    void inventorySectionIsSampledOnlyForSessionsThatSelectIt() throws Exception {
+        var players = new java.util.concurrent.atomic.AtomicInteger();
+        var inventories = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.function.Supplier<JsonObject> player = () -> { players.incrementAndGet(); return new JsonObject(); };
+        java.util.function.Supplier<JsonObject> inventory = () -> {
+            inventories.incrementAndGet();
+            JsonObject section = new JsonObject();
+            section.addProperty("selected", 2);
+            return section;
+        };
+        TestClient controller = connectAndHello(); // default ["player"], e.g. a published 0.1.0a1 client
+        TestClient observer = TestClient.connect(server.port());
+        observer.send("""
+                {"type":"hello","versions":[2],"role":"observer","sections":["player","inventory"]}
+                """);
+        observer.awaitMessage();
+        await(() -> server.observerCount() == 1);
+        server.sendSectionObservation(1, 1, player, inventory);
+        JsonObject plain = JsonParser.parseString(controller.awaitMessage()).getAsJsonObject();
+        JsonObject full = JsonParser.parseString(observer.awaitMessage()).getAsJsonObject();
+        assertTrue(plain.has("player"));
+        assertFalse(plain.has("inventory"), "sessions that never select inventory see unchanged frames");
+        assertEquals(2, full.getAsJsonObject("inventory").get("selected").getAsInt());
+        assertEquals(1, players.get());
+        assertEquals(1, inventories.get());
+        observer.ws.abort();
+        await(() -> server.observerCount() == 0);
+        server.sendSectionObservation(2, 1, player, inventory);
+        controller.awaitMessage();
+        assertEquals(1, inventories.get(), "unselected sections must not sample game state");
+    }
+
     private static final String OBSERVER_HELLO =
             "{\"type\": \"hello\", \"versions\": [2], \"role\": \"observer\"}";
 

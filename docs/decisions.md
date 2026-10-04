@@ -479,7 +479,8 @@ mod.
   capability flag. One-shot presses ride `input.tap` (array of control
   names, one-tick press, `tap` capability flag) — the shape M3.3
   reuses for attack/use.
-- Item-component serialization depth (enchantments, custom names) — M4.2.
+- Item-component serialization depth (enchantments, custom names) — **resolved in
+  M4.2** (2026-10-04): an enumerated, capped set of stack extras; see D18.
 - Crosshair ray-cast distance: vanilla reach vs. configurable gaze — M4.3.
 - Hostility classification source; client-side aggro inference depth — M4.4.
 - Raw-input vs. active-Baritone-goal conflict policy; which Baritone settings
@@ -737,3 +738,93 @@ Not demonstrated in the rendered run: overlay `action_bar` system messages
 (no command emits one; covered by unit tests), arrow pickups, chat-delay and
 blocked-player filtering, and multiplayer servers. M3.3's physical alt-tab and
 human animation acceptance and the remaining M5.1 items stay outstanding.
+
+## D18 — Inventory observation: opt-in section, enumerated item detail — **Settled** (2026-10-04, M4.2)
+
+The `inventory` observation section (`protocol/v1.md`, Inventory section) is
+advertised as `inventoryState` and selected through the existing D2 `sections`
+mask. It carries the selected hotbar index, the held stack, hotbar, main
+inventory, armor, offhand and the visible container menu. The menu descriptor
+is the same object `inspect` returns, so observation mirrors the D8 action
+addressing exactly: menu type, container and state ids, slot indexes, player
+aliases and the carried stack.
+
+**Compatibility:** the published `marionette-mc==0.1.0a1` validates sections
+against `["player"]` and therefore cannot select the new section; sessions that
+keep the default mask receive byte-for-byte the same frame shape as before. New
+descriptor fields in `inventory_result` (`slotCount`, `operations`, `refusal`,
+`refused`, stack extras) are additive keys, which 0.1.0a1 keeps. No new message
+type exists, so D17's unknown-type hazard does not arise. Protocol stays 2.
+
+**Item detail (the M4.2 minor decision):** stacks always have `item` and
+`count`. Non-empty stacks add only an enumerated list of extras: durability
+(`damage`, `maxDamage`), a custom name (plain text, cut at 64 UTF-16 characters
+with `nameTruncated`), enchantments and stored enchantments (sorted by id, at
+most 8 each, with a `...Truncated` flag), and a base potion id. Lore, custom
+data, container contents (shulkers, bundles), attribute modifiers, custom
+effects and similar components are deliberately not serialized: they are
+unbounded or mod-defined, and agents can request richer detail as a later
+additive capability. A whole section, or an `inspect` menu, is limited to
+96 KiB of JSON; beyond that every stack drops to id/count/durability
+(`reduced`), then trailing menu slots are omitted (`truncated`, with the real
+`slotCount`). This keeps frames under the existing 128 KiB observation and
+reply caps instead of silently dropping frames or disconnecting on a large
+modded menu.
+
+**Observable but not mutable:** `inspect` and the section describe any
+container screen in any game mode. The descriptor lists the mutating
+`operations` the mod would attempt, or a `refusal`
+(`player_unavailable`, `unsupported_menu`, `busy`, `cursor_occupied`). In
+menus within the mutation scope, slots the mod never acts on carry `refused`
+(`crafting`, `inactive`, `bundle`). Mutation scope itself is unchanged (D8a);
+widening it is M3.5. Previously `inspect` failed with `inventory_unavailable`
+for such menus; it now succeeds, which no client could have relied on as a
+success path.
+
+Rejected: always-on inventory in every frame (breaks the D2 default and
+inflates every 0.1.0a1 frame), a separate inventory message type (fatal for
+0.1.0a1, D17), raw component/NBT dumps (unbounded, version-specific), and
+omitting player slots from the menu descriptor (breaks D8 symmetry with
+`inspect`).
+
+### M4.2 implementation and verification (2026-10-04)
+
+`./gradlew build` passed with 261 tests (250 before). In-repository Python
+client tests passed on 3.11 and 3.14 (33 tests, 27 before; mypy strict clean).
+A rendered client in an isolated copy of the test world, provisioned by a
+temporary client-side harness outside the repository (server-console triggers,
+dumps and screenshots only), was observed through real WebSocket sessions with
+the in-repository client (observer, player+inventory, divisor 1) while a
+controller acted through the protocol:
+
+- At nine checkpoints (baseline, survival inventory open, after an animated
+  move, after picking up a dropped item stack, after eating a golden apple
+  with a bounded use hold, chest open, after a chest-to-player move, furnace
+  open, final) every one of the 41 player slots and every menu slot (index,
+  alias, item, count, durability, name, enchantments, potion) matched both the
+  rendered screen's menu and the integrated server's authoritative inventory
+  and menu; menu ids and state ids matched the screen. Screenshots agree.
+- Updates: the move, pickup (+4 apples) and consumption (golden apples 3 → 2,
+  one transition during the hold) each appeared in the stream; during the
+  animated move the frames showed the carried stack with refusal `busy`.
+- Chest: `minecraft:generic_9x3`, 63 slots, chest slots 0–26 then
+  `main.0`–`main.26`, `hotbar.0`–`hotbar.8`, operations
+  `move, swap, drop, close`; a protocol move from slot 13 to `main.6` was
+  reflected in both the menu and the player section.
+- Unsupported mutation menu: a furnace reported `minecraft:furnace`, its
+  contents, no operations and refusal `unsupported_menu`; a move was refused
+  with `inventory_unavailable`.
+- Caps: a 70-character name arrived as 64 characters with `nameTruncated`; a
+  sword with nine enchantments listed the first eight by id with
+  `enchantmentsTruncated`. The largest section was about 7 KiB.
+- Published 0.1.0a1, unmodified, observed the whole run as an observer and
+  later controlled the client with the furnace open: it received only
+  `hello`, `observation` (always `player`/`tick`/`type`) and one
+  `inventory_result`, and decoded the new unsupported-menu descriptor. Offline,
+  its decoder also accepted every recorded inventory frame.
+
+Not demonstrated in the rendered run: the `reduced`/`truncated` size fallbacks
+(no vanilla menu approaches 96 KiB; covered by unit tests), `player_unavailable`
+and `cursor_occupied` refusals, bundle and inactive slot refusals, and modded
+menus (M3.5). M3.3's physical alt-tab and human animation acceptance and the
+remaining M5.1 items stay outstanding.

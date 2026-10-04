@@ -16,12 +16,19 @@ class ObservationSectionsTest {
         assertEquals(Set.of("player"), ((AgentCommand.Configure) MessageParser.parse("""
                 {"type":"configure","sections":["player","player"]}
                 """)).sections());
+        assertEquals(Set.of("player", "inventory"), ((AgentCommand.Configure) MessageParser.parse("""
+                {"type":"configure","sections":["inventory","player"]}
+                """)).sections());
+        assertEquals(Set.of("inventory"), ((ParsedMessage.Hello) MessageParser.parse("""
+                {"type":"hello","versions":[2],"sections":["inventory"]}
+                """)).sections());
     }
 
     @Test
     void invalidMasksRejectWholeMessageAndEchoId() {
         for (String value : new String[]{"null", "true", "{}", "\"player\"", "[1]",
-                "[\"inventory\"]", "[\"player\",\"unknown\"]"}) {
+                "[\"target\"]", "[\"entities\"]", "[\"world\"]", "[\"Inventory\"]",
+                "[\"player\",\"unknown\"]"}) {
             for (String prefix : new String[]{"\"type\":\"configure\",\"rateDivisor\":4",
                     "\"type\":\"hello\",\"versions\":[2]"}) {
                 ProtocolError error = assertThrows(ProtocolError.class, () -> MessageParser.parse(

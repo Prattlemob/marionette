@@ -11,6 +11,12 @@ joined a world.
   item pickup, chat, block broken, dimension change), one line per event in
   `seq` order. Needs the in-repository client (`pip install -e ./python`); the
   published 0.1.0a1 alpha has no event support. Run `python examples/events.py [port]`.
+- `inventory_view.py` — M4.2: read-only held item, hotbar, main inventory,
+  armor, offhand and the open menu (type, D8 slot addresses, carried stack,
+  supported operations or refusal) from the `inventory` section. Needs the
+  in-repository client; the published 0.1.0a1 alpha cannot select that section.
+  Run `python examples/inventory_view.py [port]`; `--once` prints one frame and
+  `--json` prints raw frames.
 - `probe.py` — connect, print observations, hold forward for 0.2 s, release.
 - `walk_square.py` — walk a ~5-block square and report the return error.
   Also the target for the disconnect-safety test: `kill -9` it mid-walk and

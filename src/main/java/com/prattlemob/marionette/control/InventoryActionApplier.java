@@ -5,12 +5,15 @@ import java.util.List;
 import java.util.function.Consumer;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.prattlemob.marionette.bridge.protocol.AgentCommand;
 import com.prattlemob.marionette.bridge.protocol.ErrorCode;
 import com.prattlemob.marionette.bridge.protocol.Messages;
 import com.prattlemob.marionette.bridge.protocol.ProtocolError;
 import com.prattlemob.marionette.mixin.InventoryHoverAccess;
+import com.prattlemob.marionette.observation.InventoryJson;
+import com.prattlemob.marionette.observation.ItemObservation;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -123,8 +126,11 @@ public final class InventoryActionApplier {
 
     private String execute(Minecraft mc, AgentCommand.InventoryAction request, Consumer<String> reply) {
         LocalPlayer player = mc.player;
-        if (player == null || mc.gameMode == null || !player.isAlive() || player.isSpectator()
-                || player.hasInfiniteMaterials()) {
+        if (player != null && request.op().equals("inspect")) {
+            // Observation is broader than mutation: any mode, any container screen.
+            return Messages.inventoryResult(request.op(), request.id(), describeVisible(player));
+        }
+        if (!playerAvailable(mc, player)) {
             throw unavailable("inventory requires a live survival/adventure player");
         }
         if (request.op().equals("open")) {
@@ -135,9 +141,6 @@ public final class InventoryActionApplier {
             mc.setScreen(new InventoryScreen(player));
         }
         AbstractContainerMenu menu = visibleMenu(mc, player);
-        if (request.op().equals("inspect") && menu == null) {
-            return Messages.inventoryResult(request.op(), request.id(), null);
-        }
         if (menu == null) throw unavailable("no supported container screen is open");
         if (!supported(menu)) throw unavailable("unsupported menu implementation");
         if (request.menu() != null && (!request.menu().type().equals(menuType(menu))
@@ -145,11 +148,11 @@ public final class InventoryActionApplier {
                 || request.menu().stateId() != menu.getStateId())) {
             throw new ProtocolError(ErrorCode.STALE_MENU, "menu identity or server state changed; inspect again");
         }
-        if (!request.op().equals("inspect") && !request.op().equals("open")) {
+        if (!request.op().equals("open")) {
             require(menu.getCarried().isEmpty(), "cursor is occupied");
             if (request.op().equals("close")) {
                 player.closeContainer();
-                return Messages.inventoryResult(request.op(), request.id(), snapshot(visibleMenu(mc, player), player));
+                return Messages.inventoryResult(request.op(), request.id(), describe(visibleMenu(mc, player), player));
             }
             int from = resolve(menu, player, request.from());
             Slot source = usableSlot(menu, player, from);
@@ -205,7 +208,7 @@ public final class InventoryActionApplier {
             }
             for (Step step : steps) step.click().run();
         }
-        return Messages.inventoryResult(request.op(), request.id(), snapshot(menu, player));
+        return Messages.inventoryResult(request.op(), request.id(), describe(menu, player));
     }
 
     private static void planMove(Minecraft mc, LocalPlayer player, AbstractContainerMenu menu,
@@ -260,7 +263,7 @@ public final class InventoryActionApplier {
             if (action.next == action.steps.size()) {
                 pending = null;
                 motion = null;
-                action.reply.accept(Messages.inventoryResult(action.request.op(), action.request.id(), snapshot(action.menu, action.player)));
+                action.reply.accept(Messages.inventoryResult(action.request.op(), action.request.id(), describe(action.menu, action.player)));
             } else {
                 startLeg(clickedAt + 120_000_000L);
             }
@@ -407,31 +410,69 @@ public final class InventoryActionApplier {
         return null;
     }
 
-    private static JsonObject snapshot(AbstractContainerMenu menu, LocalPlayer player) {
-        if (menu == null) return null;
+    /** The visible container menu's descriptor (protocol/v1.md, Inventory section), or null. */
+    public JsonObject describeVisible(LocalPlayer player) {
+        return describe(visibleMenu(Minecraft.getInstance(), player), player);
+    }
+
+    /** Unbounded descriptor; the caller applies the size bound for its message. */
+    private JsonObject describeRaw(AbstractContainerMenu menu, LocalPlayer player) {
+        Minecraft mc = Minecraft.getInstance();
+        String refusal = !playerAvailable(mc, player) ? "player_unavailable"
+                : !supported(menu) ? "unsupported_menu"
+                : pending != null ? "busy"
+                : !menu.getCarried().isEmpty() ? "cursor_occupied" : null;
+        boolean inScope = refusal == null || refusal.equals("busy") || refusal.equals("cursor_occupied");
         JsonObject result = new JsonObject();
         result.addProperty("type", menuType(menu));
         result.addProperty("containerId", menu.containerId);
         result.addProperty("stateId", menu.getStateId());
+        result.addProperty("slotCount", menu.slots.size());
         JsonArray slots = new JsonArray();
+        boolean armor = false;
         for (int i = 0; i < menu.slots.size(); i++) {
             Slot slot = menu.slots.get(i);
-            JsonObject entry = stack(slot.getItem());
+            JsonObject entry = ItemObservation.stack(slot.getItem());
             entry.addProperty("slot", i);
             String alias = alias(slot, player);
             if (alias != null) entry.addProperty("alias", alias);
+            armor |= alias != null && alias.startsWith("armor.");
+            String refused = !inScope ? null
+                    : menu instanceof InventoryMenu && slot.container != player.getInventory() ? "crafting"
+                    : !slot.isActive() ? "inactive"
+                    : slot.getItem().has(DataComponents.BUNDLE_CONTENTS) ? "bundle" : null;
+            if (refused != null) entry.addProperty("refused", refused);
             slots.add(entry);
         }
         result.add("slots", slots);
-        result.add("carried", stack(menu.getCarried()));
+        result.add("carried", ItemObservation.stack(menu.getCarried()));
+        JsonArray operations = new JsonArray();
+        if (refusal == null) {
+            operations.add("move");
+            operations.add("swap");
+            if (armor) operations.add("equip");
+            operations.add("drop");
+            operations.add("close");
+        }
+        result.add("operations", operations);
+        if (refusal == null) result.add("refusal", JsonNull.INSTANCE);
+        else result.addProperty("refusal", refusal);
         return result;
     }
 
-    private static JsonObject stack(ItemStack stack) {
-        JsonObject result = new JsonObject();
-        result.addProperty("item", stack.isEmpty() ? "minecraft:air" : BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
-        result.addProperty("count", stack.getCount());
-        return result;
+    private JsonObject describe(AbstractContainerMenu menu, LocalPlayer player) {
+        return menu == null ? null : InventoryJson.boundMenu(describeRaw(menu, player));
+    }
+
+    /** For the observation section, which bounds the whole section instead. */
+    public JsonObject describeVisibleUnbounded(LocalPlayer player) {
+        AbstractContainerMenu menu = visibleMenu(Minecraft.getInstance(), player);
+        return menu == null ? null : describeRaw(menu, player);
+    }
+
+    private static boolean playerAvailable(Minecraft mc, LocalPlayer player) {
+        return player != null && mc.gameMode != null && player.isAlive() && !player.isSpectator()
+                && !player.hasInfiniteMaterials();
     }
 
     private static ProtocolError unavailable(String reason) {

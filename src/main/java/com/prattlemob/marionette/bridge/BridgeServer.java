@@ -357,16 +357,23 @@ public final class BridgeServer {
     /** Serialize once per due mask; sample player data at most once per tick. */
     public void sendPlayerObservation(long tick, int defaultDivisor,
                                      Supplier<JsonObject> player) {
+        sendSectionObservation(tick, defaultDivisor, player, () -> null);
+    }
+
+    /** Serialize once per due mask; sample each section at most once per tick, only when selected. */
+    public void sendSectionObservation(long tick, int defaultDivisor,
+                                       Supplier<JsonObject> player, Supplier<JsonObject> inventory) {
         Map<Set<String>, String> frames = new HashMap<>();
-        JsonObject snapshot = null;
+        JsonObject playerSnapshot = null, inventorySnapshot = null;
         for (AgentConnection connection : (Iterable<AgentConnection>) connections()::iterator) {
             if (!connection.ready() || tick % connection.effectiveDivisor(defaultDivisor) != 0) continue;
             var mask = connection.sections();
             String json = frames.get(mask);
             if (json == null) {
-                if (mask.contains("player") && snapshot == null) snapshot = player.get();
-                json = Messages.observation(
-                        tick, mask.contains("player") ? snapshot : null);
+                if (mask.contains("player") && playerSnapshot == null) playerSnapshot = player.get();
+                if (mask.contains("inventory") && inventorySnapshot == null) inventorySnapshot = inventory.get();
+                json = Messages.observation(tick, mask.contains("player") ? playerSnapshot : null,
+                        mask.contains("inventory") ? inventorySnapshot : null);
                 frames.put(mask, json);
             }
             connection.sendObservation(json);
@@ -380,6 +387,11 @@ public final class BridgeServer {
      */
     public void sendEvent(GameEvent event) {
         connections().forEach(connection -> connection.sendEvent(event));
+    }
+
+    /** Ready observer sessions; for headless tests. */
+    int observerCount() {
+        return (int) observers.stream().filter(AgentConnection::ready).count();
     }
 
     /** Observation frames deferred/dropped across all connections since they attached. */
