@@ -24,9 +24,9 @@ the development client built from this repository; there is no released mod
 jar yet.
 
 **You need:** a Java 21 JDK, Git, Python 3.11 or newer, and a desktop session
-(the game opens a window). The first build downloads Minecraft and NeoForge,
-about 1 GB, which takes a few minutes. The development client starts as an
-offline player named `Dev`; no login is involved.
+(the game opens a window). The first run downloads Gradle, Minecraft and
+NeoForge, about 1.2 GB, which takes a few minutes. The development client
+starts as an offline player named `Dev`; no login is involved.
 
 **1. Get the code.**
 
@@ -42,9 +42,23 @@ cd marionette
 ```
 
 (On Windows use `gradlew.bat runClient`.) Leave this terminal running; the
-game window opens on the title screen once the build finishes.
+game window opens once the build finishes. On the very first start Minecraft
+shows a "Welcome to Minecraft!" accessibility screen: click **Continue** to
+reach the title screen.
 
-**3. Open a test world.** Click **Singleplayer → Create New World**. Set
+> **Linux with Wayland:** if the game closes during startup and the terminal
+> shows `GLFW error 65548: Wayland: The platform does not provide the window
+> position` (Gradle may still print `BUILD SUCCESSFUL`), turn off NeoForge's
+> early loading window, which the first launch configured in
+> `run/config/fml.toml`, and start again:
+>
+> ```sh
+> sed -i 's/^earlyWindowControl = true/earlyWindowControl = false/' run/config/fml.toml
+> ./gradlew runClient
+> ```
+
+**3. Open a test world.** Click **Singleplayer**, then **Create New World**
+(with no saved worlds yet, Singleplayer opens that screen directly). Set
 **Game Mode** to **Creative**, open the **World** tab and set **World Type** to
 **Superflat**, then click **Create New World**. A flat creative world gives the
 agent room to walk and keeps your real worlds out of the way. Once you are in
