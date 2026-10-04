@@ -1,6 +1,7 @@
 package com.prattlemob.marionette.mixin;
 
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
@@ -23,6 +24,9 @@ import net.minecraft.client.gui.screens.Screen;
  * then runs startAttack/startUseItem/continueAttack, so attack
  * cooldown, missTime, rightClickDelay, and use ticks stay vanilla, and
  * NeoForge's onClickInput hooks observe agent clicks like human ones.
+ *
+ * <p>Agent-exclusive mode (M5.1) replaces instead of merging: the human's
+ * attack, use, pick-block, drop, swap-hands and hotbar presses are dropped.
  *
  * <p>All three redirects are scoped to handleKeybinds and identity-check
  * the mapping: every other KeyMapping call in the method passes through
@@ -50,10 +54,15 @@ public abstract class MinecraftInteractionMixin {
     private boolean marionette$mergeAgentHolds(KeyMapping mapping) {
         boolean vanilla = mapping.isDown();
         ControlState state = MixinInputApplier.activeState();
+        Minecraft minecraft = (Minecraft) (Object) this;
+        if (MixinInputApplier.localInputLocked() && (mapping == minecraft.options.keyAttack
+                || mapping == minecraft.options.keyUse)) {
+            // Agent-exclusive (M5.1): the human's attack/use buttons do nothing.
+            vanilla = false;
+        }
         if (state == null) {
             return vanilla;
         }
-        Minecraft minecraft = (Minecraft) (Object) this;
         if (mapping == minecraft.options.keyAttack) {
             return vanilla || state.attack();
         }
@@ -71,10 +80,17 @@ public abstract class MinecraftInteractionMixin {
         // loop's next iteration.
         boolean vanilla = mapping.consumeClick();
         ControlState state = MixinInputApplier.activeState();
+        Minecraft minecraft = (Minecraft) (Object) this;
+        if (vanilla && MixinInputApplier.localInputLocked() && marionette$gameplay(minecraft, mapping)) {
+            // Agent-exclusive (M5.1): drain and drop the human's gameplay clicks.
+            while (mapping.consumeClick()) {
+                // discard queued presses too, so none fires after the lockout ends
+            }
+            vanilla = false;
+        }
         if (state == null) {
             return vanilla;
         }
-        Minecraft minecraft = (Minecraft) (Object) this;
         if (mapping == minecraft.options.keyAttack) {
             return vanilla || state.consumeTap(TapControl.ATTACK);
         }
@@ -87,6 +103,20 @@ public abstract class MinecraftInteractionMixin {
             return vanilla || state.consumeTap(TapControl.SWAP_HANDS);
         }
         return vanilla;
+    }
+
+    /** Gameplay clicks suppressed by agent-exclusive mode; UI and system keys are not listed. */
+    @Unique
+    private static boolean marionette$gameplay(Minecraft minecraft, KeyMapping mapping) {
+        var options = minecraft.options;
+        if (mapping == options.keyAttack || mapping == options.keyUse || mapping == options.keyPickItem
+                || mapping == options.keyDrop || mapping == options.keySwapOffhand) {
+            return true;
+        }
+        for (KeyMapping slot : options.keyHotbarSlots) {
+            if (mapping == slot) return true;
+        }
+        return false;
     }
 
     @Redirect(method = "handleKeybinds",

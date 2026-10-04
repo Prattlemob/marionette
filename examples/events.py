@@ -4,7 +4,9 @@
 Requires the in-repository client (`python -m pip install -e ./python`); the
 published 0.1.0a1 alpha predates events. Usage: python examples/events.py [port]
 Take damage, die and respawn, pick up an item, chat, break a block or change
-dimension: each event prints once, in order. Ctrl-C exits without changing controls.
+dimension: each event prints once, in order. With `humanPrecedence` it also shows
+human precedence changes (`control`): a human pausing the agent, the input lockout
+and panic. Ctrl-C exits without changing controls.
 """
 import asyncio
 import sys
@@ -34,6 +36,10 @@ def describe(event):
     if kind == "block_broken":
         pos = event["pos"]
         return f"broke {event['block']} at {pos['x']} {pos['y']} {pos['z']} (client prediction)"
+    if kind == "control":
+        inputs = f" by {', '.join(event['inputs'])}" if event["inputs"] else ""
+        state = "agent paused" if event["paused"] else "agent may drive"
+        return f"control {event['mode']}: {state} ({event['cause']}{inputs})"
     return f"{kind} (unknown kind; ignored)"
 
 

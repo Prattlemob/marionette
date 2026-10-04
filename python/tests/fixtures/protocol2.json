@@ -386,7 +386,8 @@
         "respawn": true,
         "chat": true,
         "playerIdentity": true,
-        "playerActivity": true
+        "playerActivity": true,
+        "humanPrecedence": true
       },
       "mod": "0.1.0",
       "id": "hello-fixture"
@@ -1419,6 +1420,14 @@
       "id": "terrain",
       "input": "{\"type\":\"scan\",\"id\":\"terrain\",\"size\":{\"x\":16,\"y\":8,\"z\":16}}",
       "reason": "released"
+    },
+    {
+      "type": "error",
+      "code": "inventory_unavailable",
+      "message": "human input has paused agent control",
+      "id": "inv-paused",
+      "input": "{\"type\":\"inventory\",\"id\":\"inv-paused\",\"op\":\"open\"}",
+      "reason": "human_paused"
     }
   ],
   "invalidCommands": [
@@ -1701,6 +1710,119 @@
       },
       "amount": 1.0,
       "health": 19.0
+    },
+    {
+      "type": "event",
+      "event": "control",
+      "seq": 13,
+      "worldSession": "5d0c6f3e9a4b2c18",
+      "tick": 500,
+      "basis": "client",
+      "mode": "human_priority",
+      "paused": false,
+      "cause": "controller_attached",
+      "inputs": []
+    },
+    {
+      "type": "event",
+      "event": "control",
+      "seq": 14,
+      "worldSession": "5d0c6f3e9a4b2c18",
+      "tick": 510,
+      "basis": "client",
+      "mode": "human_priority",
+      "paused": true,
+      "cause": "human_input",
+      "inputs": [
+        "movement",
+        "look"
+      ]
+    },
+    {
+      "type": "event",
+      "event": "control",
+      "seq": 15,
+      "worldSession": "5d0c6f3e9a4b2c18",
+      "tick": 520,
+      "basis": "client",
+      "mode": "human_priority",
+      "paused": false,
+      "cause": "human_idle",
+      "inputs": []
+    },
+    {
+      "type": "event",
+      "event": "control",
+      "seq": 16,
+      "worldSession": "5d0c6f3e9a4b2c18",
+      "tick": 530,
+      "basis": "client",
+      "mode": "agent_exclusive",
+      "paused": false,
+      "cause": "lockout_engaged",
+      "inputs": []
+    },
+    {
+      "type": "event",
+      "event": "control",
+      "seq": 17,
+      "worldSession": "5d0c6f3e9a4b2c18",
+      "tick": 540,
+      "basis": "client",
+      "mode": "human_priority",
+      "paused": false,
+      "cause": "lockout_released",
+      "inputs": []
+    },
+    {
+      "type": "event",
+      "event": "control",
+      "seq": 18,
+      "worldSession": "5d0c6f3e9a4b2c18",
+      "tick": 550,
+      "basis": "client",
+      "mode": "human_priority",
+      "paused": true,
+      "cause": "human_input",
+      "inputs": [
+        "pause_menu"
+      ]
+    },
+    {
+      "type": "event",
+      "event": "control",
+      "seq": 19,
+      "worldSession": "5d0c6f3e9a4b2c18",
+      "tick": 560,
+      "basis": "client",
+      "mode": "panic",
+      "paused": false,
+      "cause": "panic",
+      "inputs": []
+    },
+    {
+      "type": "event",
+      "event": "control",
+      "seq": 20,
+      "worldSession": "5d0c6f3e9a4b2c18",
+      "tick": 570,
+      "basis": "client",
+      "mode": "human_priority",
+      "paused": false,
+      "cause": "rearmed",
+      "inputs": []
+    },
+    {
+      "type": "event",
+      "event": "control",
+      "seq": 21,
+      "worldSession": "5d0c6f3e9a4b2c18",
+      "tick": 580,
+      "basis": "client",
+      "mode": "human_priority",
+      "paused": false,
+      "cause": "controller_lost",
+      "inputs": []
     }
   ],
   "scanResults": [
@@ -1823,6 +1945,27 @@
       "id": "r2",
       "input": "{\"type\":\"respawn\",\"id\":\"r2\"}",
       "reason": "not_dead"
+    },
+    {
+      "type": "error",
+      "code": "respawn_refused",
+      "message": "human input has paused agent control",
+      "id": "r2",
+      "input": "{\"type\":\"respawn\",\"id\":\"r2\"}",
+      "reason": "human_paused"
+    },
+    {
+      "type": "error",
+      "code": "chat_refused",
+      "message": "human input has paused agent control",
+      "id": "c9",
+      "input": "{\"type\":\"chat\",\"id\":\"c9\",\"text\":\"hi\"}",
+      "reason": "human_paused",
+      "limits": {
+        "maxMessages": 5,
+        "windowSeconds": 10,
+        "maxLength": 256
+      }
     }
   ]
 }

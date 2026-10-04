@@ -47,6 +47,7 @@ public final class Messages {
         capabilities.addProperty("chat", true);
         capabilities.addProperty("playerIdentity", true);
         capabilities.addProperty("playerActivity", true);
+        capabilities.addProperty("humanPrecedence", true);
         reply.add("capabilities", capabilities);
         reply.addProperty("mod", modVersion);
         return reply.toString();

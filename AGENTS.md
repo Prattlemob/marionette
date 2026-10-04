@@ -30,7 +30,8 @@ Java sources live under `src/main/java/com/prattlemob/marionette/`:
 - `bridge/`: Netty transport, connection ownership, queues, and backpressure.
 - `bridge/protocol/`: parsing, messages, commands, and protocol sessions.
   Keep transport and protocol code free of Minecraft imports for headless tests.
-- `control/`: control state, camera smoothing, and the input-applier seam.
+- `control/`: control state, human precedence, camera smoothing, and the
+  input-applier seam.
   Keep state/math independent of Minecraft; isolate game access in the applier.
 - `observation/`: client-thread observation sampling; `InventoryJson` (stack
   extras and size bounds) stays Minecraft-free.
@@ -57,6 +58,10 @@ or build output. The repository's Minecraft skill is in
   also runs on the client thread.
 - Preserve release-all behavior on controller loss and world exit. Observer
   disconnects must not release the controller's inputs.
+- Preserve human precedence (D25, `docs/safety-state-machine.md`): human input
+  releases and pauses a human-priority agent; the input lockout never
+  suppresses the lockout, panic, re-arm or interface keys and ends the moment
+  no controller is attached.
 - Preserve loopback-only binding, a single controller, read-only observers,
   and per-connection observation backpressure. See `SECURITY.md` and the protocol.
 - Keep client-only classes behind client-side entry points; the common entry

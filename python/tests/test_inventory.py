@@ -55,7 +55,7 @@ class InventoryDecodeTests(unittest.TestCase):
         errors = [m for m in FIXTURE['messages'] if m['type'] == 'error' and not m['code'].startswith('scan_')]
         self.assertEqual([e.get('reason') for e in errors],
                          ['released', 'destination_rejects', 'unsupported_menu', 'no_result',
-                          'missing_ingredients', 'result_changed', None])
+                          'missing_ingredients', 'result_changed', None, 'human_paused'])
         with self.assertRaises(InvalidMessage):
             decode(json.dumps({**errors[1], 'reason': 3}))
 

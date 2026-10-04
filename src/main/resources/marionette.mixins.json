@@ -13,7 +13,8 @@
     "FurnaceMenuAccess",
     "ClientPacketListenerEventsMixin",
     "LocalPlayerHealthMixin",
-    "MultiPlayerGameModeEventsMixin"
+    "MultiPlayerGameModeEventsMixin",
+    "MouseLookMixin"
   ],
   "injectors": {
     "defaultRequire": 1

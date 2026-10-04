@@ -54,9 +54,14 @@ config files); values marked *(restart required)* are read once at startup.
 	# Default: 24680
 	# Range: 1 ~ 65535
 	port = 24680
-	#Bind address. Non-loopback values are ignored and clamped to 127.0.0.1
-	#with a warning. Remote binding is unsupported. (restart required)
+	#Bind address, resolved once at start. Non-loopback or unresolvable values are
+	#clamped to 127.0.0.1 with a warning unless the opt-out below is set. (restart required)
 	bindAddress = "127.0.0.1"
+	#Explicit opt-out of loopback enforcement. Only when true is a non-loopback
+	#bindAddress bound as configured, with a warning at every start. The bridge has
+	#NO authentication or encryption: anyone who can reach the port can control your
+	#game. Remote access is unsupported; leave false. (restart required)
+	iUnderstandNonLoopbackIsUnauthenticated = false
 	#Maximum simultaneous read-only observer connections (role "observer");
 	#0 disables the observer role entirely. (restart required)
 	# Default: 2
@@ -67,6 +72,12 @@ config files); values marked *(restart required)* are read once at startup.
 	# Default: 10
 	# Range: 1 ~ 60
 	helloTimeoutSeconds = 10
+	#Maximum seconds without a pong before disconnect and release.
+	#Agents must keep answering pings; a stall longer than about three
+	#quarters of this value can disconnect a healthy agent. (restart required)
+	# Default: 2
+	# Range: 1 ~ 60
+	pongTimeoutSeconds = 2
 
 [observation]
 	#Send one observation frame every N client ticks. (live)
@@ -100,6 +111,19 @@ config files); values marked *(restart required)* are read once at startup.
 	#the session keeps running and streaming when unfocused. (live)
 	suppressPauseOnLostFocus = true
 
+[logging]
+	#QUIET: warnings/errors only. NORMAL: lifecycle + connection events.
+	#VERBOSE: adds per-tick heartbeat and puppet-position evidence logs. (live)
+	#Allowed Values: QUIET, NORMAL, VERBOSE
+	verbosity = "NORMAL"
+
+[precedence]
+	#Human-priority mode: milliseconds after the last human gameplay input before
+	#a paused agent may drive again. Held keys and an open pause menu keep the pause. (live)
+	# Default: 2000
+	# Range: 250 ~ 60000
+	resumeAfterMillis = 2000
+
 [chat]
 	#Allow the controller to send ordinary chat messages with the `chat` request. (live)
 	allowChat = true
@@ -119,22 +143,24 @@ config files); values marked *(restart required)* are read once at startup.
 	# Default: 180.0
 	# Range: 10.0 ~ 1080.0
 	smoothingSpeed = 180.0
-
-[logging]
-	#QUIET: warnings/errors only. NORMAL: lifecycle + connection events.
-	#VERBOSE: adds per-tick heartbeat and puppet-position evidence logs. (live)
-	#Allowed Values: QUIET, NORMAL, VERBOSE
-	verbosity = "NORMAL"
 ```
 
 Notes:
 
-- A non-loopback `bindAddress` is ignored and clamped to `127.0.0.1` with a
-  loud warning. Remote binding is unsupported (D16).
+- `bindAddress` is resolved once at start. A non-loopback or unresolvable
+  value is clamped to `127.0.0.1` with a loud warning. Only the explicit
+  opt-out `iUnderstandNonLoopbackIsUnauthenticated = true` binds a resolvable
+  non-loopback address as configured, with a warning at every start; the
+  bridge has no authentication or encryption, and remote access remains
+  unsupported (D16, D25).
 - `allowCommands` is the human's switch: agents can never enable command
   execution themselves (D24).
-- `suppressPauseOnLostFocus` only takes effect while an agent is connected;
-  with no agent attached the game pauses on focus loss exactly as vanilla.
+- `suppressPauseOnLostFocus` only takes effect while an agent is connected
+  and panic is not latched; otherwise the game pauses on focus loss exactly
+  as vanilla. With it off, the focus-loss pause menu pauses a human-priority
+  agent like any other human input (D25).
+- `[precedence] resumeAfterMillis` is how long a human-priority agent stays
+  paused after your last gameplay input (see Human precedence below).
 - The `[observation]` radius/count caps are defined ahead of the features
   that consume them (Phase 4) so operators can see the ceilings; they have
   no effect yet.
@@ -155,11 +181,37 @@ Marionette is not an official Minecraft product and is not affiliated with, or e
 
 A [Prattlemob](https://github.com/Prattlemob) project — [prattlemob.com](https://prattlemob.com)
 
+### Human precedence
+
+Your own input always outranks the agent (D25, protocol/v1.md, Human
+precedence). There are three modes:
+
+- **Human priority** (default). Any gameplay input of yours in game — moving,
+  jumping, sneaking, sprinting, turning the camera with the mouse, attacking,
+  using, picking a block, the hotbar keys or scroll wheel, drop, swap hands, or
+  opening the pause menu — immediately releases everything the agent holds and
+  pauses it. While paused the agent's movement and camera commands are
+  discarded and its inventory changes, chat and respawn requests are refused.
+  The agent may drive again `resumeAfterMillis` (default 2 s) after your last
+  input; nothing it held is restored.
+- **Agent exclusive.** Press the rebindable **F7** "Toggle agent input
+  lockout" key (Controls → Marionette) in game while an agent is attached. Your
+  movement, jump, sneak, sprint, mouse look, attack/use, pick-block, drop,
+  swap-hands and hotbar input are then ignored, so only the agent drives.
+  Escape and the pause menu, F1–F3/F5/F11, chat, inventory and every other
+  interface key keep working, and so do F7 (press again to take control back,
+  even from a screen), panic and re-arm. The lockout ends by itself the moment
+  no agent is attached: disconnect, watchdog, panic or leaving the world.
+- **Panic** (below).
+
+Toasts report lockout changes. Agents that subscribe to events receive a
+`control` event for each mode or pause change.
+
 ### Emergency control and development trust
 
 The rebindable **F8** panic key (Controls → Marionette) releases the agent and
 severs its controller connection, including during inventory animation or a
-paused screen. Panic then **latches**: every reconnecting controller is refused
+paused screen, and ends any input lockout. Panic then **latches**: every reconnecting controller is refused
 (`panic_latched`, close 1008) until you press the separate, rebindable
 **F9** "Allow agent control" key in game. Pressing F8 again never re-enables
 anything, and re-arming resumes nothing; an agent must connect afresh. The

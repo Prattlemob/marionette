@@ -176,7 +176,8 @@ into this record, is the durable record.
 input on top of agent-held controls but cannot *counter* them (pressing S
 does not stop a scripted forward hold). M5.1's human-input precedence policy
 must add an explicit "human counters/overrides agent" layer on top of this
-OR-merge base — it is not free from D4 and needs its own design.
+OR-merge base — it is not free from D4 and needs its own design. M5.1 does
+this by releasing and pausing the agent on human input (D25).
 
 ### D4a — Interaction injection (attack/use/hotbar) — **Settled** (2026-08-05, M3.3 design)
 
@@ -492,7 +493,8 @@ mod.
   per-tick budget, controller only; see D22.
 - Raw-input vs. active-Baritone-goal conflict policy; which Baritone settings
   are exposed — M6.2.
-- Human-input precedence policy details — M5.1. (The watchdog timeout default
+- Human-input precedence policy details — **implemented in M5.1** (2026-10-04;
+  details decided pending owner review, D25). (The watchdog timeout default
   was resolved early: 2 seconds, D16a, 2026-10-03.)
   The policy must define **three modes** (owner-requested, 2026-07-13):
   **human-priority** (default — human input overrides/pauses agent control),
@@ -516,9 +518,8 @@ mod.
   exist in 1.21.8) that never mutates `options.pauseOnLostFocus` (options.txt
   cannot be persisted wrong; the moment the agent detaches while unfocused,
   vanilla pauses on the next frame). With no agent connected, vanilla pause
-  behavior is untouched. Still open for M5.1: how focus loss behaves in each
-  precedence mode (pausing on focus loss is arguably a safety feature when a
-  human walks away).
+  behavior is untouched. Per-mode focus-loss behavior was decided in M5.1
+  (D25, item 6, pending owner review).
 - Non-loopback bind handling — **resolved for M2.2** (2026-07-23): a
   non-loopback `bridge.bindAddress` is clamped to `127.0.0.1` with a WARN
   naming the ignored value; the bridge still starts, on loopback, so a config
@@ -528,7 +529,9 @@ mod.
   the Netty bind re-resolve the configured string independently, so a
   *hostname* whose resolution changes between the two calls could in
   principle bind non-loopback — resolve once and pass the resulting
-  `InetAddress` through when M5.1 hardens loopback enforcement.
+  `InetAddress` through when M5.1 hardens loopback enforcement. **Closed:**
+  M5.1a passes the single resolved object to Netty and M5.1 adds the explicit
+  opt-out gate on the same path (D25, item 9).
 - Mod-version ↔ protocol-version relationship in the changelog policy — M9.2.
 
 ## D14 — Published Python client — **Settled; initial alpha published** (2026-10-03)
@@ -582,12 +585,13 @@ browser support with that decision.
 
 M5.1a resolves the configured address once to an InetAddress, clamps non-loopback
 or unresolvable values to 127.0.0.1, and passes the same address object to Netty.
-No non-loopback opt-out exists. Bridge limits and overload behavior are normative
+No non-loopback opt-out existed until M5.1 added the explicit
+`bridge.iUnderstandNonLoopbackIsUnauthenticated` gate (D25). Bridge limits and overload behavior are normative
 in protocol/v1.md under `bridgeSafety`. Pong timeout defaults to two seconds
 (D16a; originally five); local panic defaults to rebindable F8 and latches
 controller admission off until a separate re-arm key (default F9) clears it
-(D16b). These emergency controls do not settle
-M5.1 human-precedence modes or per-mode focus-loss policy.
+(D16b). These emergency controls did not settle the M5.1 human-precedence
+modes or per-mode focus-loss policy; D25 does.
 
 The earlier M2.3 watermark described as a hard bound was insufficient for
 reliable replies and tasks waiting for the event loop. M5.1a reserves output
@@ -1481,3 +1485,160 @@ horse jump; matrix above), riptide, pig/strider boosting, hardcore and
 `client_restricted` refusals (unit/contract only), multiplayer servers and
 other mods' chat hooks. M3.3's physical alt-tab and human animation acceptance
 and the remaining M5.1 items stay outstanding.
+
+## D25 — Human precedence and lifecycle safety — **Settled modes; details decided pending owner review** (2026-10-04, M5.1)
+
+The owner settled the three modes and their trust invariants earlier (Minor open
+points, 2026-07-13): **human-priority** by default, **agent-exclusive** through a
+rebindable input-lockout key, and **panic** (D16b); the lockout and panic keys
+are never suppressed, system and interface keys stay live, the lockout drops
+the moment no controller is attached, and the M5.2 HUD will show the mode.
+M5.1 implements them and the remaining safety items. The contract is
+`protocol/v1.md` (Human precedence, Safety behavior, the `control` event and
+the `human_paused` reasons); the states are in
+[safety-state-machine.md](safety-state-machine.md). The additive capability is
+`humanPrecedence`; the protocol integer stays 2.
+
+**Implementation.** `HumanPrecedence` (Minecraft-free) holds the mode, the pause
+and the lockout, and tracks the attached controller by identity.
+`KeyboardInputMixin` replaces rather than merges the human's movement keys
+while locked out; `MinecraftInteractionMixin` drops the human's attack/use
+holds and attack, use, pick-block, drop, swap-hands and hotbar clicks;
+`MouseLookMixin` drops mouse turning at vanilla's single `player.turn` call in
+`MouseHandler.turnPlayer` and otherwise reports it as human look input; the
+hotbar scroll event is cancelled. Human input is detected from NeoForge key and
+mouse-button events in game with no screen open, the scroll event, mouse look,
+gameplay key mappings held down each tick, and an open pause menu.
+
+### Decided (pending owner review)
+
+These details were open at M5.1. They were decided conservatively and need the
+owner's review; each is a local client policy, not a wire change, except where
+noted.
+
+1. **Always-live keys.** Agent-exclusive suppresses only gameplay input:
+   movement, jump, sneak, sprint, mouse look, attack, use, pick-block, drop,
+   swap hands, hotbar keys and the hotbar scroll wheel. Everything else stays
+   live: the lockout (default F7), panic (F8) and re-arm (F9) keys; Escape and
+   the pause menu; F1, F2, F3 and F3 combinations, F5, F11; chat and command;
+   player list; inventory, advancements, social interactions; screenshots,
+   perspective, smooth camera; and every input inside a screen. Opening the
+   inventory is treated as an interface key; human clicks in the agent's
+   inventory screen still cancel agent inventory work.
+2. **What counts as human input** (human-priority). Any of the gameplay inputs
+   above, made in game with no screen open, including any non-zero mouse turn,
+   plus the pause menu (Escape, or vanilla's focus-loss pause when not
+   suppressed). Sneak and sprint in toggle mode count on presses only, so a
+   toggled-on sneak does not pause the agent forever. Chat typing, F-keys and
+   interface keys are not human input.
+3. **Pause semantics.** Human input releases every agent actuator immediately
+   (inventory work is cancelled with `human_input`; a block scan keeps running
+   because it only reads) and pauses the agent. While paused, `input` and
+   `look` are discarded silently; mutating `inventory` requests, `respawn` and
+   `chat` are refused with reason `human_paused` (wire: three additive reasons);
+   `release`, `configure`, inventory `inspect` and `scan` keep working.
+   Discarding instead of erroring keeps unsubscribed clients such as
+   0.1.0a1 from accumulating unread error replies.
+4. **Resume.** The agent may drive again `precedence.resumeAfterMillis`
+   (default 2000, range 250–60000, live) after the last human input; held
+   gameplay keys or an open pause menu keep it paused. Resuming restores and
+   replays nothing: the agent must re-send its holds. Two seconds is long
+   enough to see a human's correction take effect and short enough not to
+   strand an attentive agent.
+5. **Lockout key behavior.** Default F7 (unbound in vanilla 1.21.8, next to F8
+   and F9). It engages only in game with no screen open, only while a
+   controller is attached and panic is not latched; otherwise a notice says it
+   is unavailable or that panic is engaged. Pressing it again releases the
+   lockout anywhere, including in screens. Panic, controller loss and a
+   different controller attaching all drop it; it is in-memory and never
+   restored.
+6. **Focus loss per mode.** Focus loss never releases or pauses by itself. In
+   human-priority and agent-exclusive modes the M2.2
+   `client.suppressPauseOnLostFocus` toggle (default on) keeps the game running
+   while a controller is attached; with it off the vanilla pause menu opens and,
+   in human-priority mode, pauses the agent as human input. In panic mode, and
+   with no controller, vanilla applies. The lockout survives focus loss: it is
+   a deliberate human hand-over.
+7. **Agent notification.** A new event kind `control` (`mode`, `paused`,
+   `cause`, `inputs`) on the existing opt-in event stream (D17), advertised by
+   `humanPrecedence`. It is sent on each change of mode or pause and as a
+   start state when a controller attaches (`controller_attached`). No new
+   message type is introduced, so marionette-mc 0.1.0a1, which ends a session
+   on unknown message types and never subscribes to events, never receives it.
+   Panic is still signalled to the controller by its close (`local panic`);
+   observers receive the `panic` and `controller_lost` events.
+8. **Lifecycle releases.** Every agent actuator is released when the player is
+   first seen dead and again when the client replaces its player (respawn or
+   dimension change). The controller stays attached. Holds therefore never
+   survive a death screen, respawn or dimension change.
+9. **Loopback opt-out.** The gate is the boolean
+   `bridge.iUnderstandNonLoopbackIsUnauthenticated` (default false, restart
+   required). Only when it is true is a resolvable non-loopback `bindAddress`
+   (including the wildcard) bound, with a WARN at every start naming the address
+   and the missing authentication; an unresolvable value is still clamped. The
+   address is resolved exactly once and the same `InetAddress` object is passed
+   to Netty, which closes the M2.2 re-resolution gap (M5.1a already passed the
+   object; M5.1 keeps the single resolution for the opt-out path). The Origin
+   rule and the lack of authentication are unchanged; remote access remains
+   unsupported and D16's release gate stands.
+10. **Notices.** Toasts report lockout engaged, released, dropped and
+    unavailable; a human pause has no toast (it would fire on every correction)
+    and is logged; the M5.2 HUD will show the mode and pause.
+
+Rejected: pausing without releasing (a held agent forward would still counter
+the human, the D4 OR-merge problem); auto-resume with replay of the agent's
+last holds (resumes motion without a fresh agent decision); answering
+discarded `input`/`look` with errors (floods unsubscribed clients); a new
+message type for notifications (breaks 0.1.0a1, D17); counting interface keys
+as human input (would pause an agent whenever the human opens chat or F3);
+persisting the lockout across controllers or restarts (a dead agent could
+leave a locked keyboard).
+
+### M5.1 implementation and verification (2026-10-04)
+
+`./gradlew build` passed with 378 tests (355 before). The in-repository Python
+client passed on 3.11 and 3.14 (78 tests, mypy strict clean); its shared
+fixtures gained the capability, the `control` events and the `human_paused`
+refusals. Nothing was published.
+
+Rendered verification ran in an isolated copy of the test world with a
+temporary harness (outside the repository) that injected **synthetic** human
+input through Minecraft's registered GLFW key, mouse-button, cursor, scroll and
+focus callbacks; physical keyboard and mouse confirmation is pending the
+owner's availability. Controllers ran as separate processes through real
+WebSocket sessions. No input jumped (the harness refuses the space key; the
+traced merged jump input stayed false). The final matrix below ran on the
+committed code; milliseconds are from the trigger to the agent's holds being
+empty, sampled at frame boundaries (button rows include a 150 ms press):
+
+| Check | Result |
+|---|---|
+| Human S key over agent forward+sprint | released 11 ms; only the human's back input applied (moved backward); agent input during the pause discarded; still paused 1.5 s after release; resumed 2.02 s after the last input; events `controller_attached`, `human_input [movement]`, `human_idle` |
+| Mouse look over an agent smooth pan + forward | released 21 ms, pan cancelled, `inputs [look]`, resumed |
+| Attack, use buttons; hotbar key; scroll; drop; swap keys | each paused with exactly its category (`attack`, `use`, `hotbar`, `hotbar`, `drop`, `swap_hands`) |
+| Pause menu (Escape) | released 31 ms, paused (`pause_menu`) and kept paused for 3 s while open; `chat_refused`, `respawn_refused`, `inventory_unavailable` all `human_paused`; `inspect` answered; resumed 2.02 s after closing |
+| Agent-exclusive suppression | human S, A, sneak: no effect (agent forward kept); mouse look: yaw unchanged; attack: no swing or mining; use: no item use; hotbar key and scroll: slot unchanged; Q and F: no drop or swap; agent look and hotbar still applied |
+| Agent-exclusive live keys | F3 on/off; T opened chat and Escape closed it; Escape opened the pause menu (agent not paused) and closed it; E opened the inventory; F7 released; lockout survived all of these |
+| Lockout auto-drop | disconnect 20 ms; watchdog 2.46 s; world leave 31 ms; panic 10 ms (and F7 while latched refused, reconnect refused `panic_latched`) |
+| SIGSTOP mid-sprint (3 trials) | released 2.36–2.38 s, idle 2.60–2.61 s (13.5–13.8 blocks of sprint) |
+| Panic mid-control (forward, sprint, attack, smooth pan) | released 11 ms; controller closed 1008 `local panic`; observer received `control` `panic`; under a lockout, human S and mouse look worked 61 ms after panic |
+| Death and respawn (agent sprinting and drawing a bow) | released 112 ms after `/kill`; input sent while dead was released by the respawn; after the agent's `respawn`: nothing held, no use, did not move |
+| Dimension change (Nether and back) | released 51 ms and 31 ms; controller stayed attached; `dimension_change` events |
+| GUI open | agent attack released, forward continued (D4); attack did not resume on close |
+| Focus loss | suppression on: no pause, agent kept driving; off: pause menu, agent paused; agent-exclusive: no pause, lockout kept; no controller: vanilla pause |
+| Every actuator per trigger: A = forward, left, sprint, attack, smooth pan; B = back, right, sneak, bow `use`, hotbar, smooth pan | panic 11/11; watchdog 1955/2483; disconnect 20/20; human look 42/22; death 52/31; dimension 51/31; world leave 31/31 — all neutral afterwards (death checked after respawn, leave after rejoin) |
+| Inventory animation + panic | 12 ms; stack recovered to its source slot |
+| Loopback | `172.17.0.1` without the opt-out: clamped with a WARN, listening only on 127.0.0.1; with the opt-out (a host-local bridge address, not the LAN): two WARNs, listening only on 172.17.0.1, an agent connected there, 127.0.0.1 refused |
+
+Published 0.1.0a1, unmodified, observed the whole first and final runs (9131
+and 5711 observations, only `hello` and `observation` frames). As a controller it held
+sneak, was paused by human W, had its input silently discarded, received
+`inventory_unavailable`/`human_paused` as an ordinary `ServerError`, still got
+its `inspect` answer, resumed driving after the pause and never received an
+event. In the final run an event-subscribed observer received 111 events with
+gapless `seq`, including every `control` cause.
+
+Not established: physical (non-synthetic) keyboard and mouse input, which needs
+the owner; M3.3's physical alt-tab and human animation acceptance (separate
+debt); multiplayer servers. Queued `respawn`/`chat` discard on every release
+remains covered by unit tests (M3.7), as a request is applied within a tick.

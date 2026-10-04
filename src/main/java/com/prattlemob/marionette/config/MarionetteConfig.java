@@ -25,6 +25,7 @@ public final class MarionetteConfig {
     private static final ModConfigSpec.BooleanValue BRIDGE_ENABLED;
     private static final ModConfigSpec.IntValue PORT;
     private static final ModConfigSpec.ConfigValue<String> BIND_ADDRESS;
+    private static final ModConfigSpec.BooleanValue NON_LOOPBACK_OPT_OUT;
     private static final ModConfigSpec.IntValue MAX_OBSERVERS;
     private static final ModConfigSpec.IntValue HELLO_TIMEOUT;
     private static final ModConfigSpec.IntValue PONG_TIMEOUT;
@@ -34,6 +35,7 @@ public final class MarionetteConfig {
     private static final ModConfigSpec.IntValue BLOCK_SCAN_RADIUS;
     private static final ModConfigSpec.IntValue BLOCK_SCAN_BUDGET;
     private static final ModConfigSpec.BooleanValue SUPPRESS_PAUSE;
+    private static final ModConfigSpec.IntValue RESUME_AFTER;
     private static final ModConfigSpec.BooleanValue ALLOW_CHAT;
     private static final ModConfigSpec.BooleanValue ALLOW_COMMANDS;
     private static final ModConfigSpec.IntValue CHAT_MAX_MESSAGES;
@@ -51,9 +53,15 @@ public final class MarionetteConfig {
                 .comment("TCP port for the bridge listener. (restart required)")
                 .defineInRange("port", 24680, 1, 65535);
         BIND_ADDRESS = builder
-                .comment("Bind address. Non-loopback values are ignored and clamped to 127.0.0.1",
-                        "with a warning. Remote binding is unsupported. (restart required)")
+                .comment("Bind address, resolved once at start. Non-loopback or unresolvable values are",
+                        "clamped to 127.0.0.1 with a warning unless the opt-out below is set. (restart required)")
                 .define("bindAddress", "127.0.0.1");
+        NON_LOOPBACK_OPT_OUT = builder
+                .comment("Explicit opt-out of loopback enforcement. Only when true is a non-loopback",
+                        "bindAddress bound as configured, with a warning at every start. The bridge has",
+                        "NO authentication or encryption: anyone who can reach the port can control your",
+                        "game. Remote access is unsupported; leave false. (restart required)")
+                .define("iUnderstandNonLoopbackIsUnauthenticated", false);
         MAX_OBSERVERS = builder
                 .comment("Maximum simultaneous read-only observer connections (role \"observer\");",
                         "0 disables the observer role entirely. (restart required)")
@@ -96,6 +104,12 @@ public final class MarionetteConfig {
                         "the session keeps running and streaming when unfocused. (live)")
                 .define("suppressPauseOnLostFocus", true);
         builder.pop();
+        builder.push("precedence");
+        RESUME_AFTER = builder
+                .comment("Human-priority mode: milliseconds after the last human gameplay input before",
+                        "a paused agent may drive again. Held keys and an open pause menu keep the pause. (live)")
+                .defineInRange("resumeAfterMillis", 2000, 250, 60000);
+        builder.pop();
         builder.push("chat");
         ALLOW_CHAT = builder
                 .comment("Allow the controller to send ordinary chat messages with the `chat` request. (live)")
@@ -129,6 +143,7 @@ public final class MarionetteConfig {
     public static volatile boolean bridgeEnabled = true;
     public static volatile int port = 24680;
     public static volatile String bindAddress = "127.0.0.1";
+    public static volatile boolean nonLoopbackOptOut = false;
     public static volatile int maxObservers = 2;
     public static volatile int helloTimeoutSeconds = 10;
     public static volatile int pongTimeoutSeconds = 2;
@@ -138,6 +153,7 @@ public final class MarionetteConfig {
     public static volatile int blockScanRadius = 16;
     public static volatile int blockScanBlocksPerTick = 1024;
     public static volatile boolean suppressPauseOnLostFocus = true;
+    public static volatile int resumeAfterMillis = 2000;
     public static volatile boolean allowChat = true;
     public static volatile boolean allowCommands = false;
     public static volatile int chatMaxMessages = 5;
@@ -162,18 +178,36 @@ public final class MarionetteConfig {
         return tick % divisor == 0;
     }
 
-    /**
-     * Clamp non-loopback (or unresolvable) bind addresses to 127.0.0.1.
-     * Resolve once and pass this exact address object to the bridge (D16).
-     */
+    /** Same as {@link #resolveBindAddress(String, boolean)} with loopback enforced. */
     public static InetAddress resolveBindAddress(String configured) {
+        return resolveBindAddress(configured, false);
+    }
+
+    /**
+     * Resolve the configured bind address exactly once; the caller passes this
+     * exact address object to the bridge (D16), so nothing re-resolves it.
+     * Loopback results are used as is. A non-loopback result is used only with
+     * the explicit opt-out, with a warning; otherwise, like an unresolvable
+     * value, it is clamped to 127.0.0.1 with a warning.
+     */
+    public static InetAddress resolveBindAddress(String configured, boolean allowNonLoopback) {
+        InetAddress resolved = null;
         try {
-            InetAddress resolved = InetAddress.getByName(configured);
-            if (resolved.isLoopbackAddress()) return resolved;
+            resolved = InetAddress.getByName(configured);
         } catch (UnknownHostException e) {
-            // unresolvable — fall through to clamp
+            // unresolvable — clamp below, opt-out or not
         }
-        Marionette.LOGGER.warn("Config bindAddress '{}' is not loopback or cannot be resolved; clamped to 127.0.0.1. Remote binding is unsupported.", configured);
+        if (resolved != null && resolved.isLoopbackAddress()) return resolved;
+        if (resolved != null && allowNonLoopback) {
+            Marionette.LOGGER.warn("LOOPBACK ENFORCEMENT DISABLED: bridge.iUnderstandNonLoopbackIsUnauthenticated is true and"
+                    + " bindAddress '{}' resolved to non-loopback {}. The bridge has no authentication or encryption;"
+                    + " anyone who can reach this address can control the game. Remote access is unsupported.",
+                    configured, resolved.getHostAddress());
+            return resolved;
+        }
+        Marionette.LOGGER.warn("Config bindAddress '{}' is not loopback or cannot be resolved; clamped to 127.0.0.1."
+                + " Remote binding is unsupported{}.", configured, resolved == null || allowNonLoopback ? ""
+                : " (the explicit opt-out bridge.iUnderstandNonLoopbackIsUnauthenticated is false)");
         try { return InetAddress.getByAddress(new byte[] {127, 0, 0, 1}); }
         catch (UnknownHostException impossible) { throw new AssertionError(impossible); }
     }
@@ -195,6 +229,7 @@ public final class MarionetteConfig {
         bridgeEnabled = BRIDGE_ENABLED.get();
         port = PORT.get();
         bindAddress = BIND_ADDRESS.get();
+        nonLoopbackOptOut = NON_LOOPBACK_OPT_OUT.get();
         maxObservers = MAX_OBSERVERS.get();
         helloTimeoutSeconds = HELLO_TIMEOUT.get();
         pongTimeoutSeconds = PONG_TIMEOUT.get();
@@ -204,6 +239,7 @@ public final class MarionetteConfig {
         blockScanRadius = BLOCK_SCAN_RADIUS.get();
         blockScanBlocksPerTick = BLOCK_SCAN_BUDGET.get();
         suppressPauseOnLostFocus = SUPPRESS_PAUSE.get();
+        resumeAfterMillis = RESUME_AFTER.get();
         allowChat = ALLOW_CHAT.get();
         allowCommands = ALLOW_COMMANDS.get();
         chatMaxMessages = CHAT_MAX_MESSAGES.get();

@@ -6,6 +6,9 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -527,6 +530,43 @@ class BridgeServerTest {
         } finally {
             other.stop();
         }
+    }
+
+    @Test
+    void nonLoopbackNeedsTheExplicitOptOut() throws Exception {
+        java.net.InetAddress any = java.net.InetAddress.getByName("0.0.0.0");
+        assertThrows(IllegalArgumentException.class,
+                () -> new BridgeServer(any, 0, "test", 1, 2000, 2000));
+        assertThrows(IllegalArgumentException.class,
+                () -> new BridgeServer(any, 0, "test", 1, 2000, 2000, false));
+        BridgeServer open = new BridgeServer(any, 0, "test", 1, 2000, 2000, true);
+        open.start();
+        try {
+            TestClient client = TestClient.connect("127.0.0.1", open.port());
+            client.send(HELLO);
+            assertEquals("hello", JsonParser.parseString(client.awaitMessage()).getAsJsonObject()
+                    .get("type").getAsString());
+        } finally {
+            open.stop();
+        }
+    }
+
+    @Test
+    void currentControllerIdentityChangesPerSessionAndClearsOnPanic() throws Exception {
+        assertNull(server.currentController());
+        TestClient first = connectAndHello();
+        Object one = server.currentController();
+        assertNotNull(one);
+        first.ws.abort();
+        await(server::pollDisconnected);
+        assertNull(server.currentController());
+        connectAndHello();
+        Object two = server.currentController();
+        assertNotNull(two);
+        assertNotSame(one, two);
+        server.panic("local panic");
+        assertNull(server.currentController(), "a latched controller is never current");
+        server.rearm();
     }
 
     @Test

@@ -3,6 +3,7 @@
 Project documentation lives here: design notes, architecture decisions, and guides for agent authors.
 
 - [decisions.md](decisions.md) — the running record of design decisions (settled, experiment-gated, deferred, open).
+- [safety-state-machine.md](safety-state-machine.md) — the idle-safe state machine: when an agent may drive, human precedence modes and lifecycle releases.
 - [../ROADMAP.md](../ROADMAP.md) — the ordered implementation roadmap: phases, milestones, and definitions of done.
 - [../protocol/v1.md](../protocol/v1.md) — the current wire contract.
 - [specs/](specs/) — dated milestone designs and experiment criteria.

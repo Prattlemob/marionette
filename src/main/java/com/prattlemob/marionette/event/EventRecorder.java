@@ -2,9 +2,11 @@ package com.prattlemob.marionette.event;
 
 import java.security.SecureRandom;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.LongSupplier;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.prattlemob.marionette.bridge.protocol.GameEvent;
@@ -205,6 +207,25 @@ public final class EventRecorder {
         pos.addProperty("z", z);
         fields.add("pos", pos);
         emit("block_broken", Basis.CLIENT, fields);
+    }
+
+    /**
+     * The local human precedence state changed (humanPrecedence).
+     *
+     * @param mode wire mode name
+     * @param cause wire cause name
+     * @param inputs wire input categories, in wire order; empty unless the cause is human input
+     */
+    public void control(String mode, boolean paused, String cause, List<String> inputs) {
+        if (worldSession == null) return;
+        JsonObject fields = new JsonObject();
+        fields.addProperty("mode", mode);
+        fields.addProperty("paused", paused);
+        fields.addProperty("cause", cause);
+        JsonArray array = new JsonArray();
+        inputs.forEach(array::add);
+        fields.add("inputs", array);
+        emit("control", Basis.CLIENT, fields);
     }
 
     /** A damage source object; null ids are unknown or absent. */

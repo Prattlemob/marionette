@@ -8,7 +8,8 @@ joined a world.
 - `dashboard.py` — M4.1: read-only live player state, effects, and movement flags.
   Run `python examples/dashboard.py [port]`; Ctrl-C exits without changing controls.
 - `events.py` — M4.6: read-only one-shot event log (damage, death, respawn,
-  item pickup, chat, block broken, dimension change), one line per event in
+  item pickup, chat, block broken, dimension change and, M5.1, human precedence
+  `control` changes), one line per event in
   `seq` order. Needs the in-repository client (`pip install -e ./python`); the
   published 0.1.0a1 alpha has no event support. Run `python examples/events.py [port]`.
 - `inventory_view.py` — M4.2: read-only held item, hotbar, main inventory,
