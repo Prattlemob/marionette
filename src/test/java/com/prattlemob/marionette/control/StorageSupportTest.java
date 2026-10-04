@@ -107,6 +107,64 @@ class StorageSupportTest {
                 i -> i == 1, i -> i == 0 ? chest : player, i -> 0)));
     }
 
+    // Stand-ins for a vanilla workstation base, its subclasses and its slot kinds.
+    static class Workbench extends Menu {
+        @Override public void slotsChanged(Object container) {}
+        @Override public void removed(Object player) {}
+        public Object getResultSlot() { return null; }
+    }
+    static class TableBench extends Workbench {}
+    static class ResortingBench extends Workbench {
+        @Override public void slotsChanged(Object container) {}
+    }
+    static class RelocatingBench extends Workbench {
+        @Override public Object getResultSlot() { return null; }
+    }
+    static class ValidatingBench extends Workbench {
+        @Override public boolean stillValid(Object player) { return true; }
+    }
+    static class FuelSlot extends Slot {
+        @Override public boolean mayPlace(Object stack) { return false; }
+    }
+    static class StricterFuelSlot extends FuelSlot {
+        @Override public boolean mayPlace(Object stack) { return true; }
+    }
+    static class TakingFuelSlot extends FuelSlot {
+        @Override public void onTake(Object player, Object stack) {}
+    }
+
+    private static final StorageSupport.Workstation BENCH = new StorageSupport.Workstation(Workbench.class, 4,
+            java.util.Map.of(0, Slot.class, 1, FuelSlot.class, 2, ResultSlot.class));
+
+    private static View bench(Class<?> menu, int data, Class<?> fuel, Class<?> result) {
+        return new View(menu, data, List.of(Slot.class, fuel, result, Slot.class), i -> i == 3,
+                i -> i == 3 ? "player" : "bench", i -> i);
+    }
+
+    @Test void workstationBaseAndPlainSubclassesQualify() {
+        assertEquals(List.of(), SUPPORT.workstationReasons(bench(Workbench.class, 4, FuelSlot.class, ResultSlot.class), BENCH));
+        assertEquals(List.of(), SUPPORT.workstationReasons(bench(TableBench.class, 4, FuelSlot.class, ResultSlot.class), BENCH));
+        assertEquals(List.of(), SUPPORT.workstationReasons(bench(ValidatingBench.class, 4, StricterFuelSlot.class, ResultSlot.class), BENCH));
+    }
+
+    @Test void workstationSubclassesOverridingBaseOrMenuBehaviorFail() {
+        assertEquals(List.of("click_behavior"), SUPPORT.workstationReasons(bench(ResortingBench.class, 4, FuelSlot.class, ResultSlot.class), BENCH));
+        assertEquals(List.of("click_behavior"), SUPPORT.workstationReasons(bench(RelocatingBench.class, 4, FuelSlot.class, ResultSlot.class), BENCH));
+        assertEquals(List.of("click_behavior"), SUPPORT.workstationReasons(bench(StorageMenu.class, 4, FuelSlot.class, ResultSlot.class), BENCH));
+        assertEquals(java.util.Set.of("slotsChanged/1"), SUPPORT.overrides(ResortingBench.class, Workbench.class, Menu.class));
+        // Methods inherited from above the base count only when the lookup reaches the menu root.
+        assertEquals(java.util.Set.of(), SUPPORT.overrides(ValidatingBench.class, Workbench.class));
+        assertEquals(java.util.Set.of("stillValid/1"), SUPPORT.overrides(ValidatingBench.class, Workbench.class, Menu.class));
+    }
+
+    @Test void workstationRolesNeedTheirVanillaSlotKindAndData() {
+        assertEquals(List.of("menu_data"), SUPPORT.workstationReasons(bench(Workbench.class, 5, FuelSlot.class, ResultSlot.class), BENCH));
+        assertEquals(List.of("slot_behavior"), SUPPORT.workstationReasons(bench(Workbench.class, 4, Slot.class, ResultSlot.class), BENCH));
+        assertEquals(List.of("slot_behavior"), SUPPORT.workstationReasons(bench(Workbench.class, 4, TakingFuelSlot.class, ResultSlot.class), BENCH));
+        assertEquals(List.of("slot_behavior"), SUPPORT.workstationReasons(bench(Workbench.class, 4, FuelSlot.class, Slot.class), BENCH));
+        assertEquals(List.of("slot_behavior"), SUPPORT.workstationReasons(new View(Workbench.class, 4, List.of(Slot.class)), BENCH));
+    }
+
     @Test void unrelatedClassesAreRejected() {
         assertThrows(IllegalArgumentException.class, () -> SUPPORT.overrides(String.class, Menu.class));
     }

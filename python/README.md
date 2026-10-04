@@ -76,7 +76,8 @@ ignore environment proxies. Current local trust has no authentication.
   `targetingMe` (`"yes"`/`"no"`/`"unknown"`), `name` or `item`) and requires
   `entityState`. Repository source only, like the sections above.
 - `inventory(op, menu=..., source=..., destination=..., hotbar=..., all=False,
-  animated=False, timeout=...)` supports open/inspect/move/swap/equip/drop/close.
+  animated=False, count=None, timeout=...)` supports
+  open/inspect/move/swap/equip/drop/craft/close.
   Obtain `menu_ref(result["menu"])` from a recent inspect before mutations.
   Results describe client prediction, not authoritative server acknowledgment.
   With `inventoryStorage`, menu descriptors carry `support` (`messages.MenuSupport`:
@@ -85,6 +86,18 @@ ignore environment proxies. Current local trust has no authentication.
   a machine-readable `ServerError.reason` (`messages.RejectionReason`, for example
   `destination_full` or `destination_rejects`). Both are in the repository
   source only; the published 0.1.0a1 alpha keeps the new fields undecoded.
+- With `crafting`, `inventory(..., count=N)` moves exactly N items in `move`, and
+  `inventory("craft", menu=..., destination=..., count=N)` takes the offered
+  crafting result N times (crafts, not items) into a slot the caller chose.
+  Crafting menus carry `crafting` (`messages.Crafting`: result and grid slot
+  indices) and furnace-style menus `processing` (`messages.Processing`: input,
+  fuel and result slots, burn and cook ticks, `lit`, `smeltable`); support
+  scopes add `"crafting"` and `"processing"`. The result slot shows the server's
+  offer once it has synchronized the grid; each grid change also advances the
+  state id, so build every request from a fresh inspect and re-inspect after a
+  `stale_menu`. New reasons include `no_result`, `missing_ingredients`,
+  `count_exceeds_source`, `whole_stack_only` and `result_changed`. Repository
+  source only; the published 0.1.0a1 alpha has no crafting API.
 - `scan(size, min=None, timeout=...)` requests one bounded block scan (requires
   `blockScan`; controller only). `size` and `min` are `(x, y, z)` tuples or
   `{"x", "y", "z"}` mappings; without `min` the box is centred on the player's

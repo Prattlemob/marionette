@@ -1,8 +1,11 @@
 package com.prattlemob.marionette.control;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 import com.google.gson.JsonArray;
@@ -13,6 +16,7 @@ import com.prattlemob.marionette.bridge.protocol.ErrorCode;
 import com.prattlemob.marionette.bridge.protocol.Messages;
 import com.prattlemob.marionette.bridge.protocol.ProtocolError;
 import com.prattlemob.marionette.control.InventoryRules.Rejection;
+import com.prattlemob.marionette.mixin.FurnaceMenuAccess;
 import com.prattlemob.marionette.mixin.InventoryHoverAccess;
 import com.prattlemob.marionette.mixin.MenuDataAccess;
 import com.prattlemob.marionette.observation.InventoryJson;
@@ -28,8 +32,15 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.AbstractCraftingMenu;
+import net.minecraft.world.inventory.AbstractFurnaceMenu;
 import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.CraftingMenu;
+import net.minecraft.world.inventory.DataSlot;
+import net.minecraft.world.inventory.FurnaceFuelSlot;
+import net.minecraft.world.inventory.FurnaceResultSlot;
 import net.minecraft.world.inventory.InventoryMenu;
+import net.minecraft.world.inventory.ResultSlot;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
@@ -37,9 +48,28 @@ import static com.prattlemob.marionette.control.InventoryRules.require;
 
 /** Client-thread adapter: inspect actual menus and route intent through vanilla clicks. */
 public final class InventoryActionApplier {
-    private record Step(int slot, Runnable click) {}
-    /** {@code scope} is "player", "storage", or null with the failed rules (protocol/v1.md, Storage support). */
-    private record Support(String scope, List<String> reasons) {}
+    /** One click; {@code ready} false defers it to a later tick (a craft awaiting the server's result). */
+    private record Step(int slot, Runnable click, BooleanSupplier ready) {
+        Step(int slot, Runnable click) {
+            this(slot, click, () -> true);
+        }
+    }
+    /**
+     * {@code scope} is "player", "storage", "crafting", "processing", or null with the failed rules
+     * (protocol/v1.md, Storage support; Crafting and processing menus). {@code crafting} is set for
+     * menus with a crafting grid, {@code processing} for the furnace base.
+     */
+    private record Support(String scope, List<String> reasons, Crafting crafting, boolean processing) {
+        /** Slots the server changes on its own, which only their own clicks check. */
+        Set<Integer> workstationSlots() {
+            if (processing) return Set.of(FURNACE_INPUT, FURNACE_FUEL, FURNACE_RESULT);
+            return crafting == null ? Set.of() : Set.of(crafting.result());
+        }
+    }
+    private record Crafting(int result, List<Integer> grid, int width, int height) {}
+    private static final int FURNACE_INPUT = AbstractFurnaceMenu.INGREDIENT_SLOT;
+    private static final int FURNACE_FUEL = AbstractFurnaceMenu.FUEL_SLOT;
+    private static final int FURNACE_RESULT = AbstractFurnaceMenu.RESULT_SLOT;
     private static final StorageSupport STORAGE = new StorageSupport(AbstractContainerMenu.class, Slot.class);
     private Pending pending;
     private AbstractContainerScreen<?> cursorScreen;
@@ -69,6 +99,15 @@ public final class InventoryActionApplier {
         "      ##"
     };
 
+    /** Ticks a craft waits for the server to re-offer its result (protocol/v1.md, craft). */
+    static final int RESULT_WAIT_TICKS = 40;
+
+    /** The stacks an action's clicks picked up; only its own stack is ever returned to the source. */
+    private static final class Carry {
+        ItemStack picked;
+        ItemStack result;
+    }
+
     private static final class Pending {
         final LocalPlayer player;
         final AbstractContainerScreen<?> screen;
@@ -77,24 +116,31 @@ public final class InventoryActionApplier {
         final Consumer<String> reply;
         final List<Step> steps;
         final int source;
+        final Carry carry;
+        final Set<Integer> workstationSlots;
+        final boolean animated;
         final int width, height;
-        final ItemStack original;
         List<ItemStack> expectedSlots;
         ItemStack expectedCarried;
         int next;
+        int waited;
 
         Pending(LocalPlayer player, AbstractContainerScreen<?> screen, AgentCommand.InventoryAction request,
-                Consumer<String> reply, List<Step> steps, int source) {
+                Consumer<String> reply, List<Step> steps, int next, int source, Carry carry,
+                Set<Integer> workstationSlots) {
             this.player = player;
             this.screen = screen;
             this.menu = screen.getMenu();
             this.request = request;
             this.reply = reply;
             this.steps = steps;
+            this.next = next;
             this.source = source;
+            this.carry = carry;
+            this.workstationSlots = workstationSlots;
+            this.animated = request.animated();
             this.width = screen.width;
             this.height = screen.height;
-            this.original = menu.slots.get(source).getItem().copy();
             remember();
         }
 
@@ -103,9 +149,11 @@ public final class InventoryActionApplier {
             expectedCarried = menu.getCarried().copy();
         }
 
+        /** Workstation result/input/fuel slots change with the server's processing; their own clicks re-check them. */
         boolean unchanged() {
             if (!ItemStack.matches(expectedCarried, menu.getCarried()) || menu.slots.size() != expectedSlots.size()) return false;
             for (int i = 0; i < expectedSlots.size(); i++) {
+                if (workstationSlots.contains(i)) continue;
                 if (!ItemStack.matches(expectedSlots.get(i), menu.slots.get(i).getItem())) return false;
             }
             return true;
@@ -160,62 +208,40 @@ public final class InventoryActionApplier {
                 player.closeContainer();
                 return Messages.inventoryResult(request.op(), request.id(), describe(visibleMenu(mc, player), player));
             }
-            int from = resolve(menu, player, request.from());
-            Slot source = usableSlot(menu, player, from);
-            InventoryRules.source(new View(source, player));
             List<Step> steps = new ArrayList<>();
-            switch (request.op()) {
-                case "move" -> planMove(mc, player, menu, from, resolve(menu, player, request.to()), false, steps);
-                case "equip" -> {
-                    EquipmentSlot equipment = player.getEquipmentSlotForItem(source.getItem());
-                    require(equipment.getType() == EquipmentSlot.Type.HUMANOID_ARMOR,
-                            "not_armor", "source is not wearable armor");
-                    int target = resolve(menu, player, new AgentCommand.SlotRef(null, "armor." + equipment.getName()));
-                    require(source.getItem().getCount() == 1, "armor_count", "equip requires one armor item");
-                    planMove(mc, player, menu, from, target, true, steps);
-                }
-                case "swap" -> {
-                    int target = resolve(menu, player, new AgentCommand.SlotRef(null, "hotbar." + request.hotbar()));
-                    require(from != target, "same_slot", "source and destination are the same slot");
-                    Slot destination = usableSlot(menu, player, target);
-                    InventoryRules.swap(new View(source, player), new View(destination, player));
-                    ItemStack beforeSource = source.getItem().copy();
-                    ItemStack beforeTarget = destination.getItem().copy();
-                    steps.add(new Step(from, () -> {
-                        InventoryRules.swap(new View(usableSlot(menu, player, from), player),
-                                new View(usableSlot(menu, player, target), player));
-                        verifiedClick(mc, player, menu, from, request.hotbar(), ClickType.SWAP,
-                                Map.of(from, beforeTarget, target, beforeSource), ItemStack.EMPTY);
-                    }));
-                }
-                case "drop" -> {
-                    require(player.canDropItems(), "drop_forbidden", "player cannot drop items");
-                    ItemStack original = source.getItem().copy();
-                    ItemStack remaining = request.all() ? ItemStack.EMPTY
-                            : original.copyWithCount(original.getCount() - 1);
-                    steps.add(new Step(from, () -> {
-                        require(player.canDropItems(), "drop_forbidden", "player cannot drop items");
-                        InventoryRules.source(new View(usableSlot(menu, player, from), player));
-                        verifiedClick(mc, player, menu, from, request.all() ? 1 : 0, ClickType.THROW,
-                                Map.of(from, remaining), ItemStack.EMPTY);
-                    }));
-                }
-                default -> throw new Rejection("unsupported_operation", "unsupported inventory operation");
+            Carry carry = new Carry();
+            int from = -1;
+            if (request.op().equals("craft")) {
+                planCraft(mc, player, menu, support, resolve(menu, player, request.to()),
+                        request.count() == null ? 1 : request.count(), carry, steps);
+            } else {
+                from = resolve(menu, player, request.from());
+                Slot source = usableSlot(menu, player, from, support);
+                InventoryRules.source(new View(source, player));
+                planSourced(mc, player, menu, support, request, from, source, carry, steps);
             }
+            AbstractContainerScreen<?> screen = (AbstractContainerScreen<?>) mc.screen;
             if (request.animated()) {
-                AbstractContainerScreen<?> screen = (AbstractContainerScreen<?>) mc.screen;
                 if (cursorScreen != screen) {
                     cursorX = screen.width / 2.0;
                     cursorY = screen.height / 2.0;
                 }
                 cursorScreen = screen;
-                pending = new Pending(player, screen, request, reply, List.copyOf(steps), from);
+                pending = new Pending(player, screen, request, reply, List.copyOf(steps), 0, from, carry,
+                        support.workstationSlots());
                 startLeg(System.nanoTime());
                 return null;
             }
             for (int i = 0; i < steps.size(); i++) {
+                Step step = steps.get(i);
+                if (!step.ready().getAsBoolean()) {
+                    // A later craft waits for the server's re-offered result: continue on the tick.
+                    pending = new Pending(player, screen, request, reply, List.copyOf(steps), i, from, carry,
+                            support.workstationSlots());
+                    return null;
+                }
                 try {
-                    steps.get(i).click().run();
+                    step.click().run();
                 } catch (Rejection e) {
                     if (i == 0) throw e;
                     // Clicks already happened: whatever the rule, the prediction failed mid-sequence.
@@ -226,28 +252,164 @@ public final class InventoryActionApplier {
         return Messages.inventoryResult(request.op(), request.id(), describe(menu, player));
     }
 
-    private static void planMove(Minecraft mc, LocalPlayer player, AbstractContainerMenu menu,
-                             int from, int to, boolean equip, List<Step> steps) {
-        require(from != to, "same_slot", "source and destination are the same slot");
-        Slot source = usableSlot(menu, player, from);
-        Slot target = usableSlot(menu, player, to);
-        if (equip) require(!target.hasItem(), "armor_occupied", "armor slot is occupied");
-        InventoryRules.move(new View(source, player), new View(target, player));
-        ItemStack original = source.getItem().copy();
-        ItemStack expected = original.copyWithCount(original.getCount() + target.getItem().getCount());
-        steps.add(new Step(from, () -> {
-            InventoryRules.move(new View(usableSlot(menu, player, from), player),
-                    new View(usableSlot(menu, player, to), player));
-            verifiedClick(mc, player, menu, from, 0, ClickType.PICKUP, Map.of(from, ItemStack.EMPTY), original);
-        }));
-        steps.add(new Step(to, () -> {
-            Slot destination = usableSlot(menu, player, to);
-            require(destination.mayPlace(menu.getCarried())
-                    && (destination.getItem().isEmpty() || destination.mayPickup(player))
-                    && destination.getMaxStackSize(menu.getCarried()) >= expected.getCount(),
-                    "unexpected_click", "destination no longer accepts the carried stack");
-            verifiedClick(mc, player, menu, to, 0, ClickType.PICKUP, Map.of(to, expected), ItemStack.EMPTY);
-        }));
+    /** Operations with a source slot: move (optionally counted), equip, swap, drop. */
+    private static void planSourced(Minecraft mc, LocalPlayer player, AbstractContainerMenu menu, Support support,
+                                    AgentCommand.InventoryAction request, int from, Slot source, Carry carry,
+                                    List<Step> steps) {
+        switch (request.op()) {
+            case "move" -> {
+                int to = resolve(menu, player, request.to());
+                require(from != to, "same_slot", "source and destination are the same slot");
+                Slot target = usableSlot(menu, player, to, support);
+                int count = request.count() == null ? source.getItem().getCount() : request.count();
+                InventoryRules.moveCount(new View(source, player), new View(target, player), count,
+                        !source.allowModification(player));
+                planMove(mc, player, menu, support, from, to, count, carry, steps);
+            }
+            case "equip" -> {
+                EquipmentSlot equipment = player.getEquipmentSlotForItem(source.getItem());
+                require(equipment.getType() == EquipmentSlot.Type.HUMANOID_ARMOR,
+                        "not_armor", "source is not wearable armor");
+                int target = resolve(menu, player, new AgentCommand.SlotRef(null, "armor." + equipment.getName()));
+                require(source.getItem().getCount() == 1, "armor_count", "equip requires one armor item");
+                require(from != target, "same_slot", "source and destination are the same slot");
+                Slot armor = usableSlot(menu, player, target, support);
+                require(!armor.hasItem(), "armor_occupied", "armor slot is occupied");
+                InventoryRules.move(new View(source, player), new View(armor, player));
+                planMove(mc, player, menu, support, from, target, 1, carry, steps);
+            }
+            case "swap" -> {
+                int target = resolve(menu, player, new AgentCommand.SlotRef(null, "hotbar." + request.hotbar()));
+                require(from != target, "same_slot", "source and destination are the same slot");
+                Slot destination = usableSlot(menu, player, target, support);
+                InventoryRules.swap(new View(source, player), new View(destination, player));
+                ItemStack beforeSource = source.getItem().copy();
+                ItemStack beforeTarget = destination.getItem().copy();
+                steps.add(new Step(from, () -> {
+                    InventoryRules.swap(new View(usableSlot(menu, player, from, support), player),
+                            new View(usableSlot(menu, player, target, support), player));
+                    verifiedClick(mc, player, menu, from, request.hotbar(), ClickType.SWAP,
+                            Map.of(from, beforeTarget, target, beforeSource), ItemStack.EMPTY);
+                }));
+            }
+            case "drop" -> {
+                require(player.canDropItems(), "drop_forbidden", "player cannot drop items");
+                require(request.all() || source.getItem().getCount() == 1 || source.allowModification(player),
+                        "whole_stack_only", "source slot gives up only whole stacks");
+                ItemStack original = source.getItem().copy();
+                ItemStack remaining = request.all() ? ItemStack.EMPTY
+                        : original.copyWithCount(original.getCount() - 1);
+                steps.add(new Step(from, () -> {
+                    require(player.canDropItems(), "drop_forbidden", "player cannot drop items");
+                    InventoryRules.source(new View(usableSlot(menu, player, from, support), player));
+                    verifiedClick(mc, player, menu, from, request.all() ? 1 : 0, ClickType.THROW,
+                            Map.of(from, remaining), ItemStack.EMPTY);
+                }));
+            }
+            default -> throw new Rejection("unsupported_operation", "unsupported inventory operation");
+        }
+    }
+
+    /**
+     * Whole stack: pickup and place. Fewer items: pickup, {@code count} single placements and a
+     * return of the rest. Each click predicts from the slots as they are when it runs.
+     */
+    private static void planMove(Minecraft mc, LocalPlayer player, AbstractContainerMenu menu, Support support,
+                                 int from, int to, int count, Carry carry, List<Step> steps) {
+        boolean whole = count == menu.slots.get(from).getItem().getCount();
+        steps.add(new Step(from, () -> pickup(mc, player, menu, support, from, carry)));
+        if (whole) {
+            steps.add(new Step(to, () -> place(mc, player, menu, support, to, false)));
+            return;
+        }
+        for (int i = 0; i < count; i++) {
+            steps.add(new Step(to, () -> place(mc, player, menu, support, to, true)));
+        }
+        steps.add(new Step(from, () -> place(mc, player, menu, support, from, false)));
+    }
+
+    /** Primary click on a nonempty slot with an empty cursor: the whole stack moves to the cursor. */
+    private static void pickup(Minecraft mc, LocalPlayer player, AbstractContainerMenu menu, Support support,
+                               int slot, Carry carry) {
+        require(menu.getCarried().isEmpty(), "unexpected_click", "cursor is no longer empty");
+        Slot source = usableSlot(menu, player, slot, support);
+        InventoryRules.source(new View(source, player));
+        ItemStack stack = source.getItem().copy();
+        verifiedClick(mc, player, menu, slot, 0, ClickType.PICKUP, Map.of(slot, ItemStack.EMPTY), stack);
+        carry.picked = stack;
+    }
+
+    /** Primary click places the whole cursor stack, secondary one item, onto an empty or matching slot. */
+    private static void place(Minecraft mc, LocalPlayer player, AbstractContainerMenu menu, Support support,
+                              int slot, boolean one) {
+        ItemStack carried = menu.getCarried().copy();
+        Slot destination = usableSlot(menu, player, slot, support);
+        ItemStack held = destination.getItem();
+        int placed = one ? 1 : carried.getCount();
+        require(!carried.isEmpty() && destination.mayPlace(carried)
+                && (held.isEmpty() || ItemStack.isSameItemSameComponents(held, carried) && destination.mayPickup(player))
+                && destination.getMaxStackSize(carried) >= held.getCount() + placed,
+                "unexpected_click", "destination no longer accepts the carried stack");
+        verifiedClick(mc, player, menu, slot, one ? 1 : 0, ClickType.PICKUP,
+                Map.of(slot, carried.copyWithCount(held.getCount() + placed)),
+                carried.copyWithCount(carried.getCount() - placed));
+    }
+
+    /**
+     * {@code crafts} times: take the offered result (the cursor receives it, each nonempty grid slot
+     * loses one item, remainders stay) and place it on the destination. Later crafts wait until the
+     * server re-offers exactly the first result.
+     */
+    private static void planCraft(Minecraft mc, LocalPlayer player, AbstractContainerMenu menu, Support support,
+                                  int to, int crafts, Carry carry, List<Step> steps) {
+        Crafting crafting = support.crafting();
+        require(crafting != null, "not_crafting", "menu has no crafting grid");
+        require(to != crafting.result() && !crafting.grid().contains(to), "destination_rejects",
+                "crafted items cannot go into the crafting grid or result slot");
+        Slot destination = usableSlot(menu, player, to, support);
+        Slot result = menu.slots.get(crafting.result());
+        List<Integer> filled = crafting.grid().stream().filter(i -> menu.slots.get(i).hasItem()).toList();
+        int[] counts = filled.stream().mapToInt(i -> menu.slots.get(i).getItem().getCount()).toArray();
+        boolean[] remainders = new boolean[filled.size()];
+        for (int i = 0; i < remainders.length; i++) {
+            remainders[i] = !menu.slots.get(filled.get(i)).getItem().getCraftingRemainder().isEmpty();
+        }
+        InventoryRules.craft(result.getItem().getCount(), counts, remainders, crafts);
+        InventoryRules.receive(new View(destination, player), new View(result, player),
+                crafts * result.getItem().getCount());
+        for (int k = 0; k < crafts; k++) {
+            boolean first = k == 0;
+            steps.add(new Step(crafting.result(), () -> take(mc, player, menu, crafting, carry), () -> {
+                if (first) return true;
+                ItemStack offered = result.getItem();
+                if (offered.isEmpty()) return false;
+                require(ItemStack.matches(offered, carry.result), "result_changed",
+                        "the server offered a different result");
+                return true;
+            }));
+            steps.add(new Step(to, () -> place(mc, player, menu, support, to, false)));
+        }
+    }
+
+    /** Primary click on the result slot, predicted as vanilla's client-side craft. */
+    private static void take(Minecraft mc, LocalPlayer player, AbstractContainerMenu menu, Crafting crafting,
+                             Carry carry) {
+        require(menu.getCarried().isEmpty(), "unexpected_click", "cursor is no longer empty");
+        ItemStack offered = menu.slots.get(crafting.result()).getItem().copy();
+        require(!offered.isEmpty(), "no_result", "the result slot offers nothing");
+        Map<Integer, ItemStack> expected = new HashMap<>();
+        expected.put(crafting.result(), ItemStack.EMPTY);
+        for (int index : crafting.grid()) {
+            ItemStack ingredient = menu.slots.get(index).getItem();
+            if (ingredient.isEmpty()) continue;
+            ItemStack remainder = ingredient.getCraftingRemainder();
+            require(remainder.isEmpty() || ingredient.getCount() == 1, "remainder_unsupported",
+                    "an ingredient with a crafting remainder shares its slot");
+            expected.put(index, ingredient.getCount() == 1 ? remainder.copy()
+                    : ingredient.copyWithCount(ingredient.getCount() - 1));
+        }
+        verifiedClick(mc, player, menu, crafting.result(), 0, ClickType.PICKUP, expected, offered);
+        if (carry.result == null) carry.result = offered;
     }
 
     /**
@@ -269,7 +431,11 @@ public final class InventoryActionApplier {
                 "unexpected_click", "cursor deviated from the prediction; inspect before recovery");
     }
 
-    /** Tick-side only: at most one click per tick, and never into a different screen/menu. */
+    /**
+     * Tick-side only, never into a different screen/menu. Animated: at most one click per tick.
+     * Otherwise every ready step runs at once; a step that is not ready (a craft awaiting the
+     * server's result) waits up to {@link #RESULT_WAIT_TICKS}.
+     */
     public void tick() {
         Minecraft mc = Minecraft.getInstance();
         if (cursorScreen != mc.screen) clearCursor();
@@ -285,23 +451,36 @@ public final class InventoryActionApplier {
             cancel("contents_changed", "slot or cursor contents changed");
             return;
         }
-        if (mc.isPaused() || !motion.ready(System.nanoTime())) return;
+        if (mc.isPaused() || action.animated && !motion.ready(System.nanoTime())) return;
         try {
-            action.steps.get(action.next).click().run();
-            clickedAt = System.nanoTime();
-            cursorX = motion.x(clickedAt);
-            cursorY = motion.y(clickedAt);
-            action.next++;
-            action.remember();
+            do {
+                Step step = action.steps.get(action.next);
+                if (!step.ready().getAsBoolean()) {
+                    if (++action.waited > RESULT_WAIT_TICKS) {
+                        throw new Rejection("result_changed", "the server did not re-offer the result");
+                    }
+                    return;
+                }
+                action.waited = 0;
+                step.click().run();
+                action.next++;
+                action.remember();
+            } while (!action.animated && action.next < action.steps.size());
+            if (action.animated) {
+                clickedAt = System.nanoTime();
+                cursorX = motion.x(clickedAt);
+                cursorY = motion.y(clickedAt);
+            }
             if (action.next == action.steps.size()) {
                 pending = null;
                 motion = null;
                 action.reply.accept(Messages.inventoryResult(action.request.op(), action.request.id(), describe(action.menu, action.player)));
-            } else {
-                startLeg(clickedAt + 120_000_000L);
+            } else if (action.animated) {
+                boolean sameSlot = action.steps.get(action.next).slot() == action.steps.get(action.next - 1).slot();
+                startLeg(clickedAt + (sameSlot ? 50_000_000L : 120_000_000L));
             }
         } catch (Rejection e) {
-            cancel("unexpected_click", e.getMessage());
+            cancel(e.reason().equals("result_changed") ? "result_changed" : "unexpected_click", e.getMessage());
         }
     }
 
@@ -323,13 +502,17 @@ public final class InventoryActionApplier {
         clearCursor();
         if (action == null) return;
         Minecraft mc = Minecraft.getInstance();
-        if (recover && action.next > 0 && mc.player == action.player && action.player.isAlive()
+        ItemStack carried = action.menu.getCarried();
+        ItemStack picked = action.carry.picked;
+        if (recover && action.source >= 0 && picked != null && mc.player == action.player && action.player.isAlive()
                 && !action.player.isSpectator() && !action.player.hasInfiniteMaterials()
                 && mc.gameMode != null && mc.screen == action.screen && action.player.containerMenu == action.menu
-                && ItemStack.matches(action.menu.getCarried(), action.original)) {
+                && !carried.isEmpty() && ItemStack.isSameItemSameComponents(carried, picked)
+                && carried.getCount() <= picked.getCount()) {
+            // Our own (possibly partly placed) stack returns only into its empty, accepting source.
             Slot source = action.menu.slots.get(action.source);
-            if (source.isActive() && !source.hasItem() && source.mayPlace(action.original)
-                    && source.getMaxStackSize(action.original) >= action.original.getCount()) {
+            if (source.isActive() && !source.hasItem() && source.mayPlace(carried)
+                    && source.getMaxStackSize(carried) >= carried.getCount()) {
                 click(mc, action.player, action.menu, action.source, 0, ClickType.PICKUP);
             }
         }
@@ -397,10 +580,40 @@ public final class InventoryActionApplier {
                 && screen.getMenu() == player.containerMenu ? player.containerMenu : null;
     }
 
-    /** The player's own menu, or the structural storage analysis of any other menu; never its name. */
+    /**
+     * The player's own menu, the workstation analysis of a vanilla crafting or furnace menu (or a
+     * subclass), or the storage analysis of any other menu; never its name.
+     */
     private static Support support(AbstractContainerMenu menu, LocalPlayer player) {
-        if (menu == player.inventoryMenu) return new Support("player", List.of());
-        List<String> reasons = STORAGE.reasons(new StorageSupport.MenuView() {
+        if (menu == player.inventoryMenu) return new Support("player", List.of(), crafting(player.inventoryMenu), false);
+        StorageSupport.MenuView view = view(menu, player);
+        if (menu instanceof CraftingMenu craftingMenu) {
+            Crafting crafting = crafting(craftingMenu);
+            Map<Integer, Class<?>> roles = new HashMap<>();
+            roles.put(crafting.result(), ResultSlot.class);
+            crafting.grid().forEach(i -> roles.put(i, Slot.class));
+            List<String> reasons = STORAGE.workstationReasons(view,
+                    new StorageSupport.Workstation(CraftingMenu.class, 0, roles));
+            return reasons.isEmpty() ? new Support("crafting", reasons, crafting, false)
+                    : new Support(null, reasons, null, false);
+        }
+        if (menu instanceof AbstractFurnaceMenu) {
+            List<String> reasons = STORAGE.workstationReasons(view, new StorageSupport.Workstation(
+                    AbstractFurnaceMenu.class, AbstractFurnaceMenu.DATA_COUNT, Map.of(FURNACE_INPUT, Slot.class,
+                    FURNACE_FUEL, FurnaceFuelSlot.class, FURNACE_RESULT, FurnaceResultSlot.class)));
+            return new Support(reasons.isEmpty() ? "processing" : null, reasons, null, reasons.isEmpty());
+        }
+        List<String> reasons = STORAGE.reasons(view);
+        return new Support(reasons.isEmpty() ? "storage" : null, reasons, null, false);
+    }
+
+    private static Crafting crafting(AbstractCraftingMenu menu) {
+        return new Crafting(menu.getResultSlot().index, menu.getInputGridSlots().stream().map(slot -> slot.index).toList(),
+                menu.getGridWidth(), menu.getGridHeight());
+    }
+
+    private static StorageSupport.MenuView view(AbstractContainerMenu menu, LocalPlayer player) {
+        return new StorageSupport.MenuView() {
             public Class<?> menuClass() { return menu.getClass(); }
             public int dataSlots() { return ((MenuDataAccess) menu).marionette$dataSlots().size(); }
             public int slotCount() { return menu.slots.size(); }
@@ -408,8 +621,7 @@ public final class InventoryActionApplier {
             public boolean playerSlot(int slot) { return menu.slots.get(slot).container == player.getInventory(); }
             public Object container(int slot) { return menu.slots.get(slot).container; }
             public int containerSlot(int slot) { return menu.slots.get(slot).getContainerSlot(); }
-        });
-        return new Support(reasons.isEmpty() ? "storage" : null, reasons);
+        };
     }
 
     private static String menuType(AbstractContainerMenu menu) {
@@ -428,11 +640,11 @@ public final class InventoryActionApplier {
         throw new Rejection("alias_absent", "player slot alias is absent from this menu: " + ref.alias());
     }
 
-    private static Slot usableSlot(AbstractContainerMenu menu, LocalPlayer player, int index) {
+    private static Slot usableSlot(AbstractContainerMenu menu, LocalPlayer player, int index, Support support) {
         Slot slot = menu.slots.get(index);
         require(slot.isActive(), "slot_refused", "slot is inactive");
-        require(!(menu instanceof InventoryMenu) || slot.container == player.getInventory(),
-                "slot_refused", "crafting slots are unsupported");
+        require(support.crafting() == null || index != support.crafting().result(),
+                "slot_refused", "only craft takes from the crafting result slot");
         require(!slot.getItem().has(DataComponents.BUNDLE_CONTENTS), "slot_refused", "bundle clicks are unsupported");
         return slot;
     }
@@ -481,7 +693,7 @@ public final class InventoryActionApplier {
             if (alias != null) entry.addProperty("alias", alias);
             armor |= alias != null && alias.startsWith("armor.");
             String refused = !inScope ? null
-                    : menu instanceof InventoryMenu && slot.container != player.getInventory() ? "crafting"
+                    : support.crafting() != null && i == support.crafting().result() ? "result"
                     : !slot.isActive() ? "inactive"
                     : slot.getItem().has(DataComponents.BUNDLE_CONTENTS) ? "bundle" : null;
             if (refused != null) entry.addProperty("refused", refused);
@@ -495,6 +707,7 @@ public final class InventoryActionApplier {
             operations.add("swap");
             if (armor) operations.add("equip");
             operations.add("drop");
+            if (support.crafting() != null) operations.add("craft");
             operations.add("close");
         }
         result.add("operations", operations);
@@ -507,7 +720,38 @@ public final class InventoryActionApplier {
         support.reasons().forEach(reasons::add);
         supportJson.add("reasons", reasons);
         result.add("support", supportJson);
+        if (support.crafting() != null) {
+            JsonObject crafting = new JsonObject();
+            crafting.addProperty("result", support.crafting().result());
+            JsonArray grid = new JsonArray();
+            support.crafting().grid().forEach(grid::add);
+            crafting.add("grid", grid);
+            crafting.addProperty("width", support.crafting().width());
+            crafting.addProperty("height", support.crafting().height());
+            result.add("crafting", crafting);
+        }
+        if (support.processing()) result.add("processing", processing((AbstractFurnaceMenu) menu));
         return result;
+    }
+
+    /** Furnace-base slot roles and synchronized data (protocol/v1.md, Processing descriptor). */
+    private static JsonObject processing(AbstractFurnaceMenu menu) {
+        List<DataSlot> data = ((MenuDataAccess) menu).marionette$dataSlots();
+        int burnTime = data.get(0).get(), cookTime = data.get(2).get();
+        JsonObject processing = new JsonObject();
+        processing.addProperty("kind", "furnace");
+        processing.addProperty("input", FURNACE_INPUT);
+        processing.addProperty("fuel", FURNACE_FUEL);
+        processing.addProperty("result", FURNACE_RESULT);
+        processing.addProperty("burnTime", burnTime);
+        processing.addProperty("burnDuration", data.get(1).get());
+        processing.addProperty("cookTime", cookTime);
+        processing.addProperty("cookDuration", data.get(3).get());
+        processing.addProperty("lit", burnTime > 0);
+        ItemStack input = menu.slots.get(FURNACE_INPUT).getItem();
+        if (input.isEmpty()) processing.add("smeltable", JsonNull.INSTANCE);
+        else processing.addProperty("smeltable", ((FurnaceMenuAccess) menu).marionette$canSmelt(input));
+        return processing;
     }
 
     private JsonObject describe(AbstractContainerMenu menu, LocalPlayer player) {

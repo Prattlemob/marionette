@@ -14,7 +14,8 @@ joined a world.
 - `inventory_view.py` — M4.2: read-only held item, hotbar, main inventory,
   armor, offhand and the open menu (type, D8 slot addresses, carried stack,
   supported operations or refusal, and with `inventoryStorage` the menu's
-  storage support or the rules it failed) from the `inventory` section. Needs the
+  storage support or the rules it failed; with `crafting` the crafting grid and
+  furnace burn/cook progress) from the `inventory` section. Needs the
   in-repository client; the published 0.1.0a1 alpha cannot select that section.
   Run `python examples/inventory_view.py [port]`; `--once` prints one frame and
   `--json` prints raw frames.
@@ -32,6 +33,15 @@ joined a world.
   flag. Needs the in-repository client; the published 0.1.0a1 alpha cannot
   select that section. Run `python examples/entity_view.py [port]`; `--once`
   prints one frame and `--json` prints raw frames.
+- `crafting.py` — M3.6: places an ingredient layout chosen on the command line
+  into the open crafting grid (the survival inventory's 2×2 grid, or a crafting
+  table opened beforehand) with counted moves, waits until the server offers a
+  result, and crafts a given number of times into a given slot (`crafting`,
+  controller). The mod never chooses recipes, ingredients or destinations. Needs
+  the in-repository client; the published 0.1.0a1 alpha has no crafting API. Run
+  `python examples/crafting.py --place 1=main.0:2 --to hotbar.0 --crafts 2`
+  (one log stack in `main.0` → 8 planks); `inventory_view.py` shows the grid,
+  the offered result and furnace progress while it runs.
 - `block_scan.py` — M4.5: requests one bounded block scan (`blockScan`,
   controller) around the player or at a given corner and prints each layer as a
   map with a legend, or the decoded blocks as JSON. Needs the in-repository

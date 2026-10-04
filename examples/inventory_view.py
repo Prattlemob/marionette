@@ -51,6 +51,13 @@ def render(tick, inv):
         lines.append(f"Menu {menu['type']} id={menu['containerId']} state={menu['stateId']} "
                      f"slots={menu['slotCount']}{' (truncated)' if menu.get('truncated') else ''} ops: {ops}{scope}")
         lines.append(f"  carried: {describe(menu['carried'])}")
+        if "crafting" in menu:  # crafting (M3.6): the result slot shows the server's offer
+            grid = menu["crafting"]
+            lines.append(f"  crafting {grid['width']}x{grid['height']}: result slot {grid['result']}, grid {grid['grid']}")
+        if "processing" in menu:  # crafting (M3.6): furnace-style progress in ticks
+            p = menu["processing"]
+            lines.append(f"  {p['kind']}: {'lit' if p['lit'] else 'unlit'} burn {p['burnTime']}/{p['burnDuration']}"
+                         f" cook {p['cookTime']}/{p['cookDuration']} smeltable={p['smeltable']}")
         lines += [f"  slot {s['slot']}{' ' + s['alias'] if 'alias' in s else ''}: {describe(s)}"
                   + (f" [refused: {s['refused']}]" if "refused" in s else "")
                   for s in menu["slots"] if "alias" not in s or s["count"]]

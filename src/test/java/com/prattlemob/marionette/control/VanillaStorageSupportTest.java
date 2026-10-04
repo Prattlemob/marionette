@@ -46,6 +46,26 @@ class VanillaStorageSupportTest {
         }
     }
 
+    @Test void vanillaWorkstationsQualifyAgainstTheirBase() {
+        Class<?> menu = load("AbstractContainerMenu");
+        assertTrue(support.overrides(load("CraftingMenu"), load("CraftingMenu"), menu).isEmpty());
+        for (String furnace : new String[] {"FurnaceMenu", "BlastFurnaceMenu", "SmokerMenu"}) {
+            assertEquals(java.util.Set.of(), support.overrides(load(furnace), load("AbstractFurnaceMenu"), menu), furnace);
+        }
+        // Other workstations are not crafting or furnace bases at all.
+        assertFalse(load("AbstractFurnaceMenu").isAssignableFrom(load("BrewingStandMenu")));
+        assertFalse(load("CraftingMenu").isAssignableFrom(load("CrafterMenu")));
+        assertFalse(load("CraftingMenu").isAssignableFrom(load("InventoryMenu")));
+        Class<?> slot = load("Slot");
+        assertTrue(StorageSupport.SLOT_OVERRIDES.containsAll(support.overrides(load("FurnaceFuelSlot"), load("FurnaceFuelSlot"), slot)));
+        assertFalse(StorageSupport.SLOT_OVERRIDES.containsAll(support.overrides(load("FurnaceResultSlot"), slot)));
+    }
+
+    @Test void brewingStandFailsTheStorageAnalysis() {
+        assertFalse(slotQualifies("BrewingStandMenu$PotionSlot", false));
+        assertTrue(menuQualifies("BrewingStandMenu"));   // menu_data and slot_behavior exclude it on the live menu
+    }
+
     @Test void armorSlotsQualifyOnlyAsPlayerSlots() {
         assertTrue(slotQualifies("ArmorSlot", true));
         assertFalse(slotQualifies("ArmorSlot", false));

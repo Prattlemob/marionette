@@ -8,7 +8,7 @@ PROTOCOL_VERSION = 2
 Role = Literal["controller", "observer"]
 Section = Literal["player", "inventory", "target", "world", "entities"]
 Tap = Literal["jump", "attack", "use"]
-Operation = Literal["open", "inspect", "move", "swap", "equip", "drop", "close"]
+Operation = Literal["open", "inspect", "move", "swap", "equip", "drop", "craft", "close"]
 RequestId = str | int | float
 SlotRef = str | int
 
@@ -90,10 +90,10 @@ class Stack(TypedDict):
     potion: NotRequired[str]
 
 
-SlotRefusal = Literal["crafting", "inactive", "bundle"]
+SlotRefusal = Literal["crafting", "result", "inactive", "bundle"]
 MenuRefusal = Literal["player_unavailable", "unsupported_menu", "busy", "cursor_occupied"]
-MutatingOperation = Literal["move", "swap", "equip", "drop", "close"]
-SupportScope = Literal["player", "storage"]
+MutatingOperation = Literal["move", "swap", "equip", "drop", "craft", "close"]
+SupportScope = Literal["player", "storage", "crafting", "processing"]
 SupportReason = Literal["click_behavior", "menu_data", "slot_behavior", "shared_slots"]
 RejectionReason = Literal[
     "no_world", "player_unavailable", "screen_open", "no_menu", "unsupported_menu",
@@ -101,7 +101,9 @@ RejectionReason = Literal[
     "source_empty", "source_locked", "destination_mismatch", "destination_locked",
     "destination_rejects", "destination_full", "source_rejects", "source_full",
     "not_armor", "armor_occupied", "armor_count", "drop_forbidden", "unexpected_click",
-    "released", "human_input", "menu_changed", "contents_changed", "world_exit"]
+    "count_exceeds_source", "whole_stack_only", "not_crafting", "no_result", "missing_ingredients",
+    "remainder_unsupported", "released", "human_input", "menu_changed", "contents_changed",
+    "world_exit", "result_changed"]
 
 
 class Slot(Stack):
@@ -116,6 +118,32 @@ class MenuSupport(TypedDict):
     Both are open strings so a future value does not end the session."""
     scope: str | None
     reasons: list[str]
+
+
+class Crafting(TypedDict):
+    """Crafting grid of a menu (``crafting``): result slot and row-major grid slot indices."""
+    result: int
+    grid: list[int]
+    width: int
+    height: int
+
+
+class Processing(TypedDict):
+    """Furnace-style menu (``crafting``): slot roles and synchronized progress in ticks.
+
+    ``kind`` is an open string (``"furnace"`` today); ``smeltable`` is ``None`` for an
+    empty input slot.
+    """
+    kind: str
+    input: int
+    fuel: int
+    result: int
+    burnTime: int
+    burnDuration: int
+    cookTime: int
+    cookDuration: int
+    lit: bool
+    smeltable: bool | None
 
 
 class MenuRef(TypedDict):
@@ -137,6 +165,8 @@ class Menu(MenuRef):
     operations: NotRequired[list[str]]
     refusal: NotRequired[str | None]
     support: NotRequired[MenuSupport]
+    crafting: NotRequired[Crafting]
+    processing: NotRequired[Processing]
     reduced: NotRequired[bool]
     truncated: NotRequired[bool]
 
@@ -434,7 +464,7 @@ InventoryRequest = TypedDict("InventoryRequest", {
     "type": Literal["inventory"], "op": Operation, "id": NotRequired[RequestId],
     "menu": NotRequired[MenuRef], "from": NotRequired[SlotRef],
     "to": NotRequired[SlotRef], "hotbar": NotRequired[int],
-    "all": NotRequired[bool], "animated": NotRequired[bool],
+    "all": NotRequired[bool], "animated": NotRequired[bool], "count": NotRequired[int],
 })
 
 
