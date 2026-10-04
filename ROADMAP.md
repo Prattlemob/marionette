@@ -29,8 +29,9 @@ depends on.
 Keep milestone IDs and completed history. **M2.5 (published client) and M5.1a
 (bridge safety) are complete; M4.6 (one-shot events), M4.2 (inventory
 observation), M3.5 (modded storage), M4.3 (crosshair target and world
-context), M4.4 (nearby entities) and M4.5 (bounded block scan) are complete.**
-The remaining implementation order is **M3.6 → M3.7 → M5.1 → M5.2**.
+context), M4.4 (nearby entities), M4.5 (bounded block scan) and M3.6 (crafting
+and processing menus) are complete.** The remaining implementation order is
+**M3.7 → M5.1 → M5.2**.
 Further package publication retains D12/D14 decision gates; a blocked release
 does not prevent independent safety/perception work. M3.3's outstanding visual
 acceptance remains debt and must be reconciled for milestones requiring it.
@@ -476,9 +477,17 @@ until a further publication is authorized (D14).
   synchronized results, and handles missing ingredients, invalid slots and
   cancellation without leaked controls or silently lost cursor stacks.
 
-- [ ] Contract and client support; scope and count semantics explicit
-- [ ] Recipe/menu observation and validated execution
-- [ ] Rendered success/failure/cancellation evidence
+- [x] Contract and client support; scope and count semantics explicit
+- [x] Recipe/menu observation and validated execution
+- [x] Rendered success/failure/cancellation evidence
+
+Implemented as the additive `crafting` capability (protocol 2; D23): a
+structural workstation analysis (player 2×2, crafting table, furnace base
+including blast furnace and smoker), `crafting`/`processing` descriptors,
+counted `move` and `craft`. See the
+[M3.6 verification record](docs/decisions.md#m36-implementation-and-verification-2026-10-04).
+The published 0.1.0a1 client is unaffected; crafting support is source-only
+until a further publication is authorized (D14).
 
 ### M3.7 — Gameplay and social control coverage (Core)
 

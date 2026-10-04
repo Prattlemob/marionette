@@ -1226,3 +1226,103 @@ Not demonstrated in the rendered run: unloaded-chunk `null` entries and
 player; unit-tested), `level_changed` and `world_exit` cancellation, a modded
 oversized result, and multiplayer servers. M3.3's physical alt-tab and human
 animation acceptance and the remaining M5.1 items stay outstanding.
+
+## D23 — Crafting and processing menus: workstation analysis, counted moves, craft — **Settled** (2026-10-04, M3.6)
+
+M3.6 adds the additive `crafting` capability (`protocol/v1.md`, Crafting and
+processing menus); protocol stays 2 and no message type is added.
+
+- **Scope by structure, not name.** Besides the player's own menu (2×2 grid, by
+  identity) a menu is supported when it is vanilla's crafting menu or furnace
+  menu base, or a subclass that overrides only the methods storage menus may
+  override (D19), with exactly the base's data values (none / four), the
+  vanilla slot kind at each role index (result, fuel, furnace result; a
+  subclass may change only placement, pickup, capacity, activity and
+  appearance rules) and storage-rule slots elsewhere. Vanilla furnace, blast
+  furnace and smoker share the furnace base and qualify; the crafter, brewing
+  stand, stonecutter, smithing table and anvil do not. The `instanceof` test
+  only selects which vanilla base the override analysis measures against.
+- **Observation.** Descriptors carry `crafting` (result and row-major grid
+  indices) or `processing` (input/fuel/result slots, burn and cook ticks,
+  `lit`, and `smeltable` from the client's recipe property set). Since 1.21.2 a
+  client has no recipe ids or smelting results; the server-synchronized result
+  slot is the recipe observation. Agents bring their own recipe knowledge.
+- **Operations.** `move` gains `count` (items): pickup, single secondary-click
+  placements, and a primary click returning the rest, each click verified
+  against the whole menu (D19). Vanilla result slots give only whole stacks
+  (`allowModification` false), so partial takes are refused
+  (`whole_stack_only`). `craft` (crafts, default 1) takes the offered result into
+  an agent-chosen destination; preflight requires an offered result
+  (`no_result`), at least `count` items in every nonempty grid slot
+  (`missing_ingredients`), remainder-bearing ingredients alone in their slot
+  (`remainder_unsupported`) and room for every crafted item. The take is
+  predicted as vanilla's client-side craft (one item per nonempty grid slot,
+  crafting remainders). Later crafts wait until the server re-offers exactly
+  the same result (up to 40 ticks, else `result_changed`), because the client
+  cannot predict the next result; the two clicks of a craft share a tick unless
+  animated. Shift-click, recipe-book placement and drag are not used: their
+  outcomes are server- or recipe-decided, so destinations would not be the
+  agent's.
+- **Cancellation.** Existing D8b rules. A partly placed `count` stack returns to
+  its source when it is the same item, no larger, and the source is empty and
+  accepts it. A crafted stack carried by an animated craft has no source, so it
+  stays visibly on the cursor for human recovery or vanilla closure. Workstation
+  slots the server changes on its own (result; furnace input, fuel, result) do
+  not cancel an animation between clicks; each click re-checks its own slots.
+- **State ids.** Each grid change makes the server send a new result with a new
+  state id one or two ticks later. Requests keep the exact-`stateId` rule; agents
+  build each request from a fresh inspect and retry `stale_menu`, which is
+  refused before any click.
+
+Rejected: a recipe lookup or "craft item X" API (planning belongs to agents, and
+the client has no recipes); the vanilla recipe-book placement packet (server
+chooses ingredients and slots, and needs unlocked recipes); shift-click output
+(server chooses destinations); relaxing the state-id check for crafting menus;
+widening support to other workstations by type name; a new message type or
+event (0.1.0a1 ends its session on unknown types, D17).
+
+### M3.6 implementation and verification (2026-10-04)
+
+`./gradlew build` passed with 332 tests (315 before). In-repository Python
+client tests passed on 3.11 and 3.14 (62 tests, 57 before; mypy strict clean).
+A rendered client in an isolated copy of the test world, provisioned by a
+temporary client-side harness outside the repository (server-console setup,
+dumps of the screen's menu and the integrated server's menu, data values and
+inventory, screenshots, a human-equivalent screen close, and simulated F8/F9
+keys), was driven only through the protocol: smooth looks, use taps and
+inventory requests, never movement or jump. At 22 checkpoints all 2442 checks
+passed: the protocol observation, the rendered screen and the server agreed
+slot for slot (and cursor), and furnace data values agreed within the
+observation-to-dump interval.
+
+| Case | Outcome |
+|---|---|
+| 2×2 grid: 2 logs, `craft` ×2 (instant, waits for the re-offer) | 8 planks at the chosen slot; server equal |
+| 2×2 grid: 4 counted moves, animated `craft` | crafting table at the chosen slot |
+| 3×3 table: 8-plank ring, animated `craft` | chest; cursor carried the real stack |
+| 3×3 table: 2+2 planks, `craft` ×2 | 8 sticks |
+| Furnace: 3 raw iron, 1 coal; 12 one-second samples | lit, burn 1574→1354 ticks, one item finished within the samples (input 3→2, output 0→1); 3 ingots taken as whole stacks |
+| Blast furnace (shared base) | `processing` scope, cook duration 100; ingot taken |
+| Empty grid / too many crafts | `no_result` / `missing_ingredients`, nothing clicked |
+| Craft into the grid; move from the result; slot 999; count 99 of 6 | `destination_rejects` / `slot_refused` / `slot_out_of_range` / `count_exceeds_source` |
+| Dirt as fuel; item into furnace result; craft in a furnace; 1 of 2 from the furnace result | `destination_rejects` ×2 / `not_crafting` / `whole_stack_only` |
+| `release` during an animated counted move (10 planks) | `released`; 2 placed, the rest returned to its source, cursor empty |
+| Screen closed while carrying | `menu_changed`; vanilla closure returned the stack and grid, nothing dropped |
+| Controller disconnect between animated crafts | release-all; one craft done, cursor empty |
+| Panic while an animated craft carried the result | severed; 4 planks stayed visible on the cursor, vanilla close returned them, nothing dropped |
+| Panic during an animated counted move | severed; the coal returned to its source |
+
+Item totals (excluding the result slot's offer) were conserved across every
+cancellation, allowing for completed crafts; no item entity appeared; no
+control was ever held, jump included, and the 5-second safety net never fired.
+No `stale_menu` retry was needed in this run. Published 0.1.0a1, unmodified,
+observed the whole run (1687 player-only observations; only `hello` and
+`observation` frames) and, as a controller with a crafting table open, decoded
+the `crafting` descriptor and an error carrying `reason` before releasing.
+
+Not demonstrated in the rendered run: human mouse/keyboard cancellation (no
+human present; unchanged D8b path), the watchdog (same release path as
+disconnect), `remainder_unsupported` and `result_changed` (unit and contract
+coverage only), the smoker (same base and analysis as the blast furnace), a
+modded workstation, and multiplayer servers. M3.3's physical alt-tab and human
+animation acceptance and the remaining M5.1 items stay outstanding.

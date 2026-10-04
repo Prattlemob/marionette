@@ -13,7 +13,8 @@ from marionette_mc.messages import InvalidMessage, decode
 HELLO = dict(type="hello", version=2, mod="0.1.0", capabilities=dict(
     configure=True, observer=True, playerState=True, tap=True, camera=True,
     interact=True, inventory=True, inventoryAnimation=True, bridgeSafety=True, events=True,
-    inventoryState=True, targetState=True, worldState=True, entityState=True, blockScan=True))
+    inventoryState=True, targetState=True, worldState=True, entityState=True, blockScan=True,
+    crafting=True))
 
 
 async def send(ws, **message):

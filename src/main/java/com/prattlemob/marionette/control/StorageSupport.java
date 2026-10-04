@@ -42,9 +42,15 @@ public final class StorageSupport {
         int containerSlot(int slot);
     }
 
+    /**
+     * A vanilla workstation base whose clicks the mod models (protocol/v1.md, Crafting and
+     * processing menus): its synchronized data count and the vanilla slot kind at each role index.
+     */
+    public record Workstation(Class<?> base, int dataSlots, Map<Integer, Class<?>> roleSlots) {}
+
     private final Class<?> menuBase;
     private final Class<?> slotBase;
-    private final Map<Class<?>, Set<String>> overrides = new ConcurrentHashMap<>();
+    private final Map<List<Class<?>>, Set<String>> overrides = new ConcurrentHashMap<>();
 
     public StorageSupport(Class<?> menuBase, Class<?> slotBase) {
         this.menuBase = menuBase;
@@ -67,27 +73,73 @@ public final class StorageSupport {
         return List.copyOf(reasons);
     }
 
+    /**
+     * Every failed rule, sorted; empty when the menu behaves exactly as the workstation's vanilla
+     * base: the base itself or a subclass overriding only {@link #MENU_OVERRIDES}, exactly the
+     * base's data values, the vanilla slot kind (changing only {@link #SLOT_OVERRIDES}) at each role
+     * index, and storage-rule slots elsewhere.
+     */
+    public List<String> workstationReasons(MenuView menu, Workstation station) {
+        Set<String> reasons = new TreeSet<>();
+        if (!station.base().isAssignableFrom(menu.menuClass())
+                || !MENU_OVERRIDES.containsAll(overrides(menu.menuClass(), station.base(), menuBase))) {
+            reasons.add(CLICK_BEHAVIOR);
+        }
+        if (menu.dataSlots() != station.dataSlots()) reasons.add(MENU_DATA);
+        Map<Object, Set<Integer>> positions = new IdentityHashMap<>();
+        for (int i = 0; i < menu.slotCount(); i++) {
+            Class<?> role = station.roleSlots().get(i);
+            Class<?> slot = menu.slotClass(i);
+            boolean ok = role == null
+                    ? (menu.playerSlot(i) ? PLAYER_SLOT_OVERRIDES : SLOT_OVERRIDES).containsAll(overrides(slot, slotBase))
+                    : role.isAssignableFrom(slot) && SLOT_OVERRIDES.containsAll(overrides(slot, role, slotBase));
+            if (!ok) reasons.add(SLOT_BEHAVIOR);
+            if (!positions.computeIfAbsent(menu.container(i), c -> new HashSet<>()).add(menu.containerSlot(i))) {
+                reasons.add(SHARED_SLOTS);
+            }
+        }
+        for (int index : station.roleSlots().keySet()) {
+            if (index >= menu.slotCount()) reasons.add(SLOT_BEHAVIOR);
+        }
+        return List.copyOf(reasons);
+    }
+
     /** {@code base}'s overridable methods that {@code type} or a class between them redeclares, as name/arity. */
     Set<String> overrides(Class<?> type, Class<?> base) {
+        return overrides(type, base, base);
+    }
+
+    /**
+     * As {@link #overrides(Class, Class)}, counting methods declared anywhere from {@code base} up to
+     * {@code root} (inclusive), so a subclass of a vanilla workstation is measured against every
+     * method of the base it inherits.
+     */
+    Set<String> overrides(Class<?> type, Class<?> base, Class<?> root) {
         if (!base.isAssignableFrom(type)) throw new IllegalArgumentException(type + " is not a " + base);
-        return overrides.computeIfAbsent(type, t -> {
+        if (!root.isAssignableFrom(base)) throw new IllegalArgumentException(base + " is not a " + root);
+        return overrides.computeIfAbsent(List.of(type, base, root), key -> {
             Set<String> found = new TreeSet<>();
-            for (Class<?> c = t; c != base; c = c.getSuperclass()) {
+            for (Class<?> c = type; c != base; c = c.getSuperclass()) {
                 for (Method method : c.getDeclaredMethods()) {
                     if (Modifier.isStatic(method.getModifiers())) continue;
-                    try {
-                        Method inherited = base.getDeclaredMethod(method.getName(), method.getParameterTypes());
-                        int modifiers = inherited.getModifiers();
-                        if (!Modifier.isPrivate(modifiers) && !Modifier.isStatic(modifiers)) {
-                            found.add(method.getName() + "/" + method.getParameterCount());
-                        }
-                    } catch (NoSuchMethodException notAnOverride) {
-                        // A method of the subclass's own; only callable from its overrides.
-                    }
+                    if (inheritable(method, base, root)) found.add(method.getName() + "/" + method.getParameterCount());
                 }
             }
             return Set.copyOf(found);
         });
+    }
+
+    /** Whether a class from {@code base} up to {@code root} declares an overridable method {@code method} overrides. */
+    private static boolean inheritable(Method method, Class<?> base, Class<?> root) {
+        for (Class<?> c = base; ; c = c.getSuperclass()) {
+            try {
+                int modifiers = c.getDeclaredMethod(method.getName(), method.getParameterTypes()).getModifiers();
+                return !Modifier.isPrivate(modifiers) && !Modifier.isStatic(modifiers);
+            } catch (NoSuchMethodException notHere) {
+                // A method of the subclass's own, or declared further up.
+            }
+            if (c == root) return false;
+        }
     }
 
     private static Set<String> union(Set<String> a, Set<String> b) {

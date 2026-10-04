@@ -33,12 +33,49 @@ public final class InventoryRules {
 
     public static void move(Slot source, Slot target) {
         source(source);
-        require(target.count() == 0 || target.sameItem(source), "destination_mismatch",
+        receive(target, source, source.count());
+    }
+
+    /**
+     * {@code move} with {@code count} items (crafting): the whole stack when it equals the source
+     * count, otherwise pickup, {@code count} single placements and a return of the rest, so the
+     * source must give up part of its stack and take the rest back.
+     */
+    public static void moveCount(Slot source, Slot target, int count, boolean wholeStackOnly) {
+        source(source);
+        require(count <= source.count(), "count_exceeds_source", "count is larger than the source stack");
+        if (count == source.count()) {
+            receive(target, source, count);
+            return;
+        }
+        require(!wholeStackOnly, "whole_stack_only", "source slot gives up only whole stacks");
+        receive(target, source, count);
+        require(source.mayPlace(source) && source.count() - count <= source.capacity(source), "source_rejects",
+                "source slot cannot take the rest back");
+    }
+
+    /** {@code target} accepts {@code total} items like {@code item}'s stack, on top of what it holds. */
+    public static void receive(Slot target, Slot item, int total) {
+        require(target.count() == 0 || target.sameItem(item), "destination_mismatch",
                 "destination contains a different item");
         require(target.count() == 0 || target.mayPickup(), "destination_locked", "destination forbids pickup");
-        require(target.mayPlace(source), "destination_rejects", "destination forbids this item");
-        require(source.count() <= target.capacity(source) - target.count(), "destination_full",
-                "whole stack does not fit");
+        require(target.mayPlace(item), "destination_rejects", "destination forbids this item");
+        require(total <= target.capacity(item) - target.count(), "destination_full", "items do not fit");
+    }
+
+    /**
+     * Craft preflight (crafting): the result slot offers {@code resultCount} items, and each nonempty
+     * grid slot holds {@code ingredients[i]} items, {@code remainders[i]} when its item leaves a
+     * crafting remainder. Every craft consumes one item from each nonempty grid slot.
+     */
+    public static void craft(int resultCount, int[] ingredients, boolean[] remainders, int crafts) {
+        require(resultCount > 0, "no_result", "the result slot offers nothing");
+        for (int i = 0; i < ingredients.length; i++) {
+            require(ingredients[i] >= crafts, "missing_ingredients",
+                    "a grid slot holds fewer items than the crafts consume");
+            require(!remainders[i] || ingredients[i] == 1, "remainder_unsupported",
+                    "an ingredient with a crafting remainder shares its slot");
+        }
     }
 
     public static void swap(Slot source, Slot target) {

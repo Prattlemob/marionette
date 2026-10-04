@@ -327,15 +327,21 @@ class Client:
     async def inventory(self, op: Operation, *, menu: MenuRef | None = None,
                         source: SlotRef | None = None, destination: SlotRef | None = None,
                         hotbar: int | None = None, all: bool = False, animated: bool = False,
-                        timeout: float | None = None) -> InventoryResult:
+                        count: int | None = None, timeout: float | None = None) -> InventoryResult:
         """Correlate one request. Timeout/cancellation does not cancel server work.
 
         IDs are unique for this session; late responses go to next_reply().
         A caller cancellation also leaves any subsequently arriving reply there.
+
+        With ``crafting``: ``count`` is a number of items for ``move`` (default the
+        whole stack) and a number of crafts for ``craft`` (default 1); ``craft``
+        takes ``destination`` and no ``source``.
         """
         self.require("inventory")
         if animated:
             self.require("inventoryAnimation")
+        if op == "craft" or count is not None:
+            self.require("crafting")
         self._active()
         if self.role != "controller":
             raise RoleError("inventory requires controller role")
@@ -355,6 +361,8 @@ class Client:
             message["to"] = destination
         if hotbar is not None:
             message["hotbar"] = hotbar
+        if count is not None:
+            message["count"] = count
         validate(message, InventoryRequest)
         if op not in ("open", "inspect") and menu is None:
             raise ValueError("operation requires current menu reference")
@@ -362,8 +370,10 @@ class Client:
             raise ValueError("menu ids must be nonnegative")
         if op in ("move", "swap", "equip", "drop") and source is None:
             raise ValueError("operation requires source")
-        if op == "move" and destination is None:
-            raise ValueError("move requires destination")
+        if op in ("move", "craft") and destination is None:
+            raise ValueError(f"{op} requires destination")
+        if count is not None and (op not in ("move", "craft") or count < 1):
+            raise ValueError("count must be at least 1, for move or craft only")
         if op == "swap" and hotbar is None:
             raise ValueError("swap requires hotbar")
         if hotbar is not None and not 0 <= hotbar <= 8:

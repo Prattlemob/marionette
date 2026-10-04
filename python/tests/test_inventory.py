@@ -29,7 +29,7 @@ class InventoryDecodeTests(unittest.TestCase):
         self.assertIsNone(inventory['menu']['refusal'])
 
     def test_unsupported_menu_descriptor_and_future_reasons(self):
-        result = next(m for m in FIXTURE['messages'] if m.get('id') == 'furnace')
+        result = next(m for m in FIXTURE['messages'] if m.get('id') == 'brewing')
         self.assertEqual(decode(json.dumps(result))['menu']['refusal'], 'unsupported_menu')
         # Reason codes are open strings: a future reason must not end the session.
         future = json.loads(json.dumps(result))
@@ -39,10 +39,10 @@ class InventoryDecodeTests(unittest.TestCase):
         self.assertEqual(decode(json.dumps(future))['menu']['slots'][0]['futureDetail'], {'x': 1})
 
     def test_storage_support_and_future_support_values(self):
-        furnace = next(m for m in FIXTURE['messages'] if m.get('id') == 'furnace')['menu']
-        self.assertEqual(furnace['support'], {'scope': None, 'reasons': ['menu_data', 'slot_behavior']})
+        brewing = next(m for m in FIXTURE['messages'] if m.get('id') == 'brewing')['menu']
+        self.assertEqual(brewing['support'], {'scope': None, 'reasons': ['menu_data', 'slot_behavior']})
         self.assertEqual(fixture_observation()['inventory']['menu']['support']['scope'], 'storage')
-        future = json.loads(json.dumps(furnace))
+        future = json.loads(json.dumps(brewing))
         future['support'] = {'scope': None, 'reasons': ['future_rule'], 'detail': 1}
         frame = {'type': 'inventory_result', 'op': 'inspect', 'menu': future}
         self.assertEqual(decode(json.dumps(frame))['menu']['support']['reasons'], ['future_rule'])
@@ -54,7 +54,8 @@ class InventoryDecodeTests(unittest.TestCase):
     def test_rejection_reasons_decode_and_are_optional(self):
         errors = [m for m in FIXTURE['messages'] if m['type'] == 'error' and not m['code'].startswith('scan_')]
         self.assertEqual([e.get('reason') for e in errors],
-                         ['released', 'destination_rejects', 'unsupported_menu', None])
+                         ['released', 'destination_rejects', 'unsupported_menu', 'no_result',
+                          'missing_ingredients', 'result_changed', None])
         with self.assertRaises(InvalidMessage):
             decode(json.dumps({**errors[1], 'reason': 3}))
 

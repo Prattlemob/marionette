@@ -245,6 +245,38 @@
       }
     },
     {
+      "javaType": "InventoryAction",
+      "wire": {
+        "type": "inventory",
+        "op": "move",
+        "id": "place",
+        "menu": {
+          "type": "minecraft:crafting",
+          "containerId": 7,
+          "stateId": 12
+        },
+        "from": "main.0",
+        "to": 1,
+        "count": 2
+      }
+    },
+    {
+      "javaType": "InventoryAction",
+      "wire": {
+        "type": "inventory",
+        "op": "craft",
+        "id": "craft",
+        "menu": {
+          "type": "minecraft:crafting",
+          "containerId": 7,
+          "stateId": 12
+        },
+        "to": "hotbar.0",
+        "count": 2,
+        "animated": true
+      }
+    },
+    {
       "javaType": "Configure",
       "wire": {
         "type": "configure",
@@ -315,7 +347,8 @@
         "targetState": true,
         "worldState": true,
         "entityState": true,
-        "blockScan": true
+        "blockScan": true,
+        "crafting": true
       },
       "mod": "0.1.0",
       "id": "hello-fixture"
@@ -903,22 +936,23 @@
     },
     {
       "type": "inventory_result",
-      "id": "furnace",
+      "id": "brewing",
       "op": "inspect",
       "menu": {
-        "type": "minecraft:furnace",
+        "type": "minecraft:brewing_stand",
         "containerId": 5,
         "stateId": 2,
-        "slotCount": 39,
+        "slotCount": 41,
         "slots": [
           {
-            "item": "minecraft:raw_iron",
-            "count": 3,
+            "item": "minecraft:potion",
+            "count": 1,
+            "potion": "minecraft:water",
             "slot": 0
           },
           {
-            "item": "minecraft:coal",
-            "count": 8,
+            "item": "minecraft:air",
+            "count": 0,
             "slot": 1
           },
           {
@@ -927,9 +961,19 @@
             "slot": 2
           },
           {
+            "item": "minecraft:nether_wart",
+            "count": 3,
+            "slot": 3
+          },
+          {
+            "item": "minecraft:blaze_powder",
+            "count": 2,
+            "slot": 4
+          },
+          {
             "item": "minecraft:dirt",
             "count": 16,
-            "slot": 3,
+            "slot": 5,
             "alias": "main.0"
           }
         ],
@@ -998,6 +1042,207 @@
       "menu": null
     },
     {
+      "type": "inventory_result",
+      "id": "crafting",
+      "op": "inspect",
+      "menu": {
+        "type": "minecraft:crafting",
+        "containerId": 7,
+        "stateId": 12,
+        "slotCount": 46,
+        "slots": [
+          {
+            "item": "minecraft:chest",
+            "count": 1,
+            "slot": 0,
+            "refused": "result"
+          },
+          {
+            "item": "minecraft:oak_planks",
+            "count": 2,
+            "slot": 1
+          },
+          {
+            "item": "minecraft:oak_planks",
+            "count": 2,
+            "slot": 2
+          },
+          {
+            "item": "minecraft:oak_planks",
+            "count": 2,
+            "slot": 3
+          },
+          {
+            "item": "minecraft:oak_planks",
+            "count": 2,
+            "slot": 4
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0,
+            "slot": 5
+          },
+          {
+            "item": "minecraft:oak_planks",
+            "count": 2,
+            "slot": 6
+          },
+          {
+            "item": "minecraft:oak_planks",
+            "count": 2,
+            "slot": 7
+          },
+          {
+            "item": "minecraft:oak_planks",
+            "count": 2,
+            "slot": 8
+          },
+          {
+            "item": "minecraft:oak_planks",
+            "count": 2,
+            "slot": 9
+          },
+          {
+            "item": "minecraft:oak_planks",
+            "count": 48,
+            "slot": 10,
+            "alias": "main.0"
+          },
+          {
+            "item": "minecraft:air",
+            "count": 0,
+            "slot": 37,
+            "alias": "hotbar.0"
+          }
+        ],
+        "carried": {
+          "item": "minecraft:air",
+          "count": 0
+        },
+        "operations": [
+          "move",
+          "swap",
+          "drop",
+          "craft",
+          "close"
+        ],
+        "refusal": null,
+        "support": {
+          "scope": "crafting",
+          "reasons": []
+        },
+        "crafting": {
+          "result": 0,
+          "grid": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          "width": 3,
+          "height": 3
+        }
+      }
+    },
+    {
+      "type": "inventory_result",
+      "id": "smelting",
+      "op": "inspect",
+      "menu": {
+        "type": "minecraft:furnace",
+        "containerId": 8,
+        "stateId": 4,
+        "slotCount": 39,
+        "slots": [
+          {
+            "item": "minecraft:raw_iron",
+            "count": 2,
+            "slot": 0
+          },
+          {
+            "item": "minecraft:coal",
+            "count": 1,
+            "slot": 1
+          },
+          {
+            "item": "minecraft:iron_ingot",
+            "count": 1,
+            "slot": 2
+          },
+          {
+            "item": "minecraft:dirt",
+            "count": 16,
+            "slot": 3,
+            "alias": "main.0"
+          }
+        ],
+        "carried": {
+          "item": "minecraft:air",
+          "count": 0
+        },
+        "operations": [
+          "move",
+          "swap",
+          "drop",
+          "close"
+        ],
+        "refusal": null,
+        "support": {
+          "scope": "processing",
+          "reasons": []
+        },
+        "processing": {
+          "kind": "furnace",
+          "input": 0,
+          "fuel": 1,
+          "result": 2,
+          "burnTime": 1452,
+          "burnDuration": 1600,
+          "cookTime": 57,
+          "cookDuration": 200,
+          "lit": true,
+          "smeltable": true
+        }
+      }
+    },
+    {
+      "type": "inventory_result",
+      "id": "craft",
+      "op": "craft",
+      "menu": {
+        "type": "minecraft:inventory",
+        "containerId": 0,
+        "stateId": 21,
+        "slots": [
+          {
+            "item": "minecraft:air",
+            "count": 0,
+            "slot": 0
+          },
+          {
+            "item": "minecraft:oak_log",
+            "count": 1,
+            "slot": 1
+          },
+          {
+            "item": "minecraft:oak_planks",
+            "count": 8,
+            "slot": 36,
+            "alias": "hotbar.0"
+          }
+        ],
+        "carried": {
+          "item": "minecraft:air",
+          "count": 0
+        }
+      }
+    },
+    {
       "type": "error",
       "code": "inventory_cancelled",
       "message": "cancelled",
@@ -1017,9 +1262,33 @@
       "type": "error",
       "code": "inventory_unavailable",
       "message": "menu failed the storage analysis: [menu_data, slot_behavior]",
-      "id": "furnace-move",
-      "input": "{\"type\":\"inventory\",\"id\":\"furnace-move\",\"op\":\"move\"}",
+      "id": "brewing-move",
+      "input": "{\"type\":\"inventory\",\"id\":\"brewing-move\",\"op\":\"move\"}",
       "reason": "unsupported_menu"
+    },
+    {
+      "type": "error",
+      "code": "inventory_impossible",
+      "message": "the result slot offers nothing",
+      "id": "empty-grid",
+      "input": "{\"type\":\"inventory\",\"id\":\"empty-grid\",\"op\":\"craft\"}",
+      "reason": "no_result"
+    },
+    {
+      "type": "error",
+      "code": "inventory_impossible",
+      "message": "a grid slot holds fewer items than the crafts consume",
+      "id": "too-many",
+      "input": "{\"type\":\"inventory\",\"id\":\"too-many\",\"op\":\"craft\"}",
+      "reason": "missing_ingredients"
+    },
+    {
+      "type": "error",
+      "code": "inventory_cancelled",
+      "message": "the server did not re-offer the result",
+      "id": "craft-3",
+      "input": "{\"type\":\"inventory\",\"id\":\"craft-3\",\"op\":\"craft\"}",
+      "reason": "result_changed"
     },
     {
       "type": "error",
@@ -1128,6 +1397,32 @@
           "x": 1,
           "y": 1,
           "z": 1
+        }
+      },
+      "code": "invalid_field"
+    },
+    {
+      "wire": {
+        "type": "inventory",
+        "op": "craft",
+        "menu": {
+          "type": "minecraft:crafting",
+          "containerId": 7,
+          "stateId": 12
+        },
+        "to": "hotbar.0",
+        "count": 0
+      },
+      "code": "invalid_field"
+    },
+    {
+      "wire": {
+        "type": "inventory",
+        "op": "craft",
+        "menu": {
+          "type": "minecraft:crafting",
+          "containerId": 7,
+          "stateId": 12
         }
       },
       "code": "invalid_field"

@@ -135,7 +135,7 @@ public final class MessageParser {
 
     private static AgentCommand.InventoryAction parseInventory(JsonObject json, JsonPrimitive id, String raw) {
         String op = optionalString(json, "op");
-        if (op == null || !Set.of("open", "inspect", "close", "move", "swap", "drop", "equip").contains(op)) {
+        if (op == null || !Set.of("open", "inspect", "close", "move", "swap", "drop", "equip", "craft").contains(op)) {
             throw new ProtocolError(ErrorCode.INVALID_FIELD, "unknown or missing inventory op");
         }
         AgentCommand.MenuRef menu = null;
@@ -152,10 +152,12 @@ public final class MessageParser {
                     requiredInt(ref, "stateId", Integer.MAX_VALUE));
         }
         boolean needsSource = Set.of("move", "swap", "drop", "equip").contains(op);
+        boolean counted = op.equals("move") || op.equals("craft");
         return new AgentCommand.InventoryAction(op, menu,
                 needsSource ? slotRef(json, "from") : null,
-                op.equals("move") ? slotRef(json, "to") : null,
+                counted ? slotRef(json, "to") : null,
                 op.equals("swap") ? requiredInt(json, "hotbar", 8) : null,
+                counted ? optionalRangedInt(json, "count", 1, Integer.MAX_VALUE) : null,
                 op.equals("drop") && Boolean.TRUE.equals(optionalBoolean(json, "all")),
                 Boolean.TRUE.equals(optionalBoolean(json, "animated")), id, raw);
     }

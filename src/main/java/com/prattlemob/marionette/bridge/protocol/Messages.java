@@ -41,6 +41,7 @@ public final class Messages {
         capabilities.addProperty("worldState", true);
         capabilities.addProperty("entityState", true);
         capabilities.addProperty("blockScan", true);
+        capabilities.addProperty("crafting", true);
         reply.add("capabilities", capabilities);
         reply.addProperty("mod", modVersion);
         return reply.toString();

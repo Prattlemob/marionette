@@ -21,6 +21,40 @@ class InventoryProtocolTest {
         assertEquals(raw, command.raw());
     }
 
+    @Test void parsesCountedMovesAndCrafts() {
+        var move = (AgentCommand.InventoryAction) MessageParser.parse(
+                "{\"type\":\"inventory\",\"op\":\"move\"," + MENU + ",\"from\":\"main.0\",\"to\":1,\"count\":3}");
+        assertEquals(3, move.count());
+        var whole = (AgentCommand.InventoryAction) MessageParser.parse(
+                "{\"type\":\"inventory\",\"op\":\"move\"," + MENU + ",\"from\":\"main.0\",\"to\":1}");
+        assertNull(whole.count());
+        var craft = (AgentCommand.InventoryAction) MessageParser.parse(
+                "{\"type\":\"inventory\",\"id\":\"c\",\"op\":\"craft\"," + MENU + ",\"to\":\"hotbar.2\",\"count\":2,\"animated\":true}");
+        assertEquals("craft", craft.op());
+        assertEquals("hotbar.2", craft.to().alias());
+        assertEquals(2, craft.count());
+        assertNull(craft.from());
+        assertTrue(craft.animated());
+        var once = (AgentCommand.InventoryAction) MessageParser.parse(
+                "{\"type\":\"inventory\",\"op\":\"craft\"," + MENU + ",\"to\":9}");
+        assertNull(once.count());
+        // count belongs to move and craft only; elsewhere it is an ignored unknown field.
+        var drop = (AgentCommand.InventoryAction) MessageParser.parse(
+                "{\"type\":\"inventory\",\"op\":\"drop\"," + MENU + ",\"from\":0,\"count\":0}");
+        assertNull(drop.count());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\"op\":\"craft\",MENU", "\"op\":\"craft\",\"to\":1",
+            "\"op\":\"craft\",MENU,\"to\":1,\"count\":0", "\"op\":\"craft\",MENU,\"to\":1,\"count\":1.5",
+            "\"op\":\"move\",MENU,\"from\":0,\"to\":1,\"count\":0",
+            "\"op\":\"move\",MENU,\"from\":0,\"to\":1,\"count\":\"2\""})
+    void rejectsInvalidCraftAndCountFields(String fields) {
+        var error = assertThrows(ProtocolError.class, () -> MessageParser.parse(
+                "{\"type\":\"inventory\"," + fields.replace("MENU", MENU) + "}"));
+        assertEquals(ErrorCode.INVALID_FIELD, error.code());
+    }
+
     @ParameterizedTest @ValueSource(strings = {"open", "inspect"})
     void readsWithoutMenu(String op) {
         var command = (AgentCommand.InventoryAction) MessageParser.parse("{\"type\":\"inventory\",\"op\":\"" + op + "\"}");
